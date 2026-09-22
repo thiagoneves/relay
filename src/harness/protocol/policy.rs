@@ -15,18 +15,26 @@ pub struct Rewritten {
     pub approve: bool,
 }
 
-/// The rewrite for `cmd`, if any. `relay` yields how to invoke relay;
+/// One shell call the hook may rewrite.
+#[derive(Debug, Clone, Copy)]
+pub struct Call<'a> {
+    pub cmd: &'a str,
+    pub session: &'a str,
+    /// Its output is read while it runs; `relay x` would hold all of it
+    /// until exit.
+    pub background: bool,
+    /// Run by a Claude Code agent isolated in its own worktree. Its guard
+    /// refuses any command with `git` text it cannot see is aimed at the
+    /// worktree, which is what a rewrite turns `git status` into.
+    pub isolated: bool,
+    pub support: RewriteSupport,
+}
+
+/// The rewrite for `call`, if any. `relay` yields how to invoke relay;
 /// it is only called when a rewrite happens, since resolving it touches
 /// the filesystem.
-pub fn rewrite(
-    cmd: &str,
-    session: &str,
-    background: bool,
-    support: RewriteSupport,
-    relay: impl FnOnce() -> String,
-) -> Option<Rewritten> {
-    // A background command's output is read while it runs; `relay x`
-    // would hold all of it until exit.
+pub fn rewrite(call: &Call, relay: impl FnOnce() -> String) -> Option<Rewritten> {
+    let Call { cmd, session, background, isolated, support } = *call;
     if background {
         return None;
     }
@@ -36,6 +44,9 @@ pub fn rewrite(
         return Some(Rewritten { command, approve: false });
     }
     let (prefix, body) = wrap_target(cmd)?;
+    if isolated && body.contains("git") {
+        return None;
+    }
     let approve = match permission::rewrite_for(prefix, body, support) {
         Rewrite::Skip => return None,
         Rewrite::Approve => true,
@@ -43,6 +54,13 @@ pub fn rewrite(
     };
     let command = format!("{prefix}{} x --session {} -- {}", relay(), shell::quote(session), shell::quote(body));
     Some(Rewritten { command, approve })
+}
+
+/// Whether `cwd` is inside a worktree Claude Code made for an isolated
+/// agent: `<repo>/.claude/worktrees/<name>`.
+pub fn in_isolated_worktree(cwd: &std::path::Path) -> bool {
+    let parts: Vec<_> = cwd.components().map(std::path::Component::as_os_str).collect();
+    parts.windows(2).any(|w| w[0] == ".claude" && w[1] == "worktrees")
 }
 
 /// `relay remember …` typed by the agent, with the session added so the
@@ -244,6 +262,20 @@ mod tests {
         "relay".into()
     }
 
+    fn call(cmd: &str) -> Call<'_> {
+        Call { cmd, session: "s1", background: false, isolated: false, support: RewriteSupport::Any }
+    }
+
+    #[test]
+    fn isolated_agents_keep_git_visible() {
+        let isolated = |cmd| Call { isolated: true, ..call(cmd) };
+        assert_eq!(rewrite(&isolated("git status"), relay), None);
+        assert_eq!(rewrite(&isolated("cmp src/compress/git.rs x"), relay), None);
+        assert!(rewrite(&isolated("cargo test"), relay).is_some());
+        assert!(in_isolated_worktree(std::path::Path::new("/r/.claude/worktrees/agent-1/src")));
+        assert!(!in_isolated_worktree(std::path::Path::new("/r/worktrees/.claude")));
+    }
+
     #[test]
     fn wraps_known_and_skips_risky() {
         assert!(should_wrap("git status"));
@@ -328,16 +360,16 @@ mod tests {
 
     #[test]
     fn rewrite_keeps_the_shell_prefix_and_carries_the_session() {
-        let r = rewrite("cd /repo && git status", "s1", false, RewriteSupport::Any, relay).unwrap();
+        let r = rewrite(&call("cd /repo && git status"), relay).unwrap();
         assert_eq!(r.command, "cd /repo && relay x --session 's1' -- 'git status'");
         assert!(r.approve);
-        assert_eq!(rewrite("git status", "s1", true, RewriteSupport::Any, relay), None);
-        assert_eq!(rewrite("cargo test", "s1", false, RewriteSupport::ApprovedOnly, relay), None);
+        assert_eq!(rewrite(&Call { background: true, ..call("git status") }, relay), None);
+        assert_eq!(rewrite(&Call { support: RewriteSupport::ApprovedOnly, ..call("cargo test") }, relay), None);
     }
 
     #[test]
     fn remember_is_filed_under_the_session() {
-        let r = rewrite("relay remember rule \"x\"", "s1", false, RewriteSupport::Any, relay).unwrap();
+        let r = rewrite(&call("relay remember rule \"x\""), relay).unwrap();
         assert_eq!(r.command, "relay remember --session 's1' rule \"x\"");
         assert!(!r.approve);
     }

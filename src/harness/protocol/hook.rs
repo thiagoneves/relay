@@ -102,8 +102,14 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, support: RewriteSup
     if spool::current_session(paths).as_deref() != Some(session) {
         spool::set_current_session(paths, session);
     }
-    let background = input["tool_input"]["run_in_background"].as_bool() == Some(true);
-    if let Some(r) = policy::rewrite(cmd, session, background, support, relay_invocation) {
+    let call = policy::Call {
+        cmd,
+        session,
+        background: input["tool_input"]["run_in_background"].as_bool() == Some(true),
+        isolated: policy::in_isolated_worktree(&paths.root),
+        support,
+    };
+    if let Some(r) = policy::rewrite(&call, relay_invocation) {
         println!("{}", reply(&r));
     }
 }
