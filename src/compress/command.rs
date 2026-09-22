@@ -30,76 +30,70 @@ pub struct Segment<'a> {
 /// outside quotes. Redirections (`2>&1`, `>&2`, `&>f`) are not
 /// separators. Empty segments are dropped; the joint that ended one is
 /// kept on the segment before it.
-pub fn segments<'a>(cmd: &'a str) -> Vec<Segment<'a>> {
+pub fn segments(cmd: &str) -> Vec<Segment<'_>> {
     let b = cmd.as_bytes();
-    let mut out: Vec<Segment<'a>> = Vec::new();
-    let mut start = 0;
-    let mut i = 0;
-    let mut quote: Option<u8> = None;
-    let push = |out: &mut Vec<Segment<'a>>, from: usize, to: usize, then: Joint| {
-        let text = cmd[from..to].trim();
-        if text.is_empty() {
-            if let Some(last) = out.last_mut() {
-                // `a &\n b`: the background marker wins over the newline.
-                if last.then != Joint::Background {
-                    last.then = then;
-                }
-            }
-        } else {
-            out.push(Segment { text, then });
-        }
-    };
+    let mut out = Vec::new();
+    let (mut start, mut i) = (0, 0);
     while i < b.len() {
-        let c = b[i];
-        if let Some(q) = quote {
-            if c == b'\\' && q == b'"' {
-                i += 2;
-                continue;
-            }
-            if c == q {
-                quote = None;
-            }
-            i += 1;
-            continue;
+        match b[i] {
+            b'\\' => i += 2,
+            q @ (b'\'' | b'"') => i = after_quote(b, i + 1, q),
+            _ => match joint_at(b, i) {
+                Some((joint, len)) => {
+                    push(&mut out, &cmd[start..i], joint);
+                    i += len;
+                    start = i;
+                }
+                None => i += 1,
+            },
         }
-        let next = b.get(i + 1).copied();
-        let (joint, len) = match c {
-            b'\\' => {
-                i += 2;
-                continue;
-            }
-            b'\'' | b'"' => {
-                quote = Some(c);
-                i += 1;
-                continue;
-            }
-            b'&' if next == Some(b'&') => (Joint::And, 2),
-            // `&>file`, `>&2`, `2>&1`: redirections, not separators.
-            b'&' if next == Some(b'>') || i > 0 && b[i - 1] == b'>' => {
-                i += 1;
-                continue;
-            }
-            b'&' => (Joint::Background, 1),
-            b'|' if next == Some(b'|') => (Joint::Or, 2),
-            b'|' if next == Some(b'&') => (Joint::Pipe, 2),
-            b'|' => (Joint::Pipe, 1),
-            b';' | b'\n' => (Joint::Seq, 1),
-            _ => {
-                i += 1;
-                continue;
-            }
-        };
-        push(&mut out, start, i, joint);
-        i += len;
-        start = i;
     }
     if start < b.len() {
-        push(&mut out, start, b.len(), Joint::End);
+        push(&mut out, &cmd[start..], Joint::End);
     }
     if let Some(last) = out.last_mut().filter(|s| s.then != Joint::Background) {
         last.then = Joint::End;
     }
     out
+}
+
+/// Index just past the quote `q` closing a string that starts at `i`.
+fn after_quote(b: &[u8], mut i: usize, q: u8) -> usize {
+    while i < b.len() {
+        match b[i] {
+            b'\\' if q == b'"' => i += 2,
+            c if c == q => return i + 1,
+            _ => i += 1,
+        }
+    }
+    b.len()
+}
+
+/// The separator starting at `i`, and its length. `&>file`, `>&2` and
+/// `2>&1` are redirections, not separators.
+fn joint_at(b: &[u8], i: usize) -> Option<(Joint, usize)> {
+    let next = b.get(i + 1).copied();
+    match b[i] {
+        b'&' if next == Some(b'&') => Some((Joint::And, 2)),
+        b'&' if next == Some(b'>') || i > 0 && b[i - 1] == b'>' => None,
+        b'&' => Some((Joint::Background, 1)),
+        b'|' if next == Some(b'|') => Some((Joint::Or, 2)),
+        b'|' if next == Some(b'&') => Some((Joint::Pipe, 2)),
+        b'|' => Some((Joint::Pipe, 1)),
+        b';' | b'\n' => Some((Joint::Seq, 1)),
+        _ => None,
+    }
+}
+
+/// An empty segment only moves its joint onto the one before:
+/// in `a &\n b` the background marker wins over the newline.
+fn push<'a>(out: &mut Vec<Segment<'a>>, text: &'a str, then: Joint) {
+    let text = text.trim();
+    if !text.is_empty() {
+        out.push(Segment { text, then });
+    } else if let Some(last) = out.last_mut().filter(|l| l.then != Joint::Background) {
+        last.then = then;
+    }
 }
 
 /// Split off leading `cd`, `pushd`, `popd` and `export` steps joined by
