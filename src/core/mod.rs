@@ -4,6 +4,7 @@ pub mod audit;
 pub mod bench;
 pub mod bootstrap;
 pub mod brief;
+pub mod condense;
 pub mod exec;
 pub mod handoff;
 pub mod machine;
