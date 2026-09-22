@@ -20,7 +20,12 @@ fn pre(repo: &Repo, harness: &str, tool_input: &Value) -> Option<Value> {
 #[test]
 fn rewrites_are_approved_and_the_rest_left_alone() {
     let repo = Repo::new("rewrite-perm");
-    for harness in ["claude", "codex"] {
+    // Codex runs commands in PowerShell on Windows, so relay leaves them be.
+    let harnesses: &[&str] = if cfg!(windows) { &["claude"] } else { &["claude", "codex"] };
+    if cfg!(windows) {
+        assert!(pre(&repo, "codex", &json!({ "command": "cargo test" })).is_none());
+    }
+    for &harness in harnesses {
         for cmd in ["git status", "cargo test"] {
             let out = pre(&repo, harness, &json!({ "command": cmd })).unwrap();
             assert!(out["updatedInput"]["command"].as_str().unwrap().contains(" x --session "), "{cmd}");
