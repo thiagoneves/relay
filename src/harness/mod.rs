@@ -16,6 +16,7 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use serde_json::Value;
 
+use crate::core::bench::ShellCall;
 use crate::core::paths::Paths;
 
 pub struct InstallReport {
@@ -39,6 +40,12 @@ pub trait Harness {
     fn handle_hook(&self) -> Result<()>;
     /// Extra arguments to resume a native session by id.
     fn resume_args(&self, session_id: &str) -> Vec<String>;
+    /// Shell calls from the harness's own transcripts, for benchmarking
+    /// against real history. `dir` overrides the default location.
+    fn shell_history(&self, dir: Option<&Path>) -> Result<Vec<ShellCall>> {
+        let _ = dir;
+        bail!("reading {} history is not supported yet", self.id())
+    }
 }
 
 pub fn by_name(name: &str) -> Result<Box<dyn Harness>> {
