@@ -66,6 +66,47 @@ pub fn classify(cmd: &str) -> &'static str {
     }
 }
 
+/// Coarse name for reports: `git status`, `cargo test`, `sed`. Leading
+/// `cd`/`export` segments and `timeout N` are skipped so the family is
+/// the command that produced the output.
+pub fn family(cmd: &str) -> String {
+    const SETUP: &[&str] = &["cd", "export", "set", "source", ".", "pushd"];
+    const VERBED: &[&str] = &[
+        "git",
+        "cargo",
+        "npm",
+        "pnpm",
+        "yarn",
+        "bun",
+        "go",
+        "docker",
+        "kubectl",
+        "gh",
+        "uv",
+        "pip",
+        "brew",
+        "make",
+        "dotnet",
+        "terraform",
+    ];
+    for seg in cmd.split(['&', '|', ';', '\n']).map(str::trim).filter(|s| !s.is_empty()) {
+        let mut toks = head_tokens(seg);
+        if toks.first().is_some_and(|t| t == "timeout") {
+            toks.drain(..2.min(toks.len()));
+        }
+        let Some(t0) = toks.first() else { continue };
+        let t0 = t0.rsplit(['/', '\\']).next().unwrap_or(t0).to_string();
+        if SETUP.contains(&t0.as_str()) {
+            continue;
+        }
+        return match toks.get(1) {
+            Some(t1) if VERBED.contains(&t0.as_str()) && !t1.starts_with('-') => format!("{t0} {t1}"),
+            _ => t0,
+        };
+    }
+    "?".into()
+}
+
 pub fn compress(cmd: &str, raw: &str) -> Compressed {
     let filter = classify(cmd);
     let result = std::panic::catch_unwind(|| apply_filter(filter, raw));
@@ -110,6 +151,16 @@ mod tests {
         assert_eq!(classify("rg foo src"), "grep");
         assert_eq!(classify("python -m pytest tests/"), "pytest");
         assert_eq!(classify("ls -la"), "generic");
+    }
+
+    #[test]
+    fn families_name_the_command_that_produced_output() {
+        assert_eq!(family("cd web && pnpm exec vitest run"), "pnpm exec");
+        assert_eq!(family("timeout 30 cargo test -q"), "cargo test");
+        assert_eq!(family("git -C x status"), "git");
+        assert_eq!(family("sed -n '1,80p' src/main.rs"), "sed");
+        assert_eq!(family("/usr/bin/python3 x.py"), "python3");
+        assert_eq!(family("export A=1; ls -la"), "ls");
     }
 
     #[test]
