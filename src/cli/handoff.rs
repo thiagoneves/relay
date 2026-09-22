@@ -1,31 +1,32 @@
-use anyhow::bail;
-
 use crate::core::paths::Paths;
 use crate::core::{handoff, spool};
 use crate::helpers::git;
 
+use super::ui::{Ui, problem};
+
+/// The handoff text goes to stdout as is; where it lives goes to stderr.
 pub fn run(session: Option<&str>, show: bool) -> anyhow::Result<i32> {
     let paths = Paths::from_cwd()?;
+    let notes = Ui::stderr();
     if show {
-        match handoff::latest(&paths, &git::branch(&paths.root)) {
-            Some((p, body)) => {
-                eprintln!("# {}", paths.rel(&p));
-                print!("{body}");
-            }
-            None => println!("relay: no handoff yet"),
-        }
+        let Some((p, body)) = handoff::latest(&paths, &git::branch(&paths.root)) else {
+            return Err(no_sessions());
+        };
+        notes.note(&format!("# {}", paths.rel(&p)));
+        print!("{body}");
         return Ok(0);
     }
     let session = match session {
         Some(s) => s.to_string(),
-        None => match spool::sessions(&paths).first() {
-            Some((s, _)) => s.clone(),
-            None => bail!("no sessions recorded yet; run a harness with relay hooks installed"),
-        },
+        None => spool::sessions(&paths).first().map(|(s, _)| s.clone()).ok_or_else(no_sessions)?,
     };
     let tail = crate::harness::tail_for(&paths, &session);
     let h = handoff::build(&paths, &session, "manual", tail.as_ref())?;
-    eprintln!("# {}", paths.rel(&h.path));
+    notes.note(&format!("# {}", paths.rel(&h.path)));
     print!("{}", h.body);
     Ok(0)
+}
+
+fn no_sessions() -> anyhow::Error {
+    problem("No session recorded in this repo yet.", "Start one with `relay claude` or `relay codex`.")
 }
