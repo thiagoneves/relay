@@ -1,9 +1,9 @@
 use crate::core::memory::{self, Kind};
 use crate::core::paths::Paths;
-use crate::core::{handoff, outputs, spool, usage};
+use crate::core::{handoff, log, outputs, spool, usage};
 use crate::helpers::env::tilde;
 use crate::helpers::text::count;
-use crate::helpers::{dir_size, human_bytes, human_tokens};
+use crate::helpers::{dir_size, human_bytes, human_tokens, truncate_chars};
 
 use super::ui::Ui;
 
@@ -15,6 +15,7 @@ pub fn run() -> anyhow::Result<i32> {
     print_compression(ui, &paths, &outs);
     print_last_session_context(ui, &paths);
     print_orientation(ui, &paths);
+    let failures = print_failures(ui, &paths);
     let sessions = spool::sessions(&paths).len();
     ui.field("Sessions", &format!("{} recorded · {}", sessions, count(handoff::count(&paths), "handoff")));
     let items = memory::list(&paths);
@@ -43,16 +44,32 @@ pub fn run() -> anyhow::Result<i32> {
         ),
     );
     ui.blank();
-    ui.next(next_step(sessions, remembered.iter().sum()));
+    ui.next(next_step(failures, sessions, remembered.iter().sum()));
     Ok(0)
 }
 
-fn next_step(sessions: usize, remembered: usize) -> &'static str {
+fn next_step(failures: usize, sessions: usize, remembered: usize) -> &'static str {
     match (sessions, remembered) {
+        _ if failures > 0 => "See what failed and when: `relay log`.",
         (0, _) => "Start a session with `relay claude` or `relay codex`.",
         (_, 0) => "Save what a new session should know: `relay remember rule \"<one line>\"`.",
         _ => "See what fills your context and how to trim it: `relay audit`.",
     }
+}
+
+/// Hooks never fail in front of the harness; this is where the user
+/// finds out that one did. Returns how many failed in the window.
+fn print_failures(ui: Ui, paths: &Paths) -> usize {
+    let window = crate::limits::status::FAILURE_WINDOW;
+    let recent = log::since(paths, std::time::SystemTime::now() - window);
+    match recent.last() {
+        None => ui.field("Failures", "none in the last 7 days"),
+        Some(last) => ui.field(
+            "Failures",
+            &format!("{} in the last 7 days · last: {}", recent.len(), truncate_chars(&last.what, 80)),
+        ),
+    }
+    recent.len()
 }
 
 fn print_compression(ui: Ui, paths: &Paths, outs: &[outputs::OutputMeta]) {

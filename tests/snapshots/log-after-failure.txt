@@ -1,0 +1,4 @@
+exit: 0
+--- stdout
+<time>  hook claude-code error: expected ident at line 1 column 2
+--- stderr

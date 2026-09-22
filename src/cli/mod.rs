@@ -9,6 +9,7 @@ mod handoff;
 mod hook;
 mod init;
 mod install;
+mod log;
 mod pipe;
 mod purge;
 mod remember;
@@ -134,6 +135,12 @@ pub enum Commands {
     Brief,
     /// What relay saved, what it stores, and where
     Status,
+    /// What failed in relay's hooks, newest last
+    Log {
+        /// How many lines to show
+        #[arg(short = 'n', long, default_value_t = crate::limits::status::LOG_LINES)]
+        lines: usize,
+    },
     /// Delete local relay data for this worktree (never touches .relay/)
     Purge {
         #[arg(long)]
@@ -196,6 +203,7 @@ fn run() -> anyhow::Result<i32> {
             bench::run(source, json, min_recall)
         }
         Commands::Brief => brief::run(),
+        Commands::Log { lines } => log::run(lines),
         Commands::Status => status::run(),
         Commands::Purge { yes } => purge::run(yes),
         Commands::Claude { last, args } => wrap::run(HarnessId::Claude, last, &args),

@@ -12,9 +12,11 @@ fn normalize(text: &str) -> String {
     let size = regex::Regex::new(r"\d+(\.\d+)? (B|KB|MB|GB)\b").unwrap();
     let id = regex::Regex::new(r"o_[0-9a-f]+_[0-9a-f]+").unwrap();
     let backup = regex::Regex::new(r"relay-bak-\d+").unwrap();
+    let time = regex::Regex::new(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ").unwrap();
     let text = size.replace_all(text, "<size>");
     let text = id.replace_all(&text, "<id>");
-    backup.replace_all(&text, "relay-bak-<time>").into_owned()
+    let text = backup.replace_all(&text, "relay-bak-<time>");
+    time.replace_all(&text, "<time>").into_owned()
 }
 
 fn check(name: &str, output: &std::process::Output) {
@@ -68,4 +70,16 @@ fn installing_hooks() {
     check("install-claude-again", &repo.run(&["install", "claude"]));
     check("uninstall-claude", &repo.run(&["uninstall", "claude"]));
     check("uninstall-claude-again", &repo.run(&["uninstall", "claude"]));
+}
+
+#[test]
+fn a_failing_hook_shows_up() {
+    use std::io::Write;
+    let repo = Repo::new("snap-failure");
+    let mut hook =
+        repo.isolated(common::relay()).args(["hook", "claude"]).stdin(std::process::Stdio::piped()).spawn().unwrap();
+    hook.stdin.take().unwrap().write_all(b"not json").unwrap();
+    assert!(hook.wait().unwrap().success(), "a hook must exit 0 even when it fails");
+    check("status-after-failure", &repo.run(&["status"]));
+    check("log-after-failure", &repo.run(&["log"]));
 }

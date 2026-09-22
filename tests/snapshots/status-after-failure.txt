@@ -3,12 +3,12 @@ exit: 0
 relay status · ~
 
   Compression   nothing compressed yet
-  Failures      none in the last 7 days
+  Failures      1 in the last 7 days · last: hook claude-code error: expected ident at line 1 column 2
   Sessions      0 recorded · 0 handoffs
   Remembered    0 rules · 0 gotchas · 0 decisions
 
   Shared        .relay · <size> · committed with the repo
   Local         .git/relay · <size> · this worktree, never leaves the machine
 
-→ Start a session with `relay claude` or `relay codex`.
+→ See what failed and when: `relay log`.
 --- stderr

@@ -70,6 +70,16 @@ pub mod handoff {
     pub const COMMAND_CHARS: usize = 80;
 }
 
+/// `relay status` and `relay log`.
+pub mod status {
+    use std::time::Duration;
+
+    /// How far back `relay status` counts failures.
+    pub const FAILURE_WINDOW: Duration = Duration::from_secs(7 * 24 * 3600);
+    /// Lines `relay log` shows by default.
+    pub const LOG_LINES: usize = 20;
+}
+
 /// `relay audit`.
 pub mod audit {
     /// Sources below this share of all context sent are not a finding.

@@ -3,6 +3,7 @@ exit: 0
 relay status · ~
 
   Compression   nothing compressed yet
+  Failures      none in the last 7 days
   Sessions      0 recorded · 0 handoffs
   Remembered    1 rule · 0 gotchas · 0 decisions
 
