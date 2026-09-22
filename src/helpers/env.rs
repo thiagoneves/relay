@@ -82,9 +82,12 @@ pub fn home() -> PathBuf {
     path(Var::Home).or_else(|| path(Var::UserProfile)).unwrap_or_else(std::env::temp_dir)
 }
 
-/// `~/rest` for paths under home, for display.
+/// `~/rest` for paths under home, for display. On Windows the two sides
+/// can spell one path differently (`\\?\C:\…` from a canonical path,
+/// `C:/…` from git), so both are simplified first.
 pub fn tilde(p: &Path) -> String {
-    match p.strip_prefix(home()) {
+    let home = super::fs::simplify(home());
+    match super::fs::simplify(p.to_path_buf()).strip_prefix(&home) {
         Ok(rest) if rest.as_os_str().is_empty() => "~".to_string(),
         Ok(rest) => format!("~/{}", slash(rest)),
         Err(_) => p.display().to_string(),
