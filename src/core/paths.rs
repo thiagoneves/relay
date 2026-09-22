@@ -121,6 +121,11 @@ pub fn home() -> PathBuf {
     std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map_or_else(std::env::temp_dir, PathBuf::from)
 }
 
+/// `~/rest` for paths under home, for display.
+pub fn tilde(p: &Path) -> String {
+    p.strip_prefix(home()).map_or_else(|_| p.display().to_string(), |rest| format!("~/{}", slash(rest)))
+}
+
 /// `$XDG_DATA_HOME/relay`, else `%LOCALAPPDATA%\\relay` on Windows, else
 /// `~/.local/share/relay`.
 pub fn data_home() -> PathBuf {

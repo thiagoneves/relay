@@ -5,9 +5,14 @@
 //! size times the calls that followed (a block stays in the context and is
 //! resent on each of them), adds sessions up, and ranks findings.
 
+pub mod findings;
+
 use std::collections::{BTreeSet, HashMap};
+use std::path::PathBuf;
 
 use serde::Serialize;
+
+pub use findings::{Finding, Kind, Severity};
 
 use crate::core::usage::ApiUsage;
 
@@ -52,9 +57,25 @@ pub struct SessionAudit {
     pub skills_invoked: BTreeSet<String>,
     /// False when the harness does not record which skills ran.
     pub skills_tracked: bool,
+    pub mcp_servers: BTreeSet<String>,
     pub subagent: bool,
     /// When the transcript was last written; set by the caller.
     pub seen: Option<std::time::SystemTime>,
+}
+
+/// What the harness loads today, to tell live findings from history. A
+/// session loads its context when it starts, so findings from sessions
+/// started before a config change keep showing what was removed since.
+#[derive(Default)]
+pub struct Now {
+    /// Hook commands in today's config, when the adapter can read them.
+    pub hooks: Option<Vec<String>>,
+    /// The harness's newest session in any project: the latest context
+    /// the global config produced.
+    pub newest: Option<SessionAudit>,
+    pub newest_started: Option<std::time::SystemTime>,
+    /// Project root, to resolve relative instruction files.
+    pub root: Option<PathBuf>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -70,27 +91,11 @@ pub struct Report {
     pub skills_listed: usize,
     pub skills_used: Vec<String>,
     pub skills_tracked: bool,
+    /// Skills listed in the newest session and never invoked in any audited one.
+    pub skills_unused: Vec<String>,
+    /// MCP servers in the newest session, else in the audited ones.
+    pub mcp_servers: Vec<String>,
     pub findings: Vec<Finding>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct Finding {
-    pub severity: Severity,
-    pub text: String,
-    pub fix: String,
-    /// Tokens resent across the audited sessions; 0 when not a token cost.
-    pub resent: usize,
-    /// Newest audited session it appeared in.
-    pub last_seen: Option<String>,
-    /// For hooks: whether today's harness config still has it (`None` when
-    /// the harness cannot tell).
-    pub still_configured: Option<bool>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
-pub enum Severity {
-    Broken,
-    Waste,
 }
 
 /// A session transcript a harness wrote. Subagent transcripts carry the
@@ -126,6 +131,11 @@ pub fn select(mut all: Vec<Transcript>, limit: usize) -> Vec<Transcript> {
     top.into_iter().chain(subs).collect()
 }
 
+/// The top-level session started last.
+pub fn newest(all: Vec<Transcript>) -> Option<Transcript> {
+    all.into_iter().filter(|t| t.parent.is_none()).max_by_key(|t| t.started)
+}
+
 struct Block {
     source: String,
     origin: Origin,
@@ -141,16 +151,23 @@ struct Block {
     until: Option<usize>,
 }
 
+/// What the first call sent beyond the blocks seen before it: the system
+/// prompt and tool schemas, which transcripts do not record. Sent on every
+/// call.
+pub const FIXED_OVERHEAD: &str = "System prompt and tool schemas (from 1st call)";
+
 /// Built by a harness adapter while it reads one transcript in order.
 #[derive(Default)]
 pub struct Collector {
     usage: ApiUsage,
     blocks: Vec<Block>,
+    first_context: Option<usize>,
     pub audit: SessionAudit,
 }
 
 impl Collector {
     pub fn call(&mut self, context: usize, cached: usize, output: usize) {
+        self.first_context.get_or_insert(context);
         self.usage.add_call(context, cached, output);
     }
 
@@ -210,7 +227,16 @@ impl Collector {
         if calls == 0 {
             return None;
         }
+        let before_first: usize = self.blocks.iter().filter(|b| b.from == 0).map(|b| b.tokens).sum();
+        let fixed = self.first_context.unwrap_or(0).saturating_sub(before_first);
         let mut by: HashMap<String, Cost> = HashMap::new();
+        if fixed > 0 {
+            let source = FIXED_OVERHEAD.to_string();
+            by.insert(
+                source.clone(),
+                Cost { source, origin: Origin::Harness, items: 1, tokens: fixed, resent: fixed * calls },
+            );
+        }
         for b in self.blocks {
             let c = by.entry(b.source.clone()).or_insert_with(|| Cost {
                 source: b.source,
@@ -227,17 +253,13 @@ impl Collector {
     }
 }
 
-/// Sources below this share of all context sent are not worth a finding.
-const MIN_SHARE: f64 = 0.005;
-
-/// `configured_hooks`: hook commands in the harness config today, when the
-/// adapter can read them; failures of hooks no longer there are history.
-pub fn report(sessions: Vec<SessionAudit>, configured_hooks: Option<&[String]>) -> Report {
+pub fn report(sessions: Vec<SessionAudit>, now: &Now) -> Report {
     let mut r = Report::default();
     let mut seen: HashMap<String, std::time::SystemTime> = HashMap::new();
     let mut by: HashMap<String, Cost> = HashMap::new();
     let mut listed = BTreeSet::new();
     let mut used = BTreeSet::new();
+    let mut mcp = BTreeSet::new();
     for s in sessions {
         if s.subagent {
             r.subagents += 1;
@@ -279,113 +301,26 @@ pub fn report(sessions: Vec<SessionAudit>, configured_hooks: Option<&[String]>) 
         r.skills_tracked |= s.skills_tracked;
         listed.extend(s.skills_listed);
         used.extend(s.skills_invoked);
+        mcp.extend(s.mcp_servers);
     }
     r.costs = by.into_values().collect();
     r.costs.sort_by_key(|c| std::cmp::Reverse(c.resent));
     r.skills_listed = listed.len();
+    if let Some(n) = &now.newest {
+        used.extend(n.skills_invoked.iter().cloned());
+        listed.clone_from(&n.skills_listed);
+        mcp.clone_from(&n.mcp_servers);
+    }
+    r.skills_unused = listed.into_iter().filter(|s| !used.contains(s)).collect();
     r.skills_used = used.into_iter().collect();
-    r.findings = findings(&r, &seen, configured_hooks);
+    r.mcp_servers = mcp.into_iter().collect();
+    r.findings = findings::findings(&r, &seen, now);
     r
-}
-
-fn findings(
-    r: &Report,
-    seen: &HashMap<String, std::time::SystemTime>,
-    configured_hooks: Option<&[String]>,
-) -> Vec<Finding> {
-    let label = |t: Option<std::time::SystemTime>| t.map(crate::helpers::short_utc);
-    let mut out = Vec::new();
-    let mut by_cause: Vec<(&str, Vec<&HookError>)> = Vec::new();
-    for h in &r.hook_errors {
-        match by_cause.iter_mut().find(|(m, _)| *m == h.message) {
-            Some((_, v)) => v.push(h),
-            None => by_cause.push((&h.message, vec![h])),
-        }
-    }
-    for (message, hooks) in by_cause {
-        let count: usize = hooks.iter().map(|h| h.count).sum();
-        let last = hooks.iter().filter_map(|h| h.last_seen).max();
-        let still = configured_hooks.map(|cfg| hooks.iter().any(|h| cfg.iter().any(|c| c == &h.command)));
-        let fix = if still == Some(false) {
-            "Already gone from your current config; this is history and will not recur".into()
-        } else {
-            "Fix or remove it in the harness settings or plugin: it runs, and fails, on every matching event".into()
-        };
-        let who = if hooks.len() == 1 {
-            format!("Hook `{}`", ends(&hooks[0].command))
-        } else {
-            format!("{} hooks (e.g. `{}`)", hooks.len(), ends(&hooks[0].command))
-        };
-        out.push(Finding {
-            severity: Severity::Broken,
-            text: format!(
-                "{who} failed {count} times: {}",
-                message.trim_start_matches("Failed with non-blocking status code: ")
-            ),
-            fix,
-            resent: 0,
-            last_seen: label(last),
-            still_configured: still,
-        });
-    }
-    let share = |n: usize| if r.context_sent == 0 { 0.0 } else { n as f64 / r.context_sent as f64 };
-    for c in r.costs.iter().filter(|c| c.origin == Origin::Config && share(c.resent) >= MIN_SHARE) {
-        let fix = if c.source == "Skills listing" {
-            let used = if r.skills_tracked {
-                format!("{} invoked in these sessions", r.skills_used.len())
-            } else {
-                "this harness does not record which ran".into()
-            };
-            format!(
-                "{} skills listed on every call, {used}. Uninstall or disable the rest; \
-                 skills in your home config and plugins load in every project",
-                r.skills_listed.max(c.items)
-            )
-        } else if c.source.starts_with("Hook output") {
-            "This hook prints into the context on every prompt. Make it silent or remove it".into()
-        } else if c.source.starts_with("MCP server instructions") || c.source.starts_with("Deferred tool names") {
-            "Disable MCP servers this project does not use (per-project config instead of global)".into()
-        } else if c.source.starts_with("Auto-review") {
-            "Every approval sends the conversation to a reviewer model. Use a permission profile that needs fewer approvals, or review manually".into()
-        } else if c.source.starts_with("Instruction file ~/") && !c.source.contains("/Projects/") {
-            "Loaded from your home directory, so it applies to every project below it. Keep only what applies everywhere".into()
-        } else if c.source.starts_with("Agent types") {
-            "Remove custom agent definitions you do not use".into()
-        } else {
-            "Trim it to what the agent needs on every call".into()
-        };
-        out.push(Finding {
-            severity: Severity::Waste,
-            text: c.source.clone(),
-            fix,
-            resent: c.resent,
-            last_seen: label(seen.get(&c.source).copied()),
-            still_configured: None,
-        });
-    }
-    out.sort_by(|a, b| a.severity.cmp(&b.severity).then(b.resent.cmp(&a.resent)));
-    out
-}
-
-/// Long commands keep their start and their end, where the script name is.
-fn ends(cmd: &str) -> String {
-    let flat = cmd.split_whitespace().collect::<Vec<_>>().join(" ");
-    let chars: Vec<char> = flat.chars().collect();
-    if chars.len() <= 70 {
-        return flat;
-    }
-    let head: String = chars[..25].iter().collect();
-    let tail: String = chars[chars.len() - 40..].iter().collect();
-    format!("{head} … {tail}")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn cost(source: &str, origin: Origin, resent: usize) -> Cost {
-        Cost { source: source.into(), origin, items: 1, tokens: 10, resent }
-    }
 
     #[test]
     fn compaction_stops_charging_what_came_before() {
@@ -402,42 +337,14 @@ mod tests {
     }
 
     #[test]
-    fn hooks_gone_from_config_are_history() {
-        let s = SessionAudit {
-            usage: ApiUsage { calls: 1, context_sent: 10, ..ApiUsage::default() },
-            hook_errors: vec![
-                HookError { command: "old".into(), message: "gone".into(), count: 1, last_seen: None },
-                HookError { command: "live".into(), message: "broken".into(), count: 2, last_seen: None },
-            ],
-            ..SessionAudit::default()
-        };
-        let r = report(vec![s], Some(&["live".to_string()]));
-        let still: Vec<Option<bool>> = r.findings.iter().map(|f| f.still_configured).collect();
-        assert_eq!(still, [Some(false), Some(true)]);
-        assert!(r.findings[0].fix.starts_with("Already gone"));
-    }
-
-    #[test]
-    fn findings_rank_broken_first_then_by_cost() {
-        let s = SessionAudit {
-            usage: ApiUsage { calls: 10, context_sent: 1_000_000, ..ApiUsage::default() },
-            costs: vec![
-                cost("Skills listing", Origin::Config, 50_000),
-                cost("Hook output on UserPromptSubmit: x", Origin::Config, 90_000),
-                cost("Tool results: Bash", Origin::Work, 500_000),
-                cost("Instruction file ~/CLAUDE.md", Origin::Config, 100),
-            ],
-            hook_errors: vec![HookError {
-                command: "rtk hook claude".into(),
-                message: "not found".into(),
-                count: 3,
-                last_seen: None,
-            }],
-            ..SessionAudit::default()
-        };
-        let r = report(vec![s], None);
-        let texts: Vec<&str> = r.findings.iter().map(|f| f.text.as_str()).collect();
-        assert!(texts[0].starts_with("Hook `rtk hook claude` failed 3 times"), "{texts:?}");
-        assert_eq!(&texts[1..], ["Hook output on UserPromptSubmit: x", "Skills listing"]);
+    fn first_call_beyond_known_blocks_is_fixed_overhead() {
+        let mut col = Collector::default();
+        col.add("prompt", Origin::Work, "some words here");
+        let known = crate::helpers::est_tokens("some words here");
+        col.call(1000, 0, 1);
+        col.call(1100, 0, 1);
+        let a = col.finish().unwrap();
+        let fixed = a.costs.iter().find(|c| c.source == FIXED_OVERHEAD).unwrap();
+        assert_eq!((fixed.tokens, fixed.resent), (1000 - known, (1000 - known) * 2));
     }
 }
