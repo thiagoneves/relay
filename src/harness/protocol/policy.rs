@@ -168,7 +168,11 @@ fn segment_verdict(text: &str, then: Joint) -> Verdict {
     let Some(t0) = toks.first().map(|t| program(t)) else { return Verdict::Neutral };
     let words: Vec<&str> = text.split_whitespace().collect();
     let already_wrapped = words.first().is_some_and(|w| matches!(program(w.trim_matches('\'')), "relay" | "rtk"));
-    if already_wrapped || INTERACTIVE.contains(&t0) || SHELL_STATE.contains(&t0) || runs_until_killed(t0, &toks, &words)
+    if already_wrapped
+        || INTERACTIVE.contains(&t0)
+        || SHELL_STATE.contains(&t0)
+        || runs_until_killed(t0, &toks, &words)
+        || (t0 == "git" && !git_reads(&words))
     {
         Verdict::Refuse
     } else if WRAP.contains(&t0) {
@@ -176,6 +180,39 @@ fn segment_verdict(text: &str, then: Joint) -> Verdict {
     } else {
         Verdict::Neutral
     }
+}
+
+/// Git subcommands whose output is worth compressing. Anything else
+/// changes the repository and prints little: rewriting it gains nothing
+/// and hides the real command from permission rules and guards.
+fn git_reads(words: &[&str]) -> bool {
+    const READS: &[&str] = &[
+        "status",
+        "diff",
+        "log",
+        "show",
+        "blame",
+        "grep",
+        "ls-files",
+        "ls-tree",
+        "shortlog",
+        "reflog",
+        "describe",
+        "rev-list",
+        "cat-file",
+        "whatchanged",
+        "range-diff",
+    ];
+    const TAKES_VALUE: &[&str] = &["-C", "-c", "--git-dir", "--work-tree", "--namespace"];
+    let mut rest = words.iter().copied().skip_while(|w| program(w) != "git").skip(1);
+    while let Some(t) = rest.next() {
+        if TAKES_VALUE.contains(&t) {
+            rest.next();
+        } else if !t.starts_with('-') {
+            return READS.contains(&t);
+        }
+    }
+    false
 }
 
 /// Servers, watchers and followers: `npm run dev`, `pnpm dev`,
@@ -222,6 +259,17 @@ mod tests {
     }
 
     #[test]
+    fn only_git_reads_are_wrapped() {
+        assert!(should_wrap("git -C /repo --no-pager log -n 5"));
+        assert!(should_wrap("/usr/bin/git diff --stat"));
+        assert!(!should_wrap("git commit -m 'x'"));
+        assert!(!should_wrap("git add . && git commit -m x"));
+        assert!(!should_wrap("git status && git push"));
+        assert!(!should_wrap("git -c user.name=a merge main"));
+        assert!(!should_wrap("git"));
+    }
+
+    #[test]
     fn a_background_job_anywhere_is_not_wrapped() {
         assert!(!should_wrap("sleep 4 & git --version"));
         assert!(!should_wrap("npm run dev & sleep 3; curl localhost:3000"));
@@ -257,7 +305,7 @@ mod tests {
         assert!(!should_wrap("docker compose up api"));
         assert!(!should_wrap("python manage.py runserver"));
         assert!(should_wrap("vite build"));
-        assert!(should_wrap("git checkout dev"));
+        assert!(should_wrap("git log dev"));
         assert!(should_wrap("tail -n 50 log/dev.log"));
         assert!(should_wrap("grep -rn \"dev\" src"));
         assert!(should_wrap("docker start api"));

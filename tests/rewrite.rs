@@ -21,7 +21,8 @@ fn only_read_only_commands_are_approved() {
     let ro = pre(&repo, "claude", &json!({ "command": "git status" })).unwrap();
     assert_eq!(ro["permissionDecision"], "allow");
 
-    for cmd in ["rm -rf build && ls", "git push --force origin main", "cargo test"] {
+    assert!(pre(&repo, "claude", &json!({ "command": "git push --force origin main" })).is_none());
+    for cmd in ["rm -rf build && ls", "cargo test"] {
         let out = pre(&repo, "claude", &json!({ "command": cmd })).unwrap();
         assert!(out["updatedInput"]["command"].as_str().unwrap().contains(" x --session "), "{cmd}");
         assert!(out.get("permissionDecision").is_none(), "{cmd} must go through the normal permission flow: {out}");
