@@ -10,8 +10,8 @@ okf_version: "0.2"
 
 ## Rules
 
+- [Comments only explain why, and are in English even though the team speaks Portuguese](rules/comments-only-explain-why-and-are-in-english-even-though-the.md)
 - [A fixed list may only describe a tool or a protocol; a person's habits become a rule of shape (word count, structure) or stay out](rules/a-fixed-list-may-only-describe-a-tool-or-a-protocol-a-person.md)
-- [Clippy pedantic with a 40-line function limit; comments only for why, always in English](rules/clippy-pedantic-with-a-40-line-function-limit-comments-only.md)
 - [Every fix ships with a test that fails before it; a test that touches file paths must pass on Windows too](rules/every-fix-ships-with-a-test-that-fails-before-it-a-test-that.md)
 - [One concern per commit, in English, no attribution lines; fold a lint fix into the commit it fixes](rules/one-concern-per-commit-in-english-no-attribution-lines-fold.md)
 - [Wait for CI to be green on Linux, macOS and Windows before fast-forwarding main](rules/wait-for-ci-to-be-green-on-linux-macos-and-windows-before-fa.md)
