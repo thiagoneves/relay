@@ -45,6 +45,7 @@ pub enum Commands {
     /// Remove relay hooks from a harness (claude, codex)
     Uninstall { harness: HarnessId },
     /// Hook entry point used by harnesses; reads JSON on stdin
+    #[command(hide = true)]
     Hook { harness: HarnessId },
     /// Run a command, print a compressed view, keep the original
     #[command(name = "x", trailing_var_arg = true, allow_hyphen_values = true)]
