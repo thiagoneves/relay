@@ -10,6 +10,7 @@ pub fn run() -> anyhow::Result<i32> {
     let tokens_out: usize = outs.iter().map(|m| m.tokens_out).sum();
     let saved = tokens_in.saturating_sub(tokens_out);
     let pct = if tokens_in > 0 { saved * 100 / tokens_in } else { 0 };
+    let refetched = outputs::fetched_ids(&paths).len();
     let sessions = spool::sessions(&paths).len();
     let handoffs = std::fs::read_dir(paths.handoffs()).map(std::iter::Iterator::count).unwrap_or(0);
 
@@ -22,6 +23,13 @@ pub fn run() -> anyhow::Result<i32> {
         human_tokens(saved),
         outs.len()
     );
+    if !outs.is_empty() {
+        println!(
+            "Refetched     {refetched} of {} originals ({}%): how often the compressed view was not enough",
+            outs.len(),
+            refetched * 100 / outs.len()
+        );
+    }
     println!("Sessions      {sessions} recorded, {handoffs} handoffs");
     let items = memory::list(&paths);
     let count = |k: Kind| items.iter().filter(|i| i.kind == k).count();

@@ -1,6 +1,7 @@
 //! Command-line surface. Each command is a thin file that parses flags,
 //! calls into `core` or `harness`, and prints. No domain logic here.
 
+mod bench;
 mod brief;
 mod get;
 mod handoff;
@@ -72,6 +73,19 @@ pub enum Commands {
         #[arg(long = "path")]
         paths: Vec<String>,
     },
+    /// Measure compression: tokens saved and signal kept, per filter
+    Bench {
+        /// Fixture dir with <name>.cmd, <name>.out and optional <name>.keep
+        /// (default: this worktree's stored originals)
+        #[arg(long)]
+        corpus: Option<std::path::PathBuf>,
+        /// Machine-readable output
+        #[arg(long)]
+        json: bool,
+        /// Exit 1 when any `.keep` line or more than this share of signal lines is lost
+        #[arg(long, value_name = "RECALL")]
+        min_recall: Option<f64>,
+    },
     /// Print the brief a new session would receive
     Brief,
     /// What relay saved, what it stores, and where
@@ -110,6 +124,7 @@ pub fn run() -> anyhow::Result<i32> {
         Commands::Get { id, meta } => get::run(&id, meta),
         Commands::Handoff { session, show } => handoff::run(session.as_deref(), show),
         Commands::Remember { kind, text, paths } => remember::run(kind, &text.join(" "), &paths),
+        Commands::Bench { corpus, json, min_recall } => bench::run(corpus.as_deref(), json, min_recall),
         Commands::Brief => brief::run(),
         Commands::Status => status::run(),
         Commands::Purge { yes } => purge::run(yes),
