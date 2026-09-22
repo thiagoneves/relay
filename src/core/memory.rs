@@ -6,37 +6,63 @@
 use std::path::PathBuf;
 
 use anyhow::{Result, bail};
+use clap::ValueEnum;
 
 use crate::core::paths::Paths;
 use crate::helpers::git as gitstate;
 use crate::helpers::{now_iso, truncate_chars, write_atomic};
 
-/// Kinds in the order the brief shows them: rules bind every session,
-/// gotchas save the most time, decisions explain the code.
-pub const KINDS: &[&str] = &["rule", "gotcha", "decision"];
+/// What an item is. Declaration order is the order the brief shows
+/// them: rules bind every session, gotchas save the most time,
+/// decisions explain the code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Kind {
+    Rule,
+    Gotcha,
+    Decision,
+}
+
+impl Kind {
+    pub const ALL: [Kind; 3] = [Kind::Rule, Kind::Gotcha, Kind::Decision];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Kind::Rule => "rule",
+            Kind::Gotcha => "gotcha",
+            Kind::Decision => "decision",
+        }
+    }
+
+    fn dir_name(self) -> String {
+        format!("{}s", self.as_str())
+    }
+}
+
+impl std::fmt::Display for Kind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
 pub struct Item {
-    pub kind: String,
+    pub kind: Kind,
     pub path: PathBuf,
     pub title: String,
     pub created: String,
 }
 
-pub fn dir_for(paths: &Paths, kind: &str) -> PathBuf {
-    paths.shared.join(format!("{kind}s"))
+pub fn dir_for(paths: &Paths, kind: Kind) -> PathBuf {
+    paths.shared.join(kind.dir_name())
 }
 
 pub struct NewItem<'a> {
-    pub kind: &'a str,
+    pub kind: Kind,
     pub text: &'a str,
     pub files: &'a [String],
     pub session: Option<&'a str>,
 }
 
 pub fn remember(paths: &Paths, item: &NewItem) -> Result<PathBuf> {
-    if !KINDS.contains(&item.kind) {
-        bail!("unknown kind `{}` (use: {})", item.kind, KINDS.join(", "));
-    }
     let text = item.text.trim();
     if text.is_empty() {
         bail!("nothing to remember: text is empty");
@@ -70,10 +96,10 @@ pub fn remember(paths: &Paths, item: &NewItem) -> Result<PathBuf> {
     Ok(path)
 }
 
-/// All items, newest first within each kind, kinds in `KINDS` order.
+/// All items, newest first within each kind, kinds in `Kind::ALL` order.
 pub fn list(paths: &Paths) -> Vec<Item> {
     let mut out = Vec::new();
-    for kind in KINDS {
+    for kind in Kind::ALL {
         let mut items: Vec<Item> = Vec::new();
         let Ok(rd) = std::fs::read_dir(dir_for(paths, kind)) else { continue };
         for e in rd.flatten() {
@@ -87,7 +113,7 @@ pub fn list(paths: &Paths) -> Vec<Item> {
             if title.is_empty() {
                 continue;
             }
-            items.push(Item { kind: kind.to_string(), path: p, title, created });
+            items.push(Item { kind, path: p, title, created });
         }
         items.sort_by(|a, b| b.created.cmp(&a.created).then(a.path.cmp(&b.path)));
         out.extend(items);
@@ -122,7 +148,14 @@ fn unique_path(dir: &std::path::Path, stem: &str) -> PathBuf {
     if !first.exists() {
         return first;
     }
-    (2..).map(|n| dir.join(format!("{stem}-{n}.md"))).find(|p| !p.exists()).expect("unbounded range")
+    let mut n = 2;
+    loop {
+        let p = dir.join(format!("{stem}-{n}.md"));
+        if !p.exists() {
+            return p;
+        }
+        n += 1;
+    }
 }
 
 #[cfg(test)]

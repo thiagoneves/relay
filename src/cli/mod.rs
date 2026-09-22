@@ -16,7 +16,11 @@ mod x;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "relay", version, about = "Context layer for coding agents: compresses what goes in, remembers what matters, lives in your repo.")]
+#[command(
+    name = "relay",
+    version,
+    about = "Context layer for coding agents: compresses what goes in, remembers what matters, lives in your repo."
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -59,8 +63,8 @@ pub enum Commands {
     },
     /// Save a rule, gotcha or decision to `.relay/` (committed, one file per item)
     Remember {
-        /// rule, gotcha or decision
-        kind: String,
+        #[arg(value_enum)]
+        kind: crate::core::memory::Kind,
         /// The item; first line becomes the title
         #[arg(required = true, num_args = 1..)]
         text: Vec<String>,
@@ -105,7 +109,7 @@ pub fn run() -> anyhow::Result<i32> {
         Commands::Exec { raw, cmd } => x::run(&cmd.join(" "), raw),
         Commands::Get { id, meta } => get::run(&id, meta),
         Commands::Handoff { session, show } => handoff::run(session.as_deref(), show),
-        Commands::Remember { kind, text, paths } => remember::run(&kind, &text.join(" "), &paths),
+        Commands::Remember { kind, text, paths } => remember::run(kind, &text.join(" "), &paths),
         Commands::Brief => brief::run(),
         Commands::Status => status::run(),
         Commands::Purge { yes } => purge::run(yes),

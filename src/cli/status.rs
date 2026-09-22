@@ -1,5 +1,6 @@
+use crate::core::memory::{self, Kind};
 use crate::core::paths::Paths;
-use crate::core::{memory, outputs, spool};
+use crate::core::{outputs, spool};
 use crate::helpers::{dir_size, human_bytes, human_tokens};
 
 pub fn run() -> anyhow::Result<i32> {
@@ -10,16 +11,26 @@ pub fn run() -> anyhow::Result<i32> {
     let saved = tokens_in.saturating_sub(tokens_out);
     let pct = if tokens_in > 0 { saved * 100 / tokens_in } else { 0 };
     let sessions = spool::sessions(&paths).len();
-    let handoffs = std::fs::read_dir(paths.handoffs()).map(|r| r.count()).unwrap_or(0);
+    let handoffs = std::fs::read_dir(paths.handoffs()).map(std::iter::Iterator::count).unwrap_or(0);
 
     println!("relay status · {}", paths.root.display());
     println!();
-    println!("Compression   {} → {} tokens, saved {} ({pct}%) over {} outputs  [estimate: bytes/4]",
-        human_tokens(tokens_in), human_tokens(tokens_out), human_tokens(saved), outs.len());
+    println!(
+        "Compression   {} → {} tokens, saved {} ({pct}%) over {} outputs  [estimate: bytes/4]",
+        human_tokens(tokens_in),
+        human_tokens(tokens_out),
+        human_tokens(saved),
+        outs.len()
+    );
     println!("Sessions      {sessions} recorded, {handoffs} handoffs");
     let items = memory::list(&paths);
-    let count = |k: &str| items.iter().filter(|i| i.kind == k).count();
-    println!("Remembered    {} rules, {} gotchas, {} decisions", count("rule"), count("gotcha"), count("decision"));
+    let count = |k: Kind| items.iter().filter(|i| i.kind == k).count();
+    println!(
+        "Remembered    {} rules, {} gotchas, {} decisions",
+        count(Kind::Rule),
+        count(Kind::Gotcha),
+        count(Kind::Decision)
+    );
     println!("Layer cost    0 tokens (no LLM calls in the default path)");
     println!();
     println!("Shared (committed)  {}  {}", paths.rel(&paths.shared), human_bytes(dir_size(&paths.shared)));
