@@ -146,14 +146,15 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness_id: &str) {
     if cmd.is_empty() {
         return;
     }
-    // Keep the "current session" pointer fresh for `relay x`.
+    // `relay remember` and hand-typed `relay x` have no session of their
+    // own; they fall back to this pointer.
     if spool::current_session(paths).as_deref() != Some(session) {
         spool::set_current_session(paths, session);
     }
     if !rewrites_commands(harness_id) || !should_wrap(cmd) {
         return;
     }
-    let rewritten = format!("{} x -- {}", relay_invocation(), shell::quote(cmd));
+    let rewritten = format!("{} x --session {} -- {}", relay_invocation(), shell::quote(session), shell::quote(cmd));
     let out = json!({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",

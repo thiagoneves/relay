@@ -48,6 +48,9 @@ pub enum Commands {
         /// Print the raw output (still strips ANSI)
         #[arg(long)]
         raw: bool,
+        /// Session the output belongs to; set by the hook that rewrote the command
+        #[arg(long, hide = true)]
+        session: Option<String>,
         #[arg(required = true, num_args = 1..)]
         cmd: Vec<String>,
     },
@@ -156,7 +159,7 @@ pub fn run() -> anyhow::Result<i32> {
         Commands::Install { harness } => install::install(&harness),
         Commands::Uninstall { harness } => install::uninstall(&harness),
         Commands::Hook { harness } => hook::run(&harness),
-        Commands::Exec { raw, cmd } => x::run(&cmd.join(" "), raw),
+        Commands::Exec { raw, session, cmd } => x::run(&cmd.join(" "), raw, session.as_deref()),
         Commands::Pipe { cmd } => pipe::run(&cmd),
         Commands::Get { id, meta } => get::run(&id, meta),
         Commands::Handoff { session, show } => handoff::run(session.as_deref(), show),

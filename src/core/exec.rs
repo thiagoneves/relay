@@ -19,7 +19,12 @@ pub struct Outcome {
     pub printed: String,
 }
 
-pub fn run(cmd: &str, raw_only: bool) -> Result<Outcome> {
+pub fn run(cmd: &str, raw_only: bool, session: Option<&str>) -> Result<Outcome> {
+    // Resolved before the command runs: the shared pointer follows
+    // whichever session touched the worktree last, and a long command
+    // gives a parallel session time to move it.
+    let session =
+        session.map(str::to_string).or_else(|| Paths::from_cwd().ok().and_then(|p| spool::current_session(&p)));
     // Merge stderr into stdout in order, inside the user's shell, so
     // compilers and test runners keep their natural interleaving.
     let wrapped = format!("{{\n{cmd}\n}} 2>&1");
@@ -58,7 +63,7 @@ pub fn run(cmd: &str, raw_only: bool) -> Result<Outcome> {
         let meta = OutputMeta {
             id: new_id("o"),
             ts: now_iso(),
-            session: spool::current_session(&paths),
+            session,
             cwd: std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default(),
             cmd: cmd.to_string(),
             exit,
