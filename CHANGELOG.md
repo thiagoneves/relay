@@ -23,6 +23,8 @@ All notable changes to relay. Dates are UTC.
 
 ### Added
 
+- Structured filters for RSpec, ExUnit (`mix test`), PHPUnit, Minitest and
+  `dart test`/`flutter test`: passing lines go, every failure line stays.
 - `.relay/` is an Open Knowledge Format (v0.2) bundle: every item, the
   project file and shared handoffs carry `type`, `title`, `timestamp` and
   `generated`; an `index.md` lists them. `relay init` migrates items written
