@@ -4,8 +4,9 @@
 
 **Your agent forgets. Your repo doesn't have to.**
 
-A context layer for coding agents: it compresses what goes in, remembers what
-matters, and lives in your repo. One binary, no server, no account, no LLM.
+A context layer for coding agents. What one session learned, the next one
+gets, whichever agent you open: Claude Code, Codex, Gemini CLI or Cursor.
+It lives in your repo. One binary, no server, no account, no LLM.
 
 [![ci](https://github.com/thiagoneves/relay/actions/workflows/ci.yml/badge.svg)](https://github.com/thiagoneves/relay/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -17,22 +18,26 @@ Claude Code · Codex · Gemini CLI · Cursor
 ---
 
 Every session starts over. You explain the architecture again, the agent reads
-the same files again, and the decision you settled yesterday is gone. Then a
-test run dumps 600 lines into the context window, and the one line that
+the same files again, and the decision you settled yesterday is gone. Switch
+from Claude Code to Codex and even the little it remembered stays behind. Then
+a test run dumps 600 lines into the context window, and the one line that
 mattered scrolls past.
 
-relay sits under the agent, in the hooks it already calls, and fixes both.
+relay sits under the agent, in the hooks it already calls, and fixes all of it.
 
 ## What you get
 
-**The next session knows where you stopped.** When a session ends, relay writes
+**Pick up where you left off, in any agent.** When a session ends, relay writes
 a handoff from what actually happened: where the work stopped, what you asked,
 the decisions you made, the files touched, what was failing. The next session
-opens with a short brief built from it. Nothing to run, nothing to paste.
+opens with a short brief built from it, whether it runs in Claude Code, Codex,
+Gemini CLI or Cursor. Your memory belongs to the repo, not to a vendor.
+Nothing to run, nothing to paste.
 
 **Memory that lives with the code.** `relay remember` saves a rule, a gotcha or
 a decision as one small file under `.relay/`. Commit it and every session, and
-every teammate, gets it. When the code it describes moves on, relay says so:
+every teammate, gets it; it shows up in a pull request like any other change.
+When the code it describes moves on, relay says so:
 _may be stale: src/pay.rs changed since_.
 
 **Long output, short context.** A 400-line script output reached the model as
@@ -42,9 +47,22 @@ one developer's 21,000 real shell calls, relay kept 100% of the signal lines.
 
 **Small enough to hold in your head.** One binary, the hooks your harness
 already calls, and two directories: `.relay/` that you commit, `.git/relay/`
-that you don't. No server, no account, no database, no background process.
-`relay uninstall` takes the hooks back out of your config; `relay purge`
-deletes what relay stored.
+that you don't. No server, no account, no database, no background process, no
+config file. `relay uninstall` takes the hooks back out of your config;
+`relay purge` deletes what relay stored.
+
+**Nothing happens where you can't see it.** Every compressed view names its
+original. `relay status` shows what was saved, how often the compressed view
+was not enough and the agent fetched the original, how long the hooks took,
+and anything that failed. At the end of each session relay checks that the
+model really received what it swapped in, and reports it if not. The memory is
+plain files under version control. Config files relay edits are backed up
+first. And when relay itself breaks, hooks fail open: the agent never blocks.
+
+**See what is eating your context.** `relay audit` reads your harness's own
+transcripts and shows what every call carries: MCP tool schemas, skill
+listings, instruction files, hook output, with the share each one costs and a
+concrete step to trim it. Costs, not verdicts; you decide what stays.
 
 **Costs you nothing to run.** No model calls in the default path, so the layer
 spends zero tokens of your quota. No daemon, no network. Hooks take about
@@ -75,6 +93,10 @@ Day to day you type one command:
 ```sh
 relay claude      # or relay codex, relay gemini; in Cursor, just open the project
 ```
+
+Plain `claude` keeps working too, once the hooks are in: `relay claude` only
+adds a closing summary and a handoff even when the harness exits without
+firing its hooks.
 
 ## A session, end to end
 
