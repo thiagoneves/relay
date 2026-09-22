@@ -81,7 +81,9 @@ relay speaks the hook protocol Claude Code introduced and Codex adopted.
   permission rules and mode. After a command succeeds, relay swaps in the
   compressed view of its output. Tests, builds, linters and reads are also
   routed through `relay x` and approved, so their output is compressed even when
-  they fail; relay never approves anything else.
+  they fail; relay never approves anything else. When such a command would hit
+  the Bash tool's timeout, `relay x` stops it just before and shows what it
+  printed so far (on Unix).
 - **Codex** only accepts a rewritten command that the hook also approves, so
   there relay compresses reads and the same routine development tasks.
 
