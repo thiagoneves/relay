@@ -17,6 +17,12 @@ pub struct Run<'a> {
     pub session: Option<String>,
 }
 
+/// The stored id a view's `relay get <id>` footer names, when it has one.
+pub fn stored_id(view: &str) -> Option<&str> {
+    let footer = view.lines().last()?.strip_prefix("[relay ")?;
+    footer.rsplit_once("relay get ")?.1.strip_suffix(']')
+}
+
 /// What the model should see of `raw`. Short outputs pass with only
 /// colour codes removed; `paths` is `None` when there is nowhere to keep
 /// an original, and then nothing is cut.
@@ -72,5 +78,16 @@ fn view(c: compress::Compressed, raw: &str, stored: Option<&str>, tokens: Tokens
         ),
         _ if c.shortened => compress::generic::strip_ansi(raw),
         _ => c.text,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_footer_names_the_stored_id() {
+        assert_eq!(stored_id("a\nb\n[relay 3k→900 tokens · original: relay get o_1a_2b]"), Some("o_1a_2b"));
+        assert_eq!(stored_id("a\nb"), None);
     }
 }

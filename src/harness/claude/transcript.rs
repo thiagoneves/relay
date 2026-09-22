@@ -86,6 +86,22 @@ fn transcript(path: PathBuf, id: String, parent: Option<String>) -> Transcript {
     })
 }
 
+/// Tool results for `ids` from the end of a transcript, as the model got
+/// them.
+pub fn tool_results(path: &Path, ids: &[&str]) -> HashMap<String, String> {
+    let mut found = HashMap::new();
+    let Some(lines) = jsonl::tail_lines(path, crate::limits::store::TRANSCRIPT_TAIL_BYTES) else { return found };
+    for line in lines.filter(|l| l.contains("\"tool_result\"")) {
+        let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
+        for b in v["message"]["content"].as_array().into_iter().flatten() {
+            if let Some(id) = b["tool_use_id"].as_str().filter(|id| ids.contains(id)) {
+                found.insert(id.to_string(), jsonl::text_of(&b["content"]));
+            }
+        }
+    }
+    found
+}
+
 pub fn shell_calls(dir: &Path) -> Vec<ShellCall> {
     let mut files = jsonl::files_under(dir);
     files.sort();

@@ -126,6 +126,12 @@ pub trait Harness {
         let _ = transcript;
         None
     }
+    /// The text the model received for each of `ids`, as the transcript
+    /// recorded it; ids it no longer holds are left out.
+    fn tool_results(&self, transcript: &Path, ids: &[&str]) -> std::collections::HashMap<String, String> {
+        let _ = (transcript, ids);
+        std::collections::HashMap::new()
+    }
     /// Where one session's context went; see `core::audit`.
     fn audit_session(&self, transcript: &Path) -> Option<SessionAudit> {
         let _ = transcript;

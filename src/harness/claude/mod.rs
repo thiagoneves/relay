@@ -73,6 +73,10 @@ impl Harness for Claude {
         tail::read(transcript)
     }
 
+    fn tool_results(&self, transcript: &Path, ids: &[&str]) -> std::collections::HashMap<String, String> {
+        transcript::tool_results(transcript, ids)
+    }
+
     fn audit_session(&self, path: &Path) -> Option<SessionAudit> {
         audit::session(path)
     }

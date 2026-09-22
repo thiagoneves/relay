@@ -40,6 +40,16 @@ impl Recorder<'_> {
         self.append("session_start", None, data)
     }
 
+    /// An output relay replaced after the harness ran the command, for the
+    /// end-of-session check that the model saw it.
+    pub fn replaced(&self, tool_use_id: &str, output_id: &str) -> Result<()> {
+        self.append(
+            "replaced",
+            Some(&format!("replaced:{tool_use_id}")),
+            json!({ "tool_use_id": tool_use_id, "output": output_id }),
+        )
+    }
+
     pub fn tool_use(&self, input: &Value) -> Result<()> {
         self.append("tool", input["tool_use_id"].as_str(), tool_data(input))
     }

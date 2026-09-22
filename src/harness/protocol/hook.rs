@@ -6,9 +6,10 @@ use serde_json::{Value, json};
 
 use super::policy::{self, Rewritten};
 use super::record::Recorder;
+use super::verify;
 use crate::core::paths::Paths;
 use crate::core::spool;
-use crate::core::{brief, condense, handoff, outputs};
+use crate::core::{brief, condense, handoff, log, outputs};
 use crate::harness::Harness;
 use crate::helpers::env::{self, Var};
 use crate::helpers::{est_tokens, shell, slash};
@@ -72,7 +73,38 @@ fn session_end(rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result<(
     // After the handoff, which lists this session's outputs; and even when
     // it failed, so storage stays bounded.
     outputs::prune(rec.paths, KEEP_OUTPUTS);
+    check_replacements(rec, input, harness);
     built
+}
+
+/// A harness that ignores relay's replacement gives no error, so the
+/// session's transcript is checked and a miss lands in the failure log,
+/// where `relay status` shows it.
+fn check_replacements(rec: &Recorder, input: &Value, harness: &dyn Harness) {
+    let replaced: Vec<verify::Replaced> = spool::read(rec.paths, rec.session)
+        .into_iter()
+        .filter(|e| e.event == "replaced")
+        .filter_map(|e| {
+            Some(verify::Replaced {
+                tool_use_id: e.data["tool_use_id"].as_str()?.to_string(),
+                output_id: e.data["output"].as_str()?.to_string(),
+            })
+        })
+        .collect();
+    let Some(transcript) = input["transcript_path"].as_str().filter(|_| !replaced.is_empty()) else { return };
+    let ids: Vec<&str> = replaced.iter().map(|r| r.tool_use_id.as_str()).collect();
+    let outcome = verify::check(&replaced, &harness.tool_results(std::path::Path::new(transcript), &ids));
+    if outcome.ignored > 0 {
+        log::write(
+            rec.paths,
+            &format!(
+                "compression after a command is not taking effect: {} showed the model the full output for {} of {} commands relay compressed (a harness update?)",
+                harness.command(),
+                outcome.ignored,
+                outcome.checked
+            ),
+        );
+    }
 }
 
 fn build_handoff(rec: &Recorder, input: &Value, harness: &dyn Harness, reason: &str) -> Result<()> {
@@ -106,6 +138,9 @@ fn shrink_output(rec: &Recorder, input: &Value) {
     let view = condense::view_of(Some(rec.paths), run, &raw);
     if view == raw {
         return;
+    }
+    if let (Some(tool_use_id), Some(output_id)) = (input["tool_use_id"].as_str(), condense::stored_id(&view)) {
+        let _ = rec.replaced(tool_use_id, output_id);
     }
     let mut updated = response.clone();
     updated["stdout"] = view.into();
