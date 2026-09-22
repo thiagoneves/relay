@@ -4,6 +4,8 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
+use super::env::{self, Var};
+
 /// Single-quote for POSIX sh.
 pub fn quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
@@ -21,10 +23,10 @@ pub fn command_word(exe: &Path) -> String {
 /// `cmd` resolved on PATH, honouring PATHEXT on Windows so that npm shims
 /// like `claude.cmd` are found.
 pub fn which(cmd: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
+    let path = env::get(Var::Path)?;
     let exts: Vec<String> = if cfg!(windows) {
-        std::env::var("PATHEXT")
-            .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into())
+        env::text(Var::PathExt)
+            .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into())
             .split(';')
             .filter(|e| !e.is_empty())
             .map(str::to_lowercase)
@@ -48,16 +50,15 @@ fn which_in(cmd: &str, path: &OsStr, exts: &[String]) -> Option<PathBuf> {
 /// The POSIX shell `relay x` runs commands with. `RELAY_SHELL` overrides.
 /// `None` on Windows without Git Bash.
 pub fn posix_shell() -> Option<PathBuf> {
-    if let Some(s) = std::env::var_os("RELAY_SHELL") {
-        return Some(PathBuf::from(s));
+    if let Some(s) = env::path(Var::RelayShell) {
+        return Some(s);
     }
     if !cfg!(windows) {
         let bash = Path::new("/bin/bash");
         return Some(if bash.exists() { bash.into() } else { "/bin/sh".into() });
     }
-    let git_bash_env = std::env::var_os("CLAUDE_CODE_GIT_BASH_PATH").map(PathBuf::from);
-    let program_files =
-        std::env::var_os("ProgramFiles").map(|p| PathBuf::from(p).join("Git").join("bin").join("bash.exe"));
+    let git_bash_env = env::path(Var::ClaudeCodeGitBashPath);
+    let program_files = env::path(Var::ProgramFiles).map(|p| p.join("Git").join("bin").join("bash.exe"));
     // git.exe lives in `<Git>\cmd\`, bash.exe in `<Git>\bin\`.
     let beside_git = which("git").and_then(|g| Some(g.parent()?.parent()?.join("bin").join("bash.exe")));
     // `System32\bash.exe` is WSL: it would run the command inside Linux.

@@ -40,11 +40,6 @@ impl Event {
     }
 }
 
-/// Set by `relay claude|codex` on the harness it launches. Hooks inherit
-/// it and stamp it on `session_start`, which is how the wrapper finds its
-/// own session when others run in the same worktree.
-pub const WRAPPER_ENV: &str = "RELAY_WRAPPER";
-
 fn file_for(paths: &Paths, session: &str) -> PathBuf {
     paths.spool().join(format!("{}.jsonl", safe(session)))
 }

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::core::audit::{Finding, Kind, Report};
-use crate::core::paths::tilde;
+use crate::helpers::env::tilde;
 
 pub fn steps(f: &Finding, r: &Report, config: &Path) -> Vec<String> {
     if f.is_history() {

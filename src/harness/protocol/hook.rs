@@ -11,6 +11,7 @@ use crate::core::usage;
 use crate::core::{brief, handoff, outputs};
 use crate::harness::protocol::permission::{self, Rewrite};
 use crate::harness::{Harness, HarnessId, RewriteSupport};
+use crate::helpers::env::{self, Var};
 use crate::helpers::{est_tokens, shell, slash, truncate_chars};
 
 /// Events relay wants, with the matcher used in settings.json.
@@ -94,7 +95,7 @@ fn session_start(paths: &Paths, session: &str, input: &Value, harness: HarnessId
             "cwd": input["cwd"],
             "harness": harness.stored(),
             "brief_tokens": est_tokens(&text),
-            "wrapper": std::env::var(spool::WRAPPER_ENV).ok(),
+            "wrapper": env::text(Var::RelayWrapper),
         }),
     )?;
     if !text.trim().is_empty() {
@@ -325,7 +326,7 @@ fn runs_until_killed(t0: &str, toks: &[String], words: &[&str]) -> bool {
 /// on Windows), where backslashes and spaces need quoting.
 fn relay_invocation() -> String {
     let exe = std::env::current_exe().ok();
-    if let (Some(exe), Some(path)) = (&exe, std::env::var_os("PATH")) {
+    if let (Some(exe), Some(path)) = (&exe, env::get(Var::Path)) {
         for dir in std::env::split_paths(&path) {
             let cand = dir.join(format!("relay{}", std::env::consts::EXE_SUFFIX));
             if cand.exists() && std::fs::canonicalize(&cand).ok() == std::fs::canonicalize(exe).ok() {

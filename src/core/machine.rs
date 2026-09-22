@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::core::paths::home;
+use crate::helpers::env::home;
 use crate::helpers::profile::{self, PathChange};
 use crate::helpers::shell;
 

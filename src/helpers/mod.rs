@@ -1,6 +1,7 @@
 //! Small shared helpers, one concern per file. Nothing here knows about
 //! relay's storage layout or commands.
 
+pub mod env;
 pub mod fs;
 pub mod git;
 pub mod ids;

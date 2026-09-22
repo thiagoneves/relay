@@ -12,7 +12,7 @@ pub mod jsonl;
 pub mod protocol;
 
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Result, bail};
 use serde_json::Value;
@@ -21,6 +21,7 @@ use crate::core::audit::{Finding, Report, SessionAudit, Transcript};
 use crate::core::bench::ShellCall;
 use crate::core::handoff::Tail;
 use crate::core::paths::Paths;
+use crate::helpers::env::{self, Var};
 
 /// The harnesses relay has an adapter for. The CLI name is what users
 /// type and what installed hooks call (`relay hook claude`); the stored
@@ -137,17 +138,6 @@ pub trait Harness {
     }
 }
 
-/// A harness home from its environment variable, else `default`. An
-/// empty value counts as unset: `PathBuf::from("")` would put the
-/// harness config in whatever directory relay runs from.
-pub fn home_from_env(var: &str, default: impl FnOnce() -> PathBuf) -> PathBuf {
-    dir_or(std::env::var_os(var), default)
-}
-
-fn dir_or(value: Option<std::ffi::OsString>, default: impl FnOnce() -> PathBuf) -> PathBuf {
-    value.filter(|v| !v.is_empty()).map_or_else(default, PathBuf::from)
-}
-
 /// Every adapter relay has, for commands that look across harnesses.
 pub fn all() -> Vec<Box<dyn Harness>> {
     [HarnessId::Claude, HarnessId::Codex].into_iter().map(HarnessId::adapter).collect()
@@ -174,25 +164,12 @@ pub fn read_stdin_json() -> Result<Option<Value>> {
 
 /// Run a hook handler fail-open: errors go to the local log, exit 0.
 pub fn run_fail_open(name: &str, f: impl FnOnce() -> Result<()>) {
-    if std::env::var_os("RELAY_DISABLE").is_some() {
+    if env::is_set(Var::RelayDisable) {
         return;
     }
     if let Err(e) = f()
         && let Ok(p) = Paths::from_cwd()
     {
         crate::core::paths::log(&p, &format!("hook {name} error: {e:#}"));
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn empty_home_variable_falls_back_to_the_default() {
-        let default = || PathBuf::from("/home/u/.claude");
-        assert_eq!(dir_or(Some("".into()), default), PathBuf::from("/home/u/.claude"));
-        assert_eq!(dir_or(None, default), PathBuf::from("/home/u/.claude"));
-        assert_eq!(dir_or(Some("/cfg".into()), default), PathBuf::from("/cfg"));
     }
 }

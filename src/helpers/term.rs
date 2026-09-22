@@ -3,6 +3,8 @@
 
 use std::io::IsTerminal;
 
+use super::env::{self, Var};
+
 #[derive(Clone, Copy)]
 pub struct Paint {
     on: bool,
@@ -20,7 +22,7 @@ pub enum Color {
 
 impl Paint {
     pub fn stdout() -> Self {
-        Self { on: std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none() }
+        Self { on: std::io::stdout().is_terminal() && !env::is_set(Var::NoColor) }
     }
 
     fn wrap(self, code: &str, s: &str) -> String {

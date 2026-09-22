@@ -15,14 +15,14 @@ use super::{Harness, HarnessId, InstallReport};
 use crate::core::audit::{Finding, Report, SessionAudit, Transcript};
 use crate::core::bench::ShellCall;
 use crate::core::handoff::Tail;
-use crate::core::paths::home;
+use crate::helpers::env::{self, Var};
 
 pub struct Claude;
 
 const MARKER: &str = " hook claude";
 
 fn config_dir() -> PathBuf {
-    super::home_from_env("CLAUDE_CONFIG_DIR", || home().join(".claude"))
+    env::path(Var::ClaudeConfigDir).unwrap_or_else(|| env::home().join(".claude"))
 }
 
 fn target() -> hooks_json::Target {

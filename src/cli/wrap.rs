@@ -10,6 +10,7 @@ use anyhow::{Context, bail};
 use crate::core::paths::Paths;
 use crate::core::{bootstrap, handoff, machine, outputs, spool};
 use crate::harness::{self, HarnessId};
+use crate::helpers::env::Var;
 use crate::helpers::{human_tokens, new_id, shell};
 
 pub fn run(id: HarnessId, last: bool, args: &[String]) -> anyhow::Result<i32> {
@@ -49,7 +50,7 @@ pub fn run(id: HarnessId, last: bool, args: &[String]) -> anyhow::Result<i32> {
     let started = SystemTime::now();
     let status = Command::new(&program)
         .args(&launch)
-        .env(spool::WRAPPER_ENV, &wrapper)
+        .env(Var::RelayWrapper.name(), &wrapper)
         .current_dir(&paths.root)
         .status()
         .with_context(|| format!("failed to launch {}", h.command()))?;

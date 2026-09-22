@@ -9,6 +9,7 @@ use crate::compress;
 use crate::core::outputs::{self, OutputMeta};
 use crate::core::paths::Paths;
 use crate::core::spool;
+use crate::helpers::env::Var;
 use crate::helpers::{est_tokens, human_tokens, new_id, now_iso, shell};
 
 /// Outputs shorter than this are printed as is, no footer, not stored.
@@ -36,7 +37,7 @@ pub fn run(cmd: &str, raw_only: bool, session: Option<&str>) -> Result<Outcome> 
         cmd_shell(cmd)
     };
     let out = command
-        .env("RELAY_ACTIVE", "1")
+        .env(Var::RelayActive.name(), "1")
         .stdin(Stdio::inherit())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

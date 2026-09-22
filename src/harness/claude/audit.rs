@@ -189,7 +189,7 @@ fn short_cmd(cmd: &str) -> String {
 }
 
 fn home_short(path: &str) -> String {
-    let home = crate::core::paths::home().display().to_string();
+    let home = crate::helpers::env::home().display().to_string();
     path.strip_prefix(&home).map_or_else(|| path.to_string(), |rest| format!("~{rest}"))
 }
 

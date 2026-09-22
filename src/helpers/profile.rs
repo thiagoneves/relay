@@ -9,6 +9,8 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use super::env::{self, Var};
+
 pub enum PathChange {
     /// The directory is already in this process's PATH.
     Present,
@@ -30,13 +32,13 @@ enum Shell {
 /// Never fails: a profile relay cannot write is the user's to edit, and
 /// must not stop setup, install or the wrapper.
 pub fn ensure_on_path(dir: &Path, home: &Path) -> PathChange {
-    if std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d == dir)) {
+    if env::get(Var::Path).is_some_and(|p| std::env::split_paths(&p).any(|d| d == dir)) {
         return PathChange::Present;
     }
-    let Some(shell) = std::env::var("SHELL").ok().and_then(|s| shell_named(&s)) else {
+    let Some(shell) = env::text(Var::Shell).and_then(|s| shell_named(&s)) else {
         return PathChange::Manual;
     };
-    let zdotdir = std::env::var_os("ZDOTDIR").map(PathBuf::from);
+    let zdotdir = env::path(Var::ZDotDir);
     let file = startup_file(shell, home, zdotdir.as_deref(), cfg!(target_os = "macos"), Path::exists);
     update_profile(&file, shell, dir, home)
 }

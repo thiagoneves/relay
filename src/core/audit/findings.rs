@@ -200,7 +200,7 @@ fn status_of(c: &Cost, kind: Kind, now: &Now) -> (Status, Option<String>) {
 /// `~/x` against home, a relative path against the project root.
 fn resolve(path: &str, now: &Now) -> Option<PathBuf> {
     if let Some(rest) = path.strip_prefix("~/") {
-        return Some(crate::core::paths::home().join(rest));
+        return Some(crate::helpers::env::home().join(rest));
     }
     let p = PathBuf::from(path);
     if p.is_absolute() { Some(p) } else { now.root.as_ref().map(|r| r.join(p)) }

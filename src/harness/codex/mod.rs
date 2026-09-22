@@ -18,14 +18,14 @@ use super::protocol::hooks_json;
 use super::{Harness, HarnessId, InstallReport, RewriteSupport};
 use crate::core::audit::{Finding, Kind, Report, SessionAudit, Transcript};
 use crate::core::handoff::Tail;
-use crate::core::paths::{home, tilde};
+use crate::helpers::env::{self, Var, tilde};
 
 pub struct Codex;
 
 const MARKER: &str = " hook codex";
 
 pub fn codex_home() -> PathBuf {
-    super::home_from_env("CODEX_HOME", || home().join(".codex"))
+    env::path(Var::CodexHome).unwrap_or_else(|| env::home().join(".codex"))
 }
 
 fn target() -> hooks_json::Target {
