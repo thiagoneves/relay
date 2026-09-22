@@ -106,7 +106,9 @@ pub fn fetched_ids(paths: &Paths) -> std::collections::HashSet<String> {
 }
 
 /// Move spilled originals into the local tier. Called from hooks and
-/// the wrapper, which run outside any sandbox. Returns files moved.
+/// the wrapper, which run outside any sandbox. Only complete pairs move
+/// (a `.json` is written last), original first, so the local tier never
+/// holds a sidecar without its original. Returns pairs moved.
 pub fn absorb_spill(paths: &Paths) -> usize {
     let spill = spill_dir(paths);
     let Ok(rd) = fs::read_dir(&spill) else { return 0 };
@@ -115,15 +117,30 @@ pub fn absorb_spill(paths: &Paths) -> usize {
     }
     let mut moved = 0;
     for e in rd.flatten() {
-        let from = e.path();
-        let Some(name) = from.file_name() else { continue };
-        let to = paths.outputs().join(name);
-        let ok = fs::rename(&from, &to).is_ok() || (fs::copy(&from, &to).is_ok() && fs::remove_file(&from).is_ok());
-        if ok {
+        let json = e.path();
+        if json.extension().and_then(|s| s.to_str()) != Some("json") {
+            continue;
+        }
+        let out = json.with_extension("out");
+        if !out.exists() {
+            continue;
+        }
+        if move_file(&out, &paths.outputs()) && move_file(&json, &paths.outputs()) {
             moved += 1;
         }
     }
     moved
+}
+
+/// Rename, or copy under a temp name and rename when the spill dir is on
+/// another filesystem, so a partial copy is never visible.
+fn move_file(from: &Path, dir: &Path) -> bool {
+    let Some(name) = from.file_name() else { return false };
+    let to = dir.join(name);
+    if fs::rename(from, &to).is_ok() {
+        return true;
+    }
+    fs::read(from).is_ok_and(|b| write_atomic(&to, &b).is_ok()) && fs::remove_file(from).is_ok()
 }
 
 fn read_metas(dir: &Path, into: &mut Vec<OutputMeta>) {
@@ -154,4 +171,51 @@ pub fn list(paths: &Paths) -> Vec<OutputMeta> {
 
 pub fn for_session(paths: &Paths, session: &str) -> Vec<OutputMeta> {
     list(paths).into_iter().filter(|m| m.session.as_deref() == Some(session)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn paths(name: &str) -> Paths {
+        let root = std::env::temp_dir().join(format!("relay-ut-outputs-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        Paths { shared: root.join(".relay"), local: root.join("local"), root, in_git: false }
+    }
+
+    fn meta(id: &str) -> OutputMeta {
+        OutputMeta {
+            id: id.into(),
+            ts: "2026-09-22T10:00:00Z".into(),
+            session: Some("s".into()),
+            cwd: String::new(),
+            cmd: "cargo test".into(),
+            exit: 0,
+            filter: "generic".into(),
+            bytes_in: 3,
+            bytes_out: 3,
+            tokens_in: 1,
+            tokens_out: 1,
+        }
+    }
+
+    #[test]
+    fn absorb_leaves_a_pair_whose_sidecar_is_not_written_yet() {
+        let p = paths("absorb");
+        let spill = spill_dir(&p);
+        let _ = fs::remove_dir_all(&spill);
+        fs::create_dir_all(&spill).unwrap();
+        // Mid-write: original present, sidecar not yet renamed in.
+        fs::write(spill.join("o_half.out"), "partial").unwrap();
+        write_pair(&spill, &meta("o_full"), "whole").unwrap();
+
+        assert_eq!(absorb_spill(&p), 1);
+        assert!(p.outputs().join("o_full.out").exists() && p.outputs().join("o_full.json").exists());
+        assert!(!p.outputs().join("o_half.out").exists());
+        assert!(spill.join("o_half.out").exists());
+        assert_eq!(get(&p, "o_full").unwrap().1, "whole");
+        let _ = fs::remove_dir_all(&spill);
+        let _ = fs::remove_dir_all(&p.root);
+    }
 }
