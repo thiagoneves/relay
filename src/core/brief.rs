@@ -9,44 +9,67 @@ use crate::helpers::text::cut_lines;
 use crate::limits;
 
 pub fn build(paths: &Paths) -> String {
-    let project = std::fs::read_to_string(paths.project_file()).unwrap_or_default();
-    let branch = gitstate::branch(&paths.root);
-    let handoff = handoff::latest(paths, &branch);
-    let items = memory::list(paths);
+    compose(&gather(paths))
+}
 
-    let mut out = String::new();
-    out.push_str("# relay brief\n");
-    if !project.trim().is_empty() {
-        out.push_str(&cut(frontmatter::strip(&project).trim(), limits::brief::PROJECT_CHARS));
+/// Everything the brief shows, read from disk and git.
+struct Inputs {
+    project: String,
+    branch: String,
+    /// Repo-relative path and body of the latest handoff.
+    handoff: Option<(String, String)>,
+    items: Vec<memory::Item>,
+    shared_dir: String,
+}
+
+fn gather(paths: &Paths) -> Inputs {
+    let branch = gitstate::branch(&paths.root);
+    Inputs {
+        project: std::fs::read_to_string(paths.project_file()).unwrap_or_default(),
+        handoff: handoff::latest(paths, &branch).map(|(p, body)| (paths.rel(&p), body)),
+        branch,
+        items: memory::list(paths),
+        shared_dir: paths.rel(&paths.shared),
+    }
+}
+
+/// Empty when there is nothing to tell: no project file, no items, no
+/// handoff.
+fn compose(i: &Inputs) -> String {
+    let mut out = String::from("# relay brief\n");
+    if !i.project.trim().is_empty() {
+        out.push_str(&cut(frontmatter::strip(&i.project).trim(), limits::brief::PROJECT_CHARS));
         out.push_str("\n\n");
     }
-    if !items.is_empty() {
-        out.push_str(&memory_section(paths, &items));
+    if !i.items.is_empty() {
+        out.push_str(&memory_section(&i.items, &i.shared_dir));
     }
-    match handoff {
-        Some((p, body)) => {
-            let hb = frontmatter::get(&body, "branch").unwrap_or_default();
-            let when = frontmatter::get(&body, "ended").unwrap_or_default();
-            let mut label = when[..10.min(when.len())].to_string();
-            if let Some(h) = frontmatter::get(&body, "harness").filter(|h| h != "unknown") {
-                label.push_str(&format!(", {h}"));
-            }
-            if hb != branch && !hb.is_empty() {
-                label.push_str(&format!(", branch {hb}"));
-            }
-            out.push_str(&format!("## Last session ({label})\n"));
-            let room = limits::brief::MAX_CHARS.saturating_sub(out.len() + 200);
-            out.push_str(&cut(&handoff_for_brief(&body), room));
-            out.push_str(&format!("\n\n_Full handoff: {}_\n", paths.rel(&p)));
-        }
-        None => {
-            if project.trim().is_empty() && items.is_empty() {
-                return String::new();
-            }
-        }
+    match &i.handoff {
+        Some((path, body)) => out.push_str(&last_session(body, path, &i.branch, out.len())),
+        None if i.project.trim().is_empty() && i.items.is_empty() => return String::new(),
+        None => {}
     }
     out.push_str("_Outputs shown by relay are compressed; `relay get <id>` prints the original._\n");
     out.push_str("_When you settle a decision, hit a gotcha or learn a project rule, save it: `relay remember decision|gotcha|rule \"<one line>\"`._\n");
+    out
+}
+
+/// The latest handoff under a heading that says when, where and on which
+/// branch; `used` is how much of the brief budget is already spent.
+fn last_session(body: &str, path: &str, branch: &str, used: usize) -> String {
+    let hb = frontmatter::get(body, "branch").unwrap_or_default();
+    let when = frontmatter::get(body, "ended").unwrap_or_default();
+    let mut label = when[..10.min(when.len())].to_string();
+    if let Some(h) = frontmatter::get(body, "harness").filter(|h| h != "unknown") {
+        label.push_str(&format!(", {h}"));
+    }
+    if hb != branch && !hb.is_empty() {
+        label.push_str(&format!(", branch {hb}"));
+    }
+    let mut out = format!("## Last session ({label})\n");
+    let room = limits::brief::MAX_CHARS.saturating_sub(used + out.len() + 200);
+    out.push_str(&cut(&handoff_for_brief(body), room));
+    out.push_str(&format!("\n\n_Full handoff: {path}_\n"));
     out
 }
 
@@ -92,7 +115,7 @@ fn handoff_for_brief(body: &str) -> String {
 }
 
 /// One line per item, grouped by kind, until the budget runs out.
-fn memory_section(paths: &Paths, items: &[memory::Item]) -> String {
+fn memory_section(items: &[memory::Item], shared_dir: &str) -> String {
     let mut s = String::from("## Remembered\n");
     let mut shown = 0;
     for it in items {
@@ -104,7 +127,7 @@ fn memory_section(paths: &Paths, items: &[memory::Item]) -> String {
         shown += 1;
     }
     if shown < items.len() {
-        s.push_str(&format!("- … +{} more in {}\n", items.len() - shown, paths.rel(&paths.shared)));
+        s.push_str(&format!("- … +{} more in {shared_dir}\n", items.len() - shown));
     }
     s.push('\n');
     s
@@ -120,6 +143,30 @@ fn cut(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn inputs() -> Inputs {
+        Inputs {
+            project: "---\ngenerated: x\n---\n# app\n".into(),
+            branch: "main".into(),
+            handoff: None,
+            items: vec![],
+            shared_dir: ".relay".into(),
+        }
+    }
+
+    #[test]
+    fn nothing_to_tell_is_an_empty_brief() {
+        let empty = Inputs { project: String::new(), ..inputs() };
+        assert_eq!(compose(&empty), "");
+    }
+
+    #[test]
+    fn handoff_from_another_branch_says_so() {
+        let body = "---\nbranch: feat\nended: 2026-09-22T10:00:00Z\nharness: codex\n---\n# Handoff\n## Asked\n- ship\n";
+        let out = compose(&Inputs { handoff: Some(("h.md".into(), body.into())), ..inputs() });
+        assert!(out.starts_with("# relay brief\n# app\n\n## Last session (2026-09-22, codex, branch feat)\n"), "{out}");
+        assert!(out.contains("### Asked\n- ship\n\n_Full handoff: h.md_\n"), "{out}");
+    }
 
     #[test]
     fn long_replies_leave_room_for_later_sections() {
