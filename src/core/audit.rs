@@ -39,6 +39,8 @@ pub struct HookError {
     pub command: String,
     pub message: String,
     pub count: usize,
+    #[serde(skip)]
+    pub last_seen: Option<std::time::SystemTime>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -51,6 +53,8 @@ pub struct SessionAudit {
     /// False when the harness does not record which skills ran.
     pub skills_tracked: bool,
     pub subagent: bool,
+    /// When the transcript was last written; set by the caller.
+    pub seen: Option<std::time::SystemTime>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -76,6 +80,11 @@ pub struct Finding {
     pub fix: String,
     /// Tokens resent across the audited sessions; 0 when not a token cost.
     pub resent: usize,
+    /// Newest audited session it appeared in.
+    pub last_seen: Option<String>,
+    /// For hooks: whether today's harness config still has it (`None` when
+    /// the harness cannot tell).
+    pub still_configured: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -91,7 +100,20 @@ pub struct Transcript {
     pub path: std::path::PathBuf,
     pub id: String,
     pub parent: Option<String>,
+    /// When the session began: the harness loads its context then, so a
+    /// config change only shows in sessions started after it.
+    pub started: std::time::SystemTime,
     pub modified: std::time::SystemTime,
+}
+
+impl Transcript {
+    /// File birth time where the filesystem records one, else last write.
+    pub fn from_file(path: std::path::PathBuf, id: String, parent: Option<String>) -> Option<Self> {
+        let meta = std::fs::metadata(&path).ok()?;
+        let modified = meta.modified().ok()?;
+        let started = meta.created().unwrap_or(modified);
+        Some(Self { path, id, parent, started, modified })
+    }
 }
 
 /// The `limit` newest top-level sessions plus the subagents they spawned.
@@ -178,6 +200,7 @@ impl Collector {
                 command: command.to_string(),
                 message: message.to_string(),
                 count: 1,
+                last_seen: None,
             }),
         }
     }
@@ -207,8 +230,11 @@ impl Collector {
 /// Sources below this share of all context sent are not worth a finding.
 const MIN_SHARE: f64 = 0.005;
 
-pub fn report(sessions: Vec<SessionAudit>) -> Report {
+/// `configured_hooks`: hook commands in the harness config today, when the
+/// adapter can read them; failures of hooks no longer there are history.
+pub fn report(sessions: Vec<SessionAudit>, configured_hooks: Option<&[String]>) -> Report {
     let mut r = Report::default();
+    let mut seen: HashMap<String, std::time::SystemTime> = HashMap::new();
     let mut by: HashMap<String, Cost> = HashMap::new();
     let mut listed = BTreeSet::new();
     let mut used = BTreeSet::new();
@@ -223,6 +249,10 @@ pub fn report(sessions: Vec<SessionAudit>) -> Report {
         r.context_sent += s.usage.context_sent;
         r.cached += s.usage.cached;
         for c in s.costs {
+            if let Some(t) = s.seen {
+                let e = seen.entry(c.source.clone()).or_insert(t);
+                *e = (*e).max(t);
+            }
             let e = by.entry(c.source.clone()).or_insert_with(|| Cost {
                 source: c.source.clone(),
                 origin: c.origin,
@@ -236,9 +266,13 @@ pub fn report(sessions: Vec<SessionAudit>) -> Report {
             e.tokens += c.tokens;
             e.resent += c.resent;
         }
-        for h in s.hook_errors {
+        for mut h in s.hook_errors {
+            h.last_seen = s.seen;
             match r.hook_errors.iter_mut().find(|e| e.command == h.command) {
-                Some(e) => e.count += h.count,
+                Some(e) => {
+                    e.count += h.count;
+                    e.last_seen = e.last_seen.max(h.last_seen);
+                }
                 None => r.hook_errors.push(h),
             }
         }
@@ -250,11 +284,16 @@ pub fn report(sessions: Vec<SessionAudit>) -> Report {
     r.costs.sort_by_key(|c| std::cmp::Reverse(c.resent));
     r.skills_listed = listed.len();
     r.skills_used = used.into_iter().collect();
-    r.findings = findings(&r);
+    r.findings = findings(&r, &seen, configured_hooks);
     r
 }
 
-fn findings(r: &Report) -> Vec<Finding> {
+fn findings(
+    r: &Report,
+    seen: &HashMap<String, std::time::SystemTime>,
+    configured_hooks: Option<&[String]>,
+) -> Vec<Finding> {
+    let label = |t: Option<std::time::SystemTime>| t.map(crate::helpers::short_utc);
     let mut out = Vec::new();
     let mut by_cause: Vec<(&str, Vec<&HookError>)> = Vec::new();
     for h in &r.hook_errors {
@@ -265,6 +304,13 @@ fn findings(r: &Report) -> Vec<Finding> {
     }
     for (message, hooks) in by_cause {
         let count: usize = hooks.iter().map(|h| h.count).sum();
+        let last = hooks.iter().filter_map(|h| h.last_seen).max();
+        let still = configured_hooks.map(|cfg| hooks.iter().any(|h| cfg.iter().any(|c| c == &h.command)));
+        let fix = if still == Some(false) {
+            "Already gone from your current config; this is history and will not recur".into()
+        } else {
+            "Fix or remove it in the harness settings or plugin: it runs, and fails, on every matching event".into()
+        };
         let who = if hooks.len() == 1 {
             format!("Hook `{}`", ends(&hooks[0].command))
         } else {
@@ -276,9 +322,10 @@ fn findings(r: &Report) -> Vec<Finding> {
                 "{who} failed {count} times: {}",
                 message.trim_start_matches("Failed with non-blocking status code: ")
             ),
-            fix: "Fix or remove it in the harness settings or plugin: it runs, and fails, on every matching event"
-                .into(),
+            fix,
             resent: 0,
+            last_seen: label(last),
+            still_configured: still,
         });
     }
     let share = |n: usize| if r.context_sent == 0 { 0.0 } else { n as f64 / r.context_sent as f64 };
@@ -307,7 +354,14 @@ fn findings(r: &Report) -> Vec<Finding> {
         } else {
             "Trim it to what the agent needs on every call".into()
         };
-        out.push(Finding { severity: Severity::Waste, text: c.source.clone(), fix, resent: c.resent });
+        out.push(Finding {
+            severity: Severity::Waste,
+            text: c.source.clone(),
+            fix,
+            resent: c.resent,
+            last_seen: label(seen.get(&c.source).copied()),
+            still_configured: None,
+        });
     }
     out.sort_by(|a, b| a.severity.cmp(&b.severity).then(b.resent.cmp(&a.resent)));
     out
@@ -348,6 +402,22 @@ mod tests {
     }
 
     #[test]
+    fn hooks_gone_from_config_are_history() {
+        let s = SessionAudit {
+            usage: ApiUsage { calls: 1, context_sent: 10, ..ApiUsage::default() },
+            hook_errors: vec![
+                HookError { command: "old".into(), message: "gone".into(), count: 1, last_seen: None },
+                HookError { command: "live".into(), message: "broken".into(), count: 2, last_seen: None },
+            ],
+            ..SessionAudit::default()
+        };
+        let r = report(vec![s], Some(&["live".to_string()]));
+        let still: Vec<Option<bool>> = r.findings.iter().map(|f| f.still_configured).collect();
+        assert_eq!(still, [Some(false), Some(true)]);
+        assert!(r.findings[0].fix.starts_with("Already gone"));
+    }
+
+    #[test]
     fn findings_rank_broken_first_then_by_cost() {
         let s = SessionAudit {
             usage: ApiUsage { calls: 10, context_sent: 1_000_000, ..ApiUsage::default() },
@@ -357,10 +427,15 @@ mod tests {
                 cost("Tool results: Bash", Origin::Work, 500_000),
                 cost("Instruction file ~/CLAUDE.md", Origin::Config, 100),
             ],
-            hook_errors: vec![HookError { command: "rtk hook claude".into(), message: "not found".into(), count: 3 }],
+            hook_errors: vec![HookError {
+                command: "rtk hook claude".into(),
+                message: "not found".into(),
+                count: 3,
+                last_seen: None,
+            }],
             ..SessionAudit::default()
         };
-        let r = report(vec![s]);
+        let r = report(vec![s], None);
         let texts: Vec<&str> = r.findings.iter().map(|f| f.text.as_str()).collect();
         assert!(texts[0].starts_with("Hook `rtk hook claude` failed 3 times"), "{texts:?}");
         assert_eq!(&texts[1..], ["Hook output on UserPromptSubmit: x", "Skills listing"]);
