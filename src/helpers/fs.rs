@@ -79,6 +79,46 @@ pub fn simplify(p: PathBuf) -> PathBuf {
     }
 }
 
+/// The owner id of `path`, or `None` off Unix. Used as the current
+/// user's id through the home directory: std does not expose `getuid`.
+#[cfg(unix)]
+pub fn owner(path: &Path) -> Option<u32> {
+    use std::os::unix::fs::MetadataExt;
+    fs::metadata(path).ok().map(|m| m.uid())
+}
+
+#[cfg(not(unix))]
+pub fn owner(_: &Path) -> Option<u32> {
+    None
+}
+
+/// Make `dir` a directory only its owner can open, or refuse one that
+/// already exists as a symlink, with another owner or open to others. A
+/// shared temp dir is where another user could pre-create it.
+#[cfg(unix)]
+pub fn ensure_private_dir(dir: &Path, uid: u32) -> std::io::Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    match fs::DirBuilder::new().mode(0o700).create(dir) {
+        Ok(()) => return Ok(()),
+        Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => return Err(e),
+        Err(_) => {}
+    }
+    let m = fs::symlink_metadata(dir)?;
+    if !m.is_dir() || m.uid() != uid || m.mode() & 0o077 != 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("{} is not a private directory of this user", dir.display()),
+        ));
+    }
+    Ok(())
+}
+
+/// Windows keeps a temp dir per user already.
+#[cfg(not(unix))]
+pub fn ensure_private_dir(dir: &Path, _: u32) -> std::io::Result<()> {
+    fs::create_dir_all(dir)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,5 +164,26 @@ mod tests {
         write_atomic(&p, b"x").unwrap();
         assert_eq!(fs::read_to_string(&p).unwrap(), "x");
         let _ = fs::remove_dir_all(&d);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_dir_is_owner_only_and_refuses_an_open_one() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = std::env::temp_dir().join(format!("relay-private-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let uid = owner(&base).unwrap();
+        let mine = base.join("mine");
+        ensure_private_dir(&mine, uid).unwrap();
+        assert_eq!(fs::metadata(&mine).unwrap().permissions().mode() & 0o777, 0o700);
+        ensure_private_dir(&mine, uid).unwrap();
+
+        let open = base.join("open");
+        fs::create_dir(&open).unwrap();
+        fs::set_permissions(&open, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(ensure_private_dir(&open, uid).is_err());
+        assert!(ensure_private_dir(&mine, uid + 1).is_err());
+        let _ = fs::remove_dir_all(&base);
     }
 }

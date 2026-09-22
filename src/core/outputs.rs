@@ -17,7 +17,8 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::core::paths::Paths;
-use crate::helpers::fs::path_slug;
+use crate::helpers::env;
+use crate::helpers::fs::{ensure_private_dir, owner as fs_owner, path_slug};
 use crate::helpers::write_atomic;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,9 +43,24 @@ impl OutputMeta {
     }
 }
 
-/// Where originals spill when the local tier is not writable.
+/// Where originals spill when the local tier is not writable: under a
+/// directory of this user's own in the temp dir, which on Linux other
+/// users share.
 pub fn spill_dir(paths: &Paths) -> PathBuf {
-    std::env::temp_dir().join("relay").join(path_slug(&paths.root)).join("outputs")
+    spill_root().join(path_slug(&paths.root)).join("outputs")
+}
+
+fn spill_root() -> PathBuf {
+    match fs_owner(&env::home()) {
+        Some(uid) => std::env::temp_dir().join(format!("relay-{uid}")),
+        None => std::env::temp_dir().join("relay"),
+    }
+}
+
+fn write_spill(paths: &Paths, meta: &OutputMeta, raw: &str) -> Result<()> {
+    let root = spill_root();
+    ensure_private_dir(&root, fs_owner(&env::home()).unwrap_or_default())?;
+    write_pair(&spill_dir(paths), meta, raw)
 }
 
 /// The original lands before its sidecar, each by rename: a reader that
@@ -58,7 +74,7 @@ fn write_pair(dir: &Path, meta: &OutputMeta, raw: &str) -> Result<()> {
 pub fn store(paths: &Paths, meta: &OutputMeta, raw: &str) -> Result<()> {
     match write_pair(&paths.outputs(), meta, raw) {
         Ok(()) => Ok(()),
-        Err(local_err) => match write_pair(&spill_dir(paths), meta, raw) {
+        Err(local_err) => match write_spill(paths, meta, raw) {
             Ok(()) => Ok(()),
             Err(spill_err) => bail!("local store: {local_err}; spill: {spill_err}"),
         },
