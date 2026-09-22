@@ -1,0 +1,11 @@
+{
+  "name": "@thiagoneves/relay",
+  "version": "0.1.0",
+  "description": "Context layer for coding agents: compresses what goes in, remembers what matters, lives in your repo.",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/thiagoneves/relay.git" },
+  "bin": { "relay": "bin/relay.js" },
+  "files": ["bin/relay.js", "README.md", "LICENSE"],
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node --test", "prepack": "node -e \"require('fs').copyFileSync('../LICENSE', 'LICENSE')\"" }
+}

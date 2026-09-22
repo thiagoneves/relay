@@ -21,3 +21,9 @@ jobs:
       - run: cargo test --locked
       # LTO and strip only run in the release profile, which is what ships.
       - run: cargo build --locked --release
+      # The npm launcher downloads the release named after its own version.
+      - name: npm launcher version matches Cargo.toml
+        shell: bash
+        run: test "$(node -p "require('./npm/package.json').version")" = "$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
+      - run: npm test
+        working-directory: npm
