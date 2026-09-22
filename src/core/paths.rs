@@ -134,14 +134,3 @@ pub fn data_home() -> PathBuf {
     }
     env::home().join(".local").join("share").join("relay")
 }
-
-/// Append one line to the local log. Never fails loudly.
-pub fn log(paths: &Paths, msg: &str) {
-    use std::io::Write;
-    if std::fs::create_dir_all(&paths.local).is_err() {
-        return;
-    }
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(paths.log_file()) {
-        let _ = writeln!(f, "{} {}", crate::helpers::now_iso(), msg);
-    }
-}

@@ -54,7 +54,7 @@ fn store_original(paths: &Paths, run: Run, raw: &str, c: &compress::Compressed, 
     match outputs::store(paths, &meta, raw) {
         Ok(()) => Some(meta.id),
         Err(e) => {
-            crate::core::paths::log(paths, &format!("store failed: {e}"));
+            crate::core::log::write(paths, &format!("store failed: {e}"));
             None
         }
     }

@@ -175,6 +175,6 @@ pub fn run_fail_open(name: &str, f: impl FnOnce() -> Result<()>) {
     if let Err(e) = f()
         && let Ok(p) = Paths::from_cwd()
     {
-        crate::core::paths::log(&p, &format!("hook {name} error: {e:#}"));
+        crate::core::log::write(&p, &format!("hook {name} error: {e:#}"));
     }
 }
