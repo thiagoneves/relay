@@ -73,7 +73,7 @@ fn compose(i: &Inputs) -> String {
         }
     }
     out.push_str("_Outputs shown by relay are compressed; `relay get <id>` prints the original._\n");
-    out.push_str("_When you settle a decision, hit a gotcha or learn a project rule, save it: `relay remember decision|gotcha|rule \"<one line>\"`._\n");
+    out.push_str("_Save with `relay remember decision|gotcha|rule \"<one line>\"` only what would change what the next session does and cannot be read from the code: a trap, a settled choice, a rule the code does not show._\n");
     out
 }
 

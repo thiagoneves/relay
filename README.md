@@ -41,7 +41,9 @@ every teammate, gets it; it shows up in a pull request like any other change.
 `.relay/` is an [Open Knowledge Format](https://okf.md) bundle, so anything
 that reads OKF reads relay's memory, and relay asks nothing extra of you.
 `relay compile` lists what recent sessions decided and lets you keep it with
-one flag. When the code an item describes moves on, relay says so:
+one flag. The bar for an item: it would change what the next session does, and
+it cannot be read from the code. A trap, a settled choice, a rule the code does
+not show. Not principles, not what a linter already enforces. When the code an item describes moves on, relay says so:
 _may be stale: src/pay.rs changed since_. An item can carry an expiry, for the
 gotcha that only holds until the next upgrade.
 
