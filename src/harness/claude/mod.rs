@@ -38,6 +38,12 @@ impl Harness for Claude {
         true
     }
 
+    /// The Bash tool's `timeout` in milliseconds, 2 minutes when unset.
+    fn command_timeout(&self, tool_input: &serde_json::Value) -> Option<std::time::Duration> {
+        const DEFAULT_MS: u64 = 120_000;
+        Some(std::time::Duration::from_millis(tool_input["timeout"].as_u64().unwrap_or(DEFAULT_MS)))
+    }
+
     fn command(&self) -> &'static str {
         "claude"
     }

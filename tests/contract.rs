@@ -61,7 +61,12 @@ fn installed_settings_call_a_command_relay_accepts() {
 #[test]
 fn the_rewrite_the_hook_hands_back_runs() {
     let repo = Repo::new("contract-x");
-    let out = repo.run(&["x", "--session", "s1", "--", "echo contract-ok"]);
-    assert!(out.status.success());
-    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "contract-ok");
+    for args in [
+        &["x", "--session", "s1", "--", "echo contract-ok"][..],
+        &["x", "--session", "s1", "--stop-after-ms", "60000", "--", "echo contract-ok"],
+    ] {
+        let out = repo.run(args);
+        assert!(out.status.success(), "{args:?}: {}", String::from_utf8_lossy(&out.stderr));
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "contract-ok");
+    }
 }

@@ -9,7 +9,7 @@ use super::record::Recorder;
 use crate::core::paths::Paths;
 use crate::core::spool;
 use crate::core::{brief, condense, handoff, outputs};
-use crate::harness::{Harness, RewriteSupport};
+use crate::harness::Harness;
 use crate::helpers::env::{self, Var};
 use crate::helpers::{est_tokens, shell, slash};
 use crate::limits::store::KEEP_OUTPUTS;
@@ -39,7 +39,7 @@ pub fn run(harness: &dyn Harness) -> Result<()> {
 
     match input["hook_event_name"].as_str().unwrap_or("") {
         "PreToolUse" => {
-            pre_tool_use(&paths, session, &input, harness.rewrites());
+            pre_tool_use(&paths, session, &input, harness);
             Ok(())
         }
         "PostToolUse" => post_tool_use(&rec, &input, harness.replaces_output()),
@@ -113,7 +113,7 @@ fn shrink_output(rec: &Recorder, input: &Value) {
     println!("{}", json!({ "hookSpecificOutput": { "hookEventName": "PostToolUse", "updatedToolOutput": updated } }));
 }
 
-fn pre_tool_use(paths: &Paths, session: &str, input: &Value, support: RewriteSupport) {
+fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness: &dyn Harness) {
     if input["tool_name"].as_str() != Some("Bash") {
         return;
     }
@@ -131,7 +131,8 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, support: RewriteSup
         session,
         background: input["tool_input"]["run_in_background"].as_bool() == Some(true),
         isolated: policy::in_isolated_worktree(&paths.root),
-        support,
+        support: harness.rewrites(),
+        timeout: harness.command_timeout(&input["tool_input"]),
     };
     if let Some(r) = policy::rewrite(&call, relay_invocation) {
         println!("{}", reply(&r));

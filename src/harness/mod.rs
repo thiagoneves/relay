@@ -99,6 +99,13 @@ pub trait Harness {
     fn replaces_output(&self) -> bool {
         false
     }
+    /// How long the harness lets this shell call run before killing it,
+    /// when it says. `relay x` stops just before, so the output so far
+    /// still reaches the model.
+    fn command_timeout(&self, tool_input: &Value) -> Option<std::time::Duration> {
+        let _ = tool_input;
+        None
+    }
     /// Extra arguments to resume a native session by id.
     fn resume_args(&self, session_id: &str) -> Vec<String>;
     /// Session transcripts for the project at `root`, or for every

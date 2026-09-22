@@ -2,6 +2,8 @@
 //! rewritten command line reads.
 
 use crate::compress::command::{Joint, head_tokens, program, segments, split_shell_state};
+use std::time::Duration;
+
 use crate::harness::RewriteSupport;
 use crate::harness::protocol::permission;
 use crate::helpers::shell;
@@ -28,13 +30,15 @@ pub struct Call<'a> {
     /// worktree, which is what a rewrite turns `git status` into.
     pub isolated: bool,
     pub support: RewriteSupport,
+    /// When the harness will kill the command, if it says.
+    pub timeout: Option<Duration>,
 }
 
 /// The rewrite for `call`, if any. `relay` yields how to invoke relay;
 /// it is only called when a rewrite happens, since resolving it touches
 /// the filesystem.
 pub fn rewrite(call: &Call, relay: impl FnOnce() -> String) -> Option<Rewritten> {
-    let Call { cmd, session, background, isolated, support } = *call;
+    let Call { cmd, session, background, isolated, support, timeout } = *call;
     if background {
         return None;
     }
@@ -50,7 +54,8 @@ pub fn rewrite(call: &Call, relay: impl FnOnce() -> String) -> Option<Rewritten>
     if isolated && body.contains("git") {
         return None;
     }
-    let command = format!("{prefix}{} x --session {} -- {}", relay(), shell::quote(session), shell::quote(body));
+    let stop = timeout.map(|t| format!(" --stop-after-ms {}", stop_before(t).as_millis())).unwrap_or_default();
+    let command = format!("{prefix}{} x --session {}{stop} -- {}", relay(), shell::quote(session), shell::quote(body));
     Some(Rewritten { command, approve: true })
 }
 
@@ -74,6 +79,14 @@ pub fn output_to_shrink(cmd: &str, response: &serde_json::Value) -> Option<Strin
         raw.push_str(stderr);
     }
     Some(raw)
+}
+
+/// When `relay x` stops a command the harness kills at `timeout`: early
+/// enough to print and store what it has, a twentieth of the limit or at
+/// least three seconds before it.
+pub fn stop_before(timeout: Duration) -> Duration {
+    let margin = (timeout / 20).max(Duration::from_secs(3));
+    timeout.saturating_sub(margin).max(timeout / 2)
 }
 
 /// Whether `cwd` is inside a worktree Claude Code made for an isolated
@@ -289,7 +302,7 @@ mod tests {
     }
 
     fn call(cmd: &str) -> Call<'_> {
-        Call { cmd, session: "s1", background: false, isolated: false, support: RewriteSupport::Any }
+        Call { cmd, session: "s1", background: false, isolated: false, support: RewriteSupport::Any, timeout: None }
     }
 
     #[test]
@@ -301,6 +314,16 @@ mod tests {
         assert_eq!(out(json!({ "stdout": "", "isImage": true })), None);
         assert_eq!(out(json!({ "stdout": "", "backgroundTaskId": "b1" })), None);
         assert_eq!(output_to_shrink("relay x -- ls", &json!({ "stdout": "a" })), None);
+    }
+
+    #[test]
+    fn stops_a_little_before_the_harness_would() {
+        assert_eq!(stop_before(Duration::from_secs(120)), Duration::from_secs(114));
+        assert_eq!(stop_before(Duration::from_secs(600)), Duration::from_secs(570));
+        assert_eq!(stop_before(Duration::from_secs(10)), Duration::from_secs(7));
+        assert_eq!(stop_before(Duration::from_secs(2)), Duration::from_secs(1));
+        let r = rewrite(&Call { timeout: Some(Duration::from_secs(120)), ..call("cargo test") }, relay).unwrap();
+        assert_eq!(r.command, "relay x --session 's1' --stop-after-ms 114000 -- 'cargo test'");
     }
 
     #[test]

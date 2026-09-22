@@ -21,6 +21,7 @@ mod x;
 
 use clap::{Parser, Subcommand};
 
+use crate::core::exec;
 use crate::harness::HarnessId;
 
 #[derive(Parser)]
@@ -56,6 +57,9 @@ pub enum Commands {
         /// Session the output belongs to; set by the hook that rewrote the command
         #[arg(long, hide = true)]
         session: Option<String>,
+        /// Stop the command after this many milliseconds; set by the hook, just under the harness's timeout
+        #[arg(long, hide = true, value_name = "MS")]
+        stop_after_ms: Option<u64>,
         #[arg(required = true, num_args = 1..)]
         cmd: Vec<String>,
     },
@@ -185,7 +189,10 @@ fn run() -> anyhow::Result<i32> {
         Commands::Install { harness } => install::install(harness),
         Commands::Uninstall { harness } => install::uninstall(harness),
         Commands::Hook { harness } => hook::run(harness),
-        Commands::Exec { raw, session, cmd } => x::run(&x::command_line(&cmd), raw, session.as_deref()),
+        Commands::Exec { raw, session, stop_after_ms, cmd } => {
+            let stop_after = stop_after_ms.map(std::time::Duration::from_millis);
+            x::run(&x::command_line(&cmd), &exec::Options { raw, session: session.as_deref(), stop_after })
+        }
         Commands::Pipe { cmd } => pipe::run(&cmd),
         Commands::Get { id, meta } => get::run(&id, meta),
         Commands::Handoff { session, show } => handoff::run(session.as_deref(), show),
