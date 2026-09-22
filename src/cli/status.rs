@@ -1,6 +1,6 @@
 use crate::core::memory::{self, Kind};
 use crate::core::paths::Paths;
-use crate::core::{handoff, log, outputs, spool, usage};
+use crate::core::{handoff, log, outputs, spool, timings, usage};
 use crate::helpers::env::tilde;
 use crate::helpers::text::count;
 use crate::helpers::{dir_size, human_bytes, human_tokens, truncate_chars};
@@ -16,6 +16,7 @@ pub fn run() -> anyhow::Result<i32> {
     print_last_session_context(ui, &paths);
     print_orientation(ui, &paths);
     let failures = print_failures(ui, &paths);
+    print_hook_latency(ui, &paths);
     let sessions = spool::sessions(&paths).len();
     ui.field("Sessions", &format!("{} recorded · {}", sessions, count(handoff::count(&paths), "handoff")));
     let items = memory::list(&paths);
@@ -70,6 +71,36 @@ fn print_failures(ui: Ui, paths: &Paths) -> usize {
         ),
     }
     recent.len()
+}
+
+/// p95 per budget group over the failure window; one that runs over its
+/// budget says so.
+fn print_hook_latency(ui: Ui, paths: &Paths) {
+    let stats = timings::since(paths, std::time::SystemTime::now() - crate::limits::status::FAILURE_WINDOW);
+    if stats.is_empty() {
+        return;
+    }
+    let parts: Vec<String> = stats
+        .iter()
+        .map(|s| {
+            let over = if s.p95 > s.group.budget() {
+                format!(", over its {:?} budget", s.group.budget())
+            } else {
+                String::new()
+            };
+            format!("{:.0?} {}{over}", s.p95, label(s.group))
+        })
+        .collect();
+    let calls: usize = stats.iter().map(|s| s.calls).sum();
+    ui.field("Hook time", &format!("p95 {} · {} in the last 7 days", parts.join(" · "), count(calls, "call")));
+}
+
+fn label(group: timings::Group) -> &'static str {
+    match group {
+        timings::Group::PerCall => "per tool call",
+        timings::Group::SessionStart => "at session start",
+        timings::Group::SessionEnd => "at session end",
+    }
 }
 
 fn print_compression(ui: Ui, paths: &Paths, outs: &[outputs::OutputMeta]) {

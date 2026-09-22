@@ -63,6 +63,9 @@ impl Paths {
     pub fn fetches_file(&self) -> PathBuf {
         self.local.join("fetches.jsonl")
     }
+    pub fn timings_file(&self) -> PathBuf {
+        self.local.join("timings.log")
+    }
     pub fn log_file(&self) -> PathBuf {
         self.local.join("relay.log")
     }

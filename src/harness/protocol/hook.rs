@@ -9,7 +9,7 @@ use super::record::Recorder;
 use super::verify;
 use crate::core::paths::Paths;
 use crate::core::spool;
-use crate::core::{brief, condense, handoff, log, outputs};
+use crate::core::{brief, condense, handoff, log, outputs, timings};
 use crate::harness::Harness;
 use crate::helpers::env::{self, Var};
 use crate::helpers::{est_tokens, shell, slash};
@@ -29,6 +29,7 @@ pub const EVENTS: &[(&str, Option<&str>, u32)] = &[
 /// Errors are the caller's to swallow: `run_fail_open` logs them and the
 /// harness never sees a failure.
 pub fn run(harness: &dyn Harness) -> Result<()> {
+    let started = std::time::Instant::now();
     let Some(input) = crate::harness::read_stdin_json()? else { return Ok(()) };
     let session = input["session_id"].as_str().unwrap_or("unknown");
     let paths = match input["cwd"].as_str() {
@@ -37,21 +38,28 @@ pub fn run(harness: &dyn Harness) -> Result<()> {
     };
     paths.ensure_local()?;
     let rec = Recorder { paths: &paths, session };
+    let event = input["hook_event_name"].as_str().unwrap_or("");
+    let result = dispatch(event, &rec, &input, harness);
+    timings::record(&paths, event, started.elapsed());
+    result
+}
 
-    match input["hook_event_name"].as_str().unwrap_or("") {
+fn dispatch(event: &str, rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result<()> {
+    let (paths, session) = (rec.paths, rec.session);
+    match event {
         "PreToolUse" => {
-            pre_tool_use(&paths, session, &input, harness);
+            pre_tool_use(paths, session, input, harness);
             Ok(())
         }
-        "PostToolUse" => post_tool_use(&rec, &input, harness.replaces_output()),
-        "UserPromptSubmit" => rec.prompt(&input),
-        "SessionStart" => session_start(&rec, &input, harness),
-        "SessionEnd" => session_end(&rec, &input, harness),
+        "PostToolUse" => post_tool_use(rec, input, harness.replaces_output()),
+        "UserPromptSubmit" => rec.prompt(input),
+        "SessionStart" => session_start(rec, input, harness),
+        "SessionEnd" => session_end(rec, input, harness),
         "PreCompact" => {
-            rec.compact(&input)?;
-            build_handoff(&rec, &input, harness, "compact")
+            rec.compact(input)?;
+            build_handoff(rec, input, harness, "compact")
         }
-        "Stop" => rec.stop(&input),
+        "Stop" => rec.stop(input),
         _ => Ok(()),
     }
 }

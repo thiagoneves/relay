@@ -30,6 +30,8 @@ pub mod store {
     /// has a 2 s budget and transcripts reach gigabytes; the handoff only
     /// needs the last turns.
     pub const TRANSCRIPT_TAIL_BYTES: u64 = 32 * 1024 * 1024;
+    /// Hook timings are cut back to their newest half past this size.
+    pub const TIMINGS_BYTES: u64 = 128 * 1024;
     /// The log is cut back to its newest half past this size.
     pub const LOG_BYTES: u64 = 256 * 1024;
     /// Longest prompt, reply and command a spool event records.

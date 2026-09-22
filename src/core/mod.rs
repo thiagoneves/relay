@@ -12,4 +12,5 @@ pub mod memory;
 pub mod outputs;
 pub mod paths;
 pub mod spool;
+pub mod timings;
 pub mod usage;
