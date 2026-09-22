@@ -2,6 +2,7 @@ use crate::core::memory::{self, Kind};
 use crate::core::paths::Paths;
 use crate::core::{handoff, outputs, spool, usage};
 use crate::helpers::env::tilde;
+use crate::helpers::text::count;
 use crate::helpers::{dir_size, human_bytes, human_tokens};
 
 use super::ui::Ui;
@@ -15,13 +16,18 @@ pub fn run() -> anyhow::Result<i32> {
     print_last_session_context(ui, &paths);
     print_orientation(ui, &paths);
     let sessions = spool::sessions(&paths).len();
-    ui.field("Sessions", &format!("{sessions} recorded · {} handoffs", handoff::count(&paths)));
+    ui.field("Sessions", &format!("{} recorded · {}", sessions, count(handoff::count(&paths), "handoff")));
     let items = memory::list(&paths);
-    let count = |k: Kind| items.iter().filter(|i| i.kind == k).count();
-    let remembered = [Kind::Rule, Kind::Gotcha, Kind::Decision].map(count);
+    let of_kind = |k: Kind| items.iter().filter(|i| i.kind == k).count();
+    let remembered = [Kind::Rule, Kind::Gotcha, Kind::Decision].map(of_kind);
     ui.field(
         "Remembered",
-        &format!("{} rules · {} gotchas · {} decisions", remembered[0], remembered[1], remembered[2]),
+        &format!(
+            "{} · {} · {}",
+            count(remembered[0], "rule"),
+            count(remembered[1], "gotcha"),
+            count(remembered[2], "decision")
+        ),
     );
     ui.blank();
     ui.field(
@@ -60,11 +66,11 @@ fn print_compression(ui: Ui, paths: &Paths, outs: &[outputs::OutputMeta]) {
     ui.field(
         "Compression",
         &format!(
-            "{} → {} tokens · {}% saved over {} outputs (estimate)",
+            "{} → {} tokens · {}% saved over {} (estimate)",
             human_tokens(tokens_in),
             human_tokens(tokens_out),
             saved * 100 / tokens_in.max(1),
-            outs.len()
+            count(outs.len(), "output")
         ),
     );
     let refetched = outputs::fetched_ids(paths).len();

@@ -12,7 +12,10 @@ pub fn run(yes: bool) -> anyhow::Result<i32> {
         ui.heading("relay purge", "preview, nothing deleted");
         let size = human_bytes(dir_size(&paths.local));
         ui.field("Deletes", &format!("{} ({size}): sessions, outputs, handoffs, log", tilde(&paths.local)));
-        ui.field("Also", &format!("originals spilled from sandboxed runs in {}", tilde(&outputs::spill_dir(&paths))));
+        let spill = outputs::spill_dir(&paths);
+        if spill.exists() {
+            ui.field("Also", &format!("originals spilled from sandboxed runs in {}", tilde(&spill)));
+        }
         ui.field("Keeps", &format!("{}, the committed rules and memory", paths.rel(&paths.shared)));
         ui.blank();
         ui.next("Run `relay purge --yes` to delete.");

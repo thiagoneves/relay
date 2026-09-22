@@ -141,6 +141,11 @@ pub fn human_bytes(n: u64) -> String {
     if i == 0 { format!("{n} B") } else { format!("{v:.1} {}", UNITS[i]) }
 }
 
+/// `1 rule`, `3 rules`: `word` is the singular, pluralized with `s`.
+pub fn count(n: usize, word: &str) -> String {
+    if n == 1 { format!("1 {word}") } else { format!("{n} {word}s") }
+}
+
 pub fn human_tokens(n: usize) -> String {
     if n >= 1_000_000 {
         format!("{:.1}M", n as f64 / 1e6)
@@ -176,5 +181,12 @@ mod tests {
         assert_eq!(cut_lines("a\nbb\nccc", 5), ("a\nbb\n".to_string(), true));
         assert_eq!(cut_lines("a\nbb", 50), ("a\nbb".to_string(), false));
         assert_eq!(cut_lines("abcdefgh", 4), ("abc…".to_string(), true));
+    }
+
+    #[test]
+    fn counts_agree_with_their_number() {
+        assert_eq!(count(1, "rule"), "1 rule");
+        assert_eq!(count(0, "rule"), "0 rules");
+        assert_eq!(count(3, "handoff"), "3 handoffs");
     }
 }

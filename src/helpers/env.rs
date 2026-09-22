@@ -84,7 +84,11 @@ pub fn home() -> PathBuf {
 
 /// `~/rest` for paths under home, for display.
 pub fn tilde(p: &Path) -> String {
-    p.strip_prefix(home()).map_or_else(|_| p.display().to_string(), |rest| format!("~/{}", slash(rest)))
+    match p.strip_prefix(home()) {
+        Ok(rest) if rest.as_os_str().is_empty() => "~".to_string(),
+        Ok(rest) => format!("~/{}", slash(rest)),
+        Err(_) => p.display().to_string(),
+    }
 }
 
 #[cfg(test)]
