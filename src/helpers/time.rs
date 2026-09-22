@@ -26,6 +26,15 @@ pub fn short_utc(t: SystemTime) -> String {
 
 /// A point in time from `30m`, `12h`, `7d` (ago) or `2026-09-22` (UTC midnight).
 pub fn parse_since(s: &str, now: SystemTime) -> Option<SystemTime> {
+    parse_when(s, now, false)
+}
+
+/// A point in time from `30m`, `12h`, `7d` (from now) or `2026-09-22`.
+pub fn parse_until(s: &str, now: SystemTime) -> Option<SystemTime> {
+    parse_when(s, now, true)
+}
+
+fn parse_when(s: &str, now: SystemTime, forward: bool) -> Option<SystemTime> {
     let s = s.trim();
     if let Some(unit) = s.chars().last().filter(char::is_ascii_alphabetic) {
         let n: u64 = s[..s.len() - 1].parse().ok()?;
@@ -35,7 +44,8 @@ pub fn parse_since(s: &str, now: SystemTime) -> Option<SystemTime> {
             'd' => 86_400,
             _ => return None,
         })?;
-        return now.checked_sub(std::time::Duration::from_secs(secs));
+        let span = std::time::Duration::from_secs(secs);
+        return if forward { now.checked_add(span) } else { now.checked_sub(span) };
     }
     let mut parts = s.split('-').map(str::parse::<i32>);
     let (y, m, d) = (parts.next()?.ok()?, parts.next()?.ok()?, parts.next()?.ok()?);
@@ -58,6 +68,7 @@ mod tests {
         assert_eq!(parse_since("soon", now), None);
         assert_eq!(parse_since("5y", now), None);
         assert_eq!(parse_since("999999999999999999d", now), None);
+        assert_eq!(parse_until("2d", now), Some(UNIX_EPOCH + Duration::from_secs(12 * 86_400)));
     }
 
     #[test]

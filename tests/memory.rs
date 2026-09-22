@@ -39,3 +39,21 @@ fn an_item_about_a_file_that_changed_is_marked_stale() {
     let status = String::from_utf8(repo.run(&["status"]).stdout).unwrap();
     assert!(status.contains("1 may be stale"), "{status}");
 }
+
+#[test]
+fn an_expired_item_leaves_the_brief_and_is_counted() {
+    let repo = Repo::new("memory-expiry");
+    assert!(repo.run(&["init"]).status.success());
+    let saved = repo.run(&["remember", "gotcha", "Postgres 15 until the upgrade", "--until", "2000-01-01"]);
+    assert!(saved.status.success(), "{}", String::from_utf8_lossy(&saved.stderr));
+    assert!(!brief(&repo).contains("Postgres 15"), "{}", brief(&repo));
+    let status = String::from_utf8(repo.run(&["status"]).stdout).unwrap();
+    assert!(status.contains("1 expired, delete or renew"), "{status}");
+
+    let bad = repo.run(&["remember", "gotcha", "x", "--until", "soon"]);
+    assert!(!bad.status.success());
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("Use 30d, 12h or a date"));
+    let ok = repo.run(&["remember", "gotcha", "Still valid", "--until", "30d"]);
+    assert!(ok.status.success());
+    assert!(brief(&repo).contains("Still valid"));
+}

@@ -98,6 +98,9 @@ pub enum Commands {
         /// Session the item came from; set by the hook that rewrote the command
         #[arg(long, hide = true)]
         session: Option<String>,
+        /// When the item stops applying: 30d, 12h or a date like 2026-12-01
+        #[arg(long, value_name = "WHEN")]
+        until: Option<String>,
     },
     /// Point out context waste: what fills every call and costs quota, from the harness transcripts
     Audit {
@@ -204,8 +207,8 @@ fn run() -> anyhow::Result<i32> {
         Commands::Pipe { cmd } => pipe::run(&cmd),
         Commands::Get { id, meta } => get::run(&id, meta),
         Commands::Handoff { session, show } => handoff::run(session.as_deref(), show),
-        Commands::Remember { kind, text, paths, session } => {
-            remember::run(kind, &text.join(" "), &paths, session.as_deref())
+        Commands::Remember { kind, text, paths, session, until } => {
+            remember::run(kind, &text.join(" "), &paths, session.as_deref(), until.as_deref())
         }
         Commands::Audit { harness, sessions, all_projects, since, json } => {
             audit::run(&audit::Options { only: harness, sessions, all_projects, since, json })

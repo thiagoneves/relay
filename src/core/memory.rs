@@ -54,9 +54,16 @@ pub struct Item {
     pub sha: Option<String>,
     /// Repo paths the item is about, as given to `--path`.
     pub about: Vec<String>,
+    /// RFC 3339 instant after which the item no longer applies.
+    pub expires: Option<String>,
 }
 
 impl Item {
+    /// RFC 3339 sorts as text, so no parsing is needed.
+    pub fn expired(&self, now_iso: &str) -> bool {
+        self.expires.as_deref().is_some_and(|e| e <= now_iso)
+    }
+
     /// The paths this item is about that appear in `changed`: files that
     /// moved on since the item was saved, so it may no longer hold. A
     /// directory counts when anything under it changed.
@@ -97,6 +104,8 @@ pub struct NewItem<'a> {
     pub text: &'a str,
     pub files: &'a [String],
     pub session: Option<&'a str>,
+    /// RFC 3339 instant after which the item no longer applies.
+    pub expires: Option<String>,
 }
 
 /// Why an item was not saved, for the CLI to explain.
@@ -146,6 +155,9 @@ fn render(item: &NewItem, git: &gitstate::GitState, created: &str) -> String {
     if !item.files.is_empty() {
         b.push_str(&format!("paths: {}\n", item.files.join(", ")));
     }
+    if let Some(e) = &item.expires {
+        b.push_str(&format!("expires: {e}\n"));
+    }
     format!("{b}---\n\n{}\n", item.text.trim())
 }
 
@@ -170,7 +182,8 @@ pub fn list(paths: &Paths) -> Vec<Item> {
             let about = frontmatter::get(&body, "paths")
                 .map(|v| v.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect())
                 .unwrap_or_default();
-            items.push(Item { kind, path: p, title, created, sha, about });
+            let expires = frontmatter::get(&body, "expires").filter(|s| !s.is_empty());
+            items.push(Item { kind, path: p, title, created, sha, about, expires });
         }
         items.sort_by(|a, b| b.created.cmp(&a.created).then(a.path.cmp(&b.path)));
         out.extend(items);
@@ -243,7 +256,8 @@ mod tests {
     #[test]
     fn item_records_where_it_was_learned() {
         let git = gitstate::GitState { branch: "main".into(), sha: "abc1234".into(), dirty: vec![] };
-        let item = NewItem { kind: Kind::Gotcha, text: " Hooks fail open \n", files: &[], session: Some("s1") };
+        let item =
+            NewItem { kind: Kind::Gotcha, text: " Hooks fail open \n", files: &[], session: Some("s1"), expires: None };
         assert_eq!(
             render(&item, &git, "2026-09-22T10:00:00Z"),
             "---\nkind: gotcha\ncreated: 2026-09-22T10:00:00Z\nbranch: main\nsha: abc1234\nsession: s1\n---\n\nHooks fail open\n"
@@ -264,6 +278,7 @@ mod tests {
             created: String::new(),
             sha: Some("abc".into()),
             about: vec!["./src/pay.rs".into(), "src/compress/".into(), "docs".into()],
+            expires: None,
         };
         let changed = ["src/pay.rs".to_string(), "src/compress/git.rs".to_string(), "docsite/a.md".to_string()];
         assert_eq!(item.changed(&changed), ["src/pay.rs", "src/compress"]);

@@ -26,7 +26,8 @@ struct Inputs {
 
 fn gather(paths: &Paths) -> Inputs {
     let branch = gitstate::branch(&paths.root);
-    let items = memory::list(paths);
+    let now = crate::helpers::now_iso();
+    let items: Vec<memory::Item> = memory::list(paths).into_iter().filter(|i| !i.expired(&now)).collect();
     let stale = memory::staleness(&paths.root, &items, limits::brief::STALE_COMMITS);
     Inputs {
         project: std::fs::read_to_string(paths.project_file()).unwrap_or_default(),
@@ -176,6 +177,7 @@ mod tests {
             created: String::new(),
             sha: Some("abc".into()),
             about: vec!["src/pay.rs".into()],
+            expires: None,
         };
         let out = compose(&Inputs {
             items: vec![item("Retries need jitter"), item("Amounts are cents")],

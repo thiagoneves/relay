@@ -40,18 +40,26 @@ pub fn run() -> anyhow::Result<i32> {
 
 /// Items per kind, and how many may be stale. Returns how many there are.
 fn print_remembered(ui: Ui, paths: &Paths) -> usize {
-    let items = memory::list(paths);
+    let now = crate::helpers::now_iso();
+    let (expired, items): (Vec<memory::Item>, Vec<memory::Item>) =
+        memory::list(paths).into_iter().partition(|i| i.expired(&now));
     let of_kind = |k: Kind| items.iter().filter(|i| i.kind == k).count();
     let remembered = [Kind::Rule, Kind::Gotcha, Kind::Decision].map(of_kind);
     let stale = memory::staleness(&paths.root, &items, crate::limits::brief::STALE_COMMITS)
         .iter()
         .filter(|changed| !changed.is_empty())
         .count();
-    let stale_note = if stale > 0 { format!(" · {stale} may be stale (see `relay brief`)") } else { String::new() };
+    let mut notes = String::new();
+    if stale > 0 {
+        notes.push_str(&format!(" · {stale} may be stale (see `relay brief`)"));
+    }
+    if !expired.is_empty() {
+        notes.push_str(&format!(" · {} expired, delete or renew", expired.len()));
+    }
     ui.field(
         "Remembered",
         &format!(
-            "{} · {} · {}{stale_note}",
+            "{} · {} · {}{notes}",
             count(remembered[0], "rule"),
             count(remembered[1], "gotcha"),
             count(remembered[2], "decision")
