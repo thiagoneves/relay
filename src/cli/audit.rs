@@ -6,10 +6,11 @@ use crate::core::audit::{self, Finding, Origin, Report, SessionAudit, Severity, 
 use crate::core::paths::Paths;
 use crate::harness::{self, Harness, HarnessId};
 use crate::helpers::term::{self, Color, Paint};
+use crate::helpers::text::count;
 use crate::helpers::{human_tokens, parse_since, truncate_chars};
 use crate::limits;
 
-use super::ui::Ui;
+use super::ui::{Ui, problem};
 
 pub struct Options {
     pub only: Option<HarnessId>,
@@ -21,48 +22,56 @@ pub struct Options {
 
 pub fn run(o: &Options) -> anyhow::Result<i32> {
     let root = if o.all_projects { None } else { Some(Paths::from_cwd()?.root) };
-    let since = match &o.since {
-        Some(s) => Some(
-            parse_since(s, SystemTime::now())
-                .ok_or_else(|| anyhow::anyhow!("--since: use 30m, 12h, 7d or 2026-09-22"))?,
-        ),
-        None => None,
-    };
-    let harnesses = match &o.only {
-        Some(id) => vec![id.adapter()],
-        None => harness::all(),
-    };
-    let mut scope = if o.all_projects { "all projects".to_string() } else { "this project".to_string() };
-    if let Some(s) = &o.since {
-        scope.push_str(&format!(", since {s}"));
-    }
+    let since = o.since.as_deref().map(parse_since_arg).transpose()?;
     let audited = Scope { root: root.as_deref(), since, sessions: o.sessions };
-    let mut reports = Vec::new();
-    for h in harnesses {
-        if let Some(r) = audit::run::run(&Adapter(h.as_ref()), &audited) {
-            reports.push((h.id(), r));
-        }
-    }
+    let harnesses = o.only.map_or_else(harness::all, |id| vec![id.adapter()]);
+    let reports: Vec<(HarnessId, Report)> =
+        harnesses.iter().filter_map(|h| audit::run::run(&Adapter(h.as_ref()), &audited).map(|r| (h.id(), r))).collect();
     if o.json {
-        let out: serde_json::Map<String, serde_json::Value> =
-            reports.iter().map(|(id, r)| ((*id).to_string(), serde_json::to_value(r).unwrap_or_default())).collect();
-        println!("{}", serde_json::to_string_pretty(&out)?);
-        return Ok(0);
+        print_json(&reports)?;
+    } else {
+        print_human(&reports, &scope_label(o));
     }
+    Ok(0)
+}
+
+fn parse_since_arg(s: &str) -> anyhow::Result<SystemTime> {
+    parse_since(s, SystemTime::now()).ok_or_else(|| {
+        problem(
+            format!("`--since {s}` is not a time relay understands."),
+            "Use 30m, 12h, 7d or a date like 2026-09-22.",
+        )
+    })
+}
+
+fn scope_label(o: &Options) -> String {
+    let base = if o.all_projects { "all projects" } else { "this project" };
+    match &o.since {
+        Some(s) => format!("{base}, since {s}"),
+        None => base.to_string(),
+    }
+}
+
+fn print_json(reports: &[(HarnessId, Report)]) -> anyhow::Result<()> {
+    let out: serde_json::Map<String, serde_json::Value> =
+        reports.iter().map(|(id, r)| (id.to_string(), serde_json::to_value(r).unwrap_or_default())).collect();
+    println!("{}", serde_json::to_string_pretty(&out)?);
+    Ok(())
+}
+
+fn print_human(reports: &[(HarnessId, Report)], scope: &str) {
+    let ui = Ui::stdout();
     if reports.is_empty() {
-        let ui = Ui::stdout();
         ui.ok(&format!("No sessions to audit for {scope}."));
         ui.next("Widen the scope with `--since 7d` or `--all-projects`, or start a session with `relay claude`.");
-        return Ok(0);
+        return;
     }
     let p = Paint::stdout();
-    for (id, r) in &reports {
-        print_report(p, *id, r, &scope);
+    for (id, r) in reports {
+        print_report(p, *id, r, scope);
     }
-    let ui = Ui::stdout();
     ui.note("Sizes are estimates; calls and totals are exact, from the transcripts.");
     ui.note("Share = size × API calls after it entered the context: what it cost on your quota.");
-    Ok(0)
 }
 
 /// The audit reads a harness through `audit::run::Source`; this is that
@@ -92,45 +101,54 @@ fn print_report(p: Paint, id: HarnessId, r: &Report, scope: &str) {
     println!("{} {}", p.bold(&format!("relay audit · {id}")), p.dim(&format!("· {scope}")));
     println!(
         "{}{subs} · {} calls · {} tokens sent ({:.0}% from cache)\n",
-        plural(r.sessions, "session"),
+        count(r.sessions, "session"),
         r.calls,
         human_tokens(r.context_sent),
         r.percent(r.cached)
     );
     print_split(p, r);
-
     let (history, live): (Vec<&Finding>, Vec<&Finding>) = r.findings.iter().partition(|f| f.is_history());
-    if !live.is_empty() {
-        let total: usize = live.iter().map(|f| f.resent).sum();
-        println!(
-            "{} {}",
-            p.bold(&format!("Worth a look ({})", live.len())),
-            p.dim(&format!("· {:.0}% of what was sent · costs, not verdicts: keep what you need", r.percent(total)))
-        );
-        let mut shown = Vec::new();
-        for f in live {
-            print_live(p, f, r, &mut shown);
-        }
-        println!();
-    }
-    if !history.is_empty() {
-        println!(
-            "{} {}",
-            p.bold(&format!("Already fixed ({})", history.len())),
-            p.dim("· still in sessions that started before the change")
-        );
-        for f in history {
-            let share = if f.resent > 0 { format!(" · {:.1}%", r.percent(f.resent)) } else { String::new() };
-            println!(
-                "  {} {}{}",
-                p.color(Color::Green, "✓"),
-                truncate_chars(&f.headline, 100),
-                p.dim(&format!("{share} · {}", f.fix.trim_start_matches("Already removed: ")))
-            );
-        }
-        println!();
-    }
+    print_worth_a_look(p, r, &live);
+    print_already_fixed(p, r, &history);
     print_sources(p, r);
+}
+
+fn print_worth_a_look(p: Paint, r: &Report, live: &[&Finding]) {
+    if live.is_empty() {
+        return;
+    }
+    let total: usize = live.iter().map(|f| f.resent).sum();
+    println!(
+        "{} {}",
+        p.bold(&format!("Worth a look ({})", live.len())),
+        p.dim(&format!("· {:.0}% of what was sent · costs, not verdicts: keep what you need", r.percent(total)))
+    );
+    let mut shown = Vec::new();
+    for f in live {
+        print_live(p, f, r, &mut shown);
+    }
+    println!();
+}
+
+fn print_already_fixed(p: Paint, r: &Report, history: &[&Finding]) {
+    if history.is_empty() {
+        return;
+    }
+    println!(
+        "{} {}",
+        p.bold(&format!("Already fixed ({})", history.len())),
+        p.dim("· still in sessions that started before the change")
+    );
+    for f in history {
+        let share = if f.resent > 0 { format!(" · {:.1}%", r.percent(f.resent)) } else { String::new() };
+        println!(
+            "  {} {}{}",
+            p.color(Color::Green, "✓"),
+            truncate_chars(&f.headline, 100),
+            p.dim(&format!("{share} · {}", f.fix.trim_start_matches("Already removed: ")))
+        );
+    }
+    println!();
 }
 
 /// One stacked bar: who the context was spent on.
@@ -203,8 +221,4 @@ fn print_sources(p: Paint, r: &Report) {
         human_tokens(rest)
     );
     println!();
-}
-
-fn plural(n: usize, word: &str) -> String {
-    if n == 1 { format!("1 {word}") } else { format!("{n} {word}s") }
 }
