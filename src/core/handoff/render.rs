@@ -14,7 +14,7 @@ pub struct Header<'a> {
 }
 
 pub fn render(h: &Header, s: &Summary, t: &Tail, git: &GitState) -> String {
-    let mut b = frontmatter(h, s, git);
+    let mut b = frontmatter(h, s, t, git);
     let branch = if git.branch.is_empty() { String::new() } else { format!("{} · ", git.branch) };
     b.push_str(&format!("# Handoff · {branch}{}\n\n", &h.ended[..10.min(h.ended.len())]));
     render_stop(&mut b, s, t);
@@ -24,9 +24,9 @@ pub fn render(h: &Header, s: &Summary, t: &Tail, git: &GitState) -> String {
     b
 }
 
-fn frontmatter(h: &Header, s: &Summary, git: &GitState) -> String {
+fn frontmatter(h: &Header, s: &Summary, t: &Tail, git: &GitState) -> String {
     format!(
-        "---\nsession: {}\nharness: {}\nbranch: {}\nsha: {}\ndirty: {}\nstarted: {}\nended: {}\nreason: {}\n---\n\n",
+        "---\nsession: {}\nharness: {}\nbranch: {}\nsha: {}\ndirty: {}\nstarted: {}\nended: {}\nreason: {}\n{}---\n\n",
         h.session,
         s.harness,
         git.branch,
@@ -34,7 +34,8 @@ fn frontmatter(h: &Header, s: &Summary, git: &GitState) -> String {
         git.dirty.len(),
         s.started,
         h.ended,
-        h.reason
+        h.reason,
+        if t.headless { "headless: true\n" } else { "" }
     )
 }
 

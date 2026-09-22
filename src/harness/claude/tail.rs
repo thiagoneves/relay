@@ -19,6 +19,11 @@ fn read_lines(lines: impl Iterator<Item = String>) -> Tail {
     let mut tail = Tail::default();
     let mut turn_end: Option<String> = None;
     for line in lines {
+        // Every line carries how the session was started; `sdk-*` means
+        // `claude -p` or an SDK app, with no one at the keyboard.
+        if !tail.headless && line.contains("\"entrypoint\":\"sdk") {
+            tail.headless = true;
+        }
         let prompt = line.contains("\"type\":\"user\"") && !line.contains("\"tool_result\"");
         let reply = line.contains("\"type\":\"assistant\"")
             && (line.contains("\"type\":\"text\"") || line.contains("\"ExitPlanMode\""));
@@ -79,6 +84,13 @@ fn decisions(result: &Value, into: &mut Vec<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_session_started_by_claude_p_is_headless() {
+        let line = |entry: &str| format!(r#"{{"type":"user","entrypoint":"{entry}","message":{{"content":"hi"}}}}"#);
+        assert!(read_lines([line("sdk-cli")].into_iter()).headless);
+        assert!(!read_lines([line("cli")].into_iter()).headless);
+    }
 
     #[test]
     fn keeps_how_each_turn_ended_and_what_the_user_decided() {

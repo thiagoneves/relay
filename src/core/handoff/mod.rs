@@ -33,6 +33,9 @@ pub struct Tail {
     /// `topic: answer`, one per question the user answered.
     pub decisions: Vec<String>,
     pub plan: Option<String>,
+    /// Run with no one at the keyboard (`claude -p`, an SDK app): a script
+    /// or a test, not work the next session should pick up.
+    pub headless: bool,
 }
 
 pub fn path_for(paths: &Paths, session: &str) -> PathBuf {
@@ -50,16 +53,30 @@ pub fn build(paths: &Paths, session: &str, reason: &str, tail: Option<&Tail>) ->
 
     let path = path_for(paths, session);
     write_atomic(&path, body.as_bytes())?;
-    spool::set_last_session(paths, session);
+    if !tail.is_some_and(|t| t.headless) {
+        spool::set_last_session(paths, session);
+    }
     Ok(Handoff { path, body })
 }
 
-/// Most recent handoff, preferring the current branch.
+/// Most recent handoff, preferring an interactive session over a headless
+/// one, then the current branch over others.
 pub fn latest(paths: &Paths, branch: &str) -> Option<(PathBuf, String)> {
     let mut all = stored(paths);
     all.sort_by(|a, b| b.0.cmp(&a.0));
-    let same_branch = all.iter().find(|(_, _, body)| frontmatter::get(body, "branch").as_deref() == Some(branch));
-    same_branch.or(all.first()).map(|(_, p, b)| (p.clone(), b.clone()))
+    let bodies: Vec<&str> = all.iter().map(|(_, _, b)| b.as_str()).collect();
+    pick(&bodies, branch).map(|i| (all[i].1.clone(), all[i].2.clone()))
+}
+
+/// Index of the handoff to show among `bodies`, newest first.
+fn pick(bodies: &[&str], branch: &str) -> Option<usize> {
+    let interactive = |b: &&str| frontmatter::get(b, "headless").as_deref() != Some("true");
+    let on_branch = |b: &&str| frontmatter::get(b, "branch").as_deref() == Some(branch);
+    let first = |f: &dyn Fn(&&str) -> bool| bodies.iter().position(f);
+    first(&|b| interactive(b) && on_branch(b))
+        .or_else(|| first(&interactive))
+        .or_else(|| first(&on_branch))
+        .or_else(|| (!bodies.is_empty()).then_some(0))
 }
 
 pub fn count(paths: &Paths) -> usize {
@@ -77,4 +94,20 @@ fn stored(paths: &Paths) -> Vec<(SystemTime, PathBuf, String)> {
             Some((modified, p, body))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_headless_run_does_not_hide_the_last_real_session() {
+        let script = "---\nbranch: main\nheadless: true\n---\n";
+        let work = "---\nbranch: main\n---\n";
+        let other_branch = "---\nbranch: feat\n---\n";
+        assert_eq!(pick(&[script, work], "main"), Some(1));
+        assert_eq!(pick(&[script, other_branch], "main"), Some(1));
+        assert_eq!(pick(&[script], "main"), Some(0));
+        assert_eq!(pick(&[], "main"), None);
+    }
 }
