@@ -6,6 +6,7 @@ pub mod git;
 pub mod ids;
 pub mod profile;
 pub mod shell;
+pub mod term;
 pub mod text;
 pub mod time;
 
