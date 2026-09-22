@@ -5,6 +5,7 @@
 use crate::compress;
 use crate::core::outputs::{self, OutputMeta};
 use crate::core::paths::Paths;
+use crate::helpers::redact::redact;
 use crate::helpers::{est_tokens, human_tokens, new_id, now_iso};
 use crate::limits;
 
@@ -43,7 +44,7 @@ fn store_original(paths: &Paths, run: Run, raw: &str, c: &compress::Compressed, 
         ts: now_iso(),
         session: run.session,
         cwd: run.cwd.to_string(),
-        cmd: run.cmd.to_string(),
+        cmd: redact(run.cmd).into_owned(),
         exit: run.exit,
         filter: c.filter.to_string(),
         bytes_in: raw.len(),

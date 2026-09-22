@@ -7,6 +7,7 @@ pub mod fs;
 pub mod git;
 pub mod ids;
 pub mod profile;
+pub mod redact;
 pub mod shell;
 pub mod term;
 pub mod text;

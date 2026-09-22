@@ -8,6 +8,7 @@ use crate::core::spool::{self, Event};
 use crate::core::usage;
 use crate::harness::HarnessId;
 use crate::helpers::env::{self, Var};
+use crate::helpers::redact::redact;
 use crate::helpers::truncate_chars;
 use crate::limits::store::{EVENT_COMMAND_CHARS, EVENT_PROMPT_CHARS, EVENT_REPLY_CHARS};
 
@@ -24,7 +25,7 @@ impl Recorder<'_> {
 
     pub fn prompt(&self, input: &Value) -> Result<()> {
         let prompt = input["prompt"].as_str().unwrap_or("");
-        self.append("prompt", None, json!({ "text": truncate_chars(prompt, EVENT_PROMPT_CHARS) }))
+        self.append("prompt", None, json!({ "text": truncate_chars(&redact(prompt), EVENT_PROMPT_CHARS) }))
     }
 
     pub fn session_start(&self, input: &Value, harness: HarnessId, brief_tokens: usize) -> Result<()> {
@@ -52,7 +53,7 @@ impl Recorder<'_> {
     }
 
     pub fn stop(&self, input: &Value) -> Result<()> {
-        let last = input["last_assistant_message"].as_str().map(|s| truncate_chars(s, EVENT_REPLY_CHARS));
+        let last = input["last_assistant_message"].as_str().map(|s| truncate_chars(&redact(s), EVENT_REPLY_CHARS));
         self.append("stop", None, json!({ "last": last }))
     }
 }
@@ -71,7 +72,7 @@ fn tool_data(input: &Value) -> Value {
     let out = resp["stdout"].as_str().or_else(|| resp.as_str()).unwrap_or("");
     json!({
         "tool": tool,
-        "command": truncate_chars(cmd, EVENT_COMMAND_CHARS),
+        "command": truncate_chars(&redact(cmd), EVENT_COMMAND_CHARS),
         "interrupted": resp["interrupted"],
         "tail": truncate_chars(out.trim_end().rsplit('\n').next().unwrap_or(""), 200),
         "tokens": tokens,
