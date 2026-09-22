@@ -66,43 +66,71 @@ fn is_true(v: &str) -> bool {
 /// dotted keys are extended in place and inline tables are refused.
 fn with_hooks_enabled(text: &str) -> Result<Option<String>> {
     let lines: Vec<&str> = text.lines().collect();
+    let layout = scan(&lines)?;
+    let mut out: Vec<String> = lines.iter().map(ToString::to_string).collect();
+    match layout.hooks {
+        Some(Flag { enabled: true, .. }) => return Ok(None),
+        Some(Flag { line, in_table, .. }) => {
+            out[line] = if in_table { "hooks = true" } else { "features.hooks = true" }.into();
+        }
+        None => add_flag(&mut out, &layout),
+    }
+    Ok(Some(finish(&out)))
+}
+
+/// An existing `hooks` flag under `[features]` or as `features.hooks`.
+struct Flag {
+    line: usize,
+    in_table: bool,
+    enabled: bool,
+}
+
+/// Where the flag is, or where it can go.
+#[derive(Default)]
+struct Layout {
+    hooks: Option<Flag>,
+    features_header: Option<usize>,
+    last_dotted: Option<usize>,
+}
+
+fn scan(lines: &[&str]) -> Result<Layout> {
+    let mut layout = Layout::default();
     let mut table: Option<String> = None;
-    let mut features_header: Option<usize> = None;
-    let mut last_dotted: Option<usize> = None;
     for (i, l) in lines.iter().enumerate() {
         let t = l.trim();
         if let Some(name) = table_name(t) {
             if name == "features" {
-                features_header = Some(i);
+                layout.features_header = Some(i);
             }
             table = Some(name);
             continue;
         }
         let Some((key, value)) = key_value(t) else { continue };
-        let hooks_line = match table.as_deref() {
+        let is_flag = match table.as_deref() {
             Some("features") => key == "hooks",
             None if key == "features" => {
                 bail!("config.toml sets `features` as an inline table; add `hooks = true` to it by hand");
             }
             None if key.starts_with("features.") => {
-                last_dotted = Some(i);
+                layout.last_dotted = Some(i);
                 key == "features.hooks"
             }
             _ => false,
         };
-        if hooks_line {
-            if is_true(value) {
-                return Ok(None);
-            }
-            let mut out: Vec<String> = lines.iter().map(std::string::ToString::to_string).collect();
-            out[i] = if table.is_some() { "hooks = true" } else { "features.hooks = true" }.into();
-            return Ok(Some(finish(&out)));
+        if is_flag {
+            layout.hooks = Some(Flag { line: i, in_table: table.is_some(), enabled: is_true(value) });
+            break;
         }
     }
-    let mut out: Vec<String> = lines.iter().map(std::string::ToString::to_string).collect();
-    if let Some(i) = features_header {
+    Ok(layout)
+}
+
+/// Next to the existing `[features]` table or dotted keys, else a new
+/// table at the end.
+fn add_flag(out: &mut Vec<String>, layout: &Layout) {
+    if let Some(i) = layout.features_header {
         out.insert(i + 1, "hooks = true".into());
-    } else if let Some(i) = last_dotted {
+    } else if let Some(i) = layout.last_dotted {
         out.insert(i + 1, "features.hooks = true".into());
     } else {
         if out.last().is_some_and(|l| !l.trim().is_empty()) {
@@ -111,7 +139,6 @@ fn with_hooks_enabled(text: &str) -> Result<Option<String>> {
         out.push("[features]".into());
         out.push("hooks = true".into());
     }
-    Ok(Some(finish(&out)))
 }
 
 fn finish(lines: &[String]) -> String {
