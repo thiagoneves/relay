@@ -55,9 +55,40 @@ fn prompts(events: &[Event]) -> Vec<String> {
         .iter()
         .filter(|e| e.event == "prompt")
         .filter_map(|e| e.data["text"].as_str())
-        .filter(|s| !s.trim().is_empty() && !s.starts_with('/') && !is_harness_turn(s))
-        .map(|s| s.replace('\n', " "))
+        .filter(|s| !s.trim().is_empty() && !s.starts_with('/') && !is_harness_turn(s) && !is_continuer(s))
+        .map(|s| without_pasted(s).replace('\n', " "))
         .collect()
+}
+
+/// A word that only says "go on" tells the next session nothing.
+fn is_continuer(text: &str) -> bool {
+    const CONTINUERS: &[&str] = &[
+        "continue",
+        "continua",
+        "continuar",
+        "segue",
+        "siga",
+        "prossiga",
+        "pode seguir",
+        "ok",
+        "sim",
+        "yes",
+        "go",
+        "y",
+    ];
+    let t = text.trim().trim_end_matches(['.', '!']).to_lowercase();
+    CONTINUERS.contains(&t.as_str())
+}
+
+/// A pasted block is the user's material, not their ask; the words
+/// around it are.
+fn without_pasted(text: &str) -> String {
+    let Some(start) = text.find("<pasted_content") else { return text.to_string() };
+    let end = text[start..]
+        .find("</pasted_content")
+        .and_then(|close| text[start + close..].find('>').map(|gt| start + close + gt + 1))
+        .unwrap_or(text.len());
+    format!("{} [pasted content] {}", text[..start].trim(), text[end..].trim()).trim().to_string()
 }
 
 fn is_harness_turn(text: &str) -> bool {
@@ -91,7 +122,13 @@ fn remembered(events: &[Event]) -> Vec<String> {
 /// Edited files, most edited first.
 fn files_touched(events: &[Event], rel: &impl Fn(&str) -> String) -> Vec<(String, usize)> {
     let edits = events.iter().filter(|e| e.event == "tool" && e.data["tool"].as_str().is_some_and(usage::is_edit));
-    tally(edits.filter_map(|e| e.data["file"].as_str()).map(rel))
+    tally(edits.filter_map(|e| e.data["file"].as_str()).map(rel).filter(|f| in_repo(f)))
+}
+
+/// `rel` leaves a path outside the repo absolute. Those are the agent's
+/// scratch and notes, not the project: the next session cannot use them.
+fn in_repo(rel: &str) -> bool {
+    !std::path::Path::new(rel).is_absolute()
 }
 
 /// Files the agent read to orient itself before its first edit, most
@@ -103,7 +140,7 @@ fn read_first(events: &[Event], edited: &[(String, usize)], rel: &impl Fn(&str) 
         .filter(|e| e.event == "tool")
         .take_while(|e| !e.data["tool"].as_str().is_some_and(usage::is_edit));
     let reads = before_first_edit.filter(|e| e.data["tool"] == "Read").filter_map(|e| e.data["file"].as_str()).map(rel);
-    tally(reads)
+    tally(reads.filter(|f| in_repo(f)))
         .into_iter()
         .filter(|(f, _)| !edited.iter().any(|(e, _)| e == f))
         .take(limits::handoff::READ_FIRST)
@@ -166,6 +203,29 @@ fn commands_from_events(events: &[Event]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn asks_leave_out_continuers_and_pasted_blocks() {
+        let events = [
+            ev("prompt", json!({ "text": "continue" })),
+            ev("prompt", json!({ "text": "Sim." })),
+            ev(
+                "prompt",
+                json!({ "text": "review this: <pasted_content id=\"7\">\n# big\n</pasted_content id=\"7\"> please" }),
+            ),
+        ];
+        assert_eq!(prompts(&events), ["review this: [pasted content] please"]);
+    }
+
+    #[test]
+    fn files_outside_the_repo_are_not_the_projects() {
+        let rel = |f: &str| f.strip_prefix("/repo/").map_or_else(|| f.to_string(), str::to_string);
+        let events = [
+            ev("tool", json!({ "tool": "Edit", "file": "/repo/src/a.rs" })),
+            ev("tool", json!({ "tool": "Edit", "file": "/Users/me/.claude/projects/x/memory/note.md" })),
+        ];
+        assert_eq!(files_touched(&events, &rel), [("src/a.rs".to_string(), 1)]);
+    }
     use serde_json::json;
 
     fn ev(event: &str, data: serde_json::Value) -> Event {
