@@ -48,14 +48,32 @@ fn harness(events: &[Event]) -> String {
         .to_string()
 }
 
-/// Typed prompts; slash commands are harness plumbing, not asks.
+/// Typed prompts. Slash commands and what the harness delivers as a user
+/// turn (subagent reports, task notices, command echoes) are not asks.
 fn prompts(events: &[Event]) -> Vec<String> {
     events
         .iter()
         .filter(|e| e.event == "prompt")
-        .filter_map(|e| e.data["text"].as_str().map(|s| s.replace('\n', " ")))
-        .filter(|s| !s.trim().is_empty() && !s.starts_with('/'))
+        .filter_map(|e| e.data["text"].as_str())
+        .filter(|s| !s.trim().is_empty() && !s.starts_with('/') && !is_harness_turn(s))
+        .map(|s| s.replace('\n', " "))
         .collect()
+}
+
+fn is_harness_turn(text: &str) -> bool {
+    const TAGS: &[&str] = &[
+        "<task-notification>",
+        "<agent-message",
+        "<system-reminder>",
+        "<local-command-",
+        "<command-name>",
+        "<command-message>",
+        "<bash-input>",
+        "<bash-stdout>",
+        "<bash-stderr>",
+    ];
+    let t = text.trim_start();
+    TAGS.iter().any(|tag| t.starts_with(tag))
 }
 
 fn last_reply(events: &[Event]) -> Option<String> {
@@ -171,7 +189,12 @@ mod tests {
 
     #[test]
     fn slash_commands_are_not_asks() {
-        let events = [ev("prompt", json!({ "text": "/clear" })), ev("prompt", json!({ "text": "fix\nit" }))];
+        let events = [
+            ev("prompt", json!({ "text": "/clear" })),
+            ev("prompt", json!({ "text": "fix\nit" })),
+            ev("prompt", json!({ "text": "<task-notification>\n<task-id>a1</task-id>" })),
+            ev("prompt", json!({ "text": "<agent-message from=\"a1\">report</agent-message>" })),
+        ];
         assert_eq!(Summary::collect(&events, &[], str::to_string, "now").prompts, ["fix it"]);
     }
 }
