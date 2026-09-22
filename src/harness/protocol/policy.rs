@@ -63,7 +63,8 @@ pub fn rewrite(call: &Call, relay: impl FnOnce() -> String) -> Option<Rewritten>
 /// stderr as `relay x` would merge them. `None` for images, background
 /// jobs and commands relay already ran through `relay x`.
 pub fn output_to_shrink(cmd: &str, response: &serde_json::Value) -> Option<String> {
-    let first = cmd.split_whitespace().next().unwrap_or("");
+    let (_, body) = split_shell_state(cmd);
+    let first = body.split_whitespace().next().unwrap_or("");
     if matches!(program(first.trim_matches('\'')), "relay" | "rtk")
         || response["isImage"].as_bool() == Some(true)
         || !response["backgroundTaskId"].is_null()
@@ -71,6 +72,11 @@ pub fn output_to_shrink(cmd: &str, response: &serde_json::Value) -> Option<Strin
         return None;
     }
     let mut raw = response["stdout"].as_str()?.to_string();
+    // Already relay's view (a rewrite this hook did not see as such):
+    // compressing it again would cut what the first pass kept.
+    if crate::core::condense::stored_id(raw.trim_end()).is_some() {
+        return None;
+    }
     let stderr = response["stderr"].as_str().unwrap_or("");
     if !stderr.is_empty() {
         if !raw.is_empty() && !raw.ends_with('\n') {
@@ -314,6 +320,9 @@ mod tests {
         assert_eq!(out(json!({ "stdout": "", "isImage": true })), None);
         assert_eq!(out(json!({ "stdout": "", "backgroundTaskId": "b1" })), None);
         assert_eq!(output_to_shrink("relay x -- ls", &json!({ "stdout": "a" })), None);
+        assert_eq!(output_to_shrink("cd /r && relay x --session s -- 'ls'", &json!({ "stdout": "a" })), None);
+        let view = json!({ "stdout": "a\n[relay 3k→900 tokens · original: relay get o_1_2]\n" });
+        assert_eq!(output_to_shrink("cargo test", &view), None);
     }
 
     #[test]
