@@ -8,6 +8,7 @@ mod handoff;
 mod hook;
 mod init;
 mod install;
+mod pipe;
 mod purge;
 mod remember;
 mod status;
@@ -45,6 +46,12 @@ pub enum Commands {
         raw: bool,
         #[arg(required = true, num_args = 1..)]
         cmd: Vec<String>,
+    },
+    /// Compress stdin as `relay x` would for `--cmd`, without running or storing anything
+    #[command(hide = true)]
+    Pipe {
+        #[arg(long)]
+        cmd: String,
     },
     /// Print the original output behind a compressed view
     Get {
@@ -127,6 +134,7 @@ pub fn run() -> anyhow::Result<i32> {
         Commands::Uninstall { harness } => install::uninstall(&harness),
         Commands::Hook { harness } => hook::run(&harness),
         Commands::Exec { raw, cmd } => x::run(&cmd.join(" "), raw),
+        Commands::Pipe { cmd } => pipe::run(&cmd),
         Commands::Get { id, meta } => get::run(&id, meta),
         Commands::Handoff { session, show } => handoff::run(session.as_deref(), show),
         Commands::Remember { kind, text, paths } => remember::run(kind, &text.join(" "), &paths),
