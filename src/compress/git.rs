@@ -1,7 +1,60 @@
 //! Structured filters for git output. They never parse anything they
 //! cannot recognise: unknown shapes fall through untouched.
 
+use super::Filter;
+use super::command::Simple;
 use crate::limits;
+
+/// Flags that make `git diff` / `git show` print something other than a
+/// patch.
+const DIFF_OTHER_SHAPES: &[&str] = &[
+    "--stat",
+    "--shortstat",
+    "--numstat",
+    "--dirstat",
+    "--name-only",
+    "--name-status",
+    "--raw",
+    "--check",
+    "--summary",
+    "--oneline",
+    "--format",
+    "--pretty",
+];
+
+/// Flags that make `git log` print something other than its default
+/// format.
+const LOG_OTHER_SHAPES: &[&str] = &[
+    "--oneline",
+    "--format",
+    "--pretty",
+    "-p",
+    "-u",
+    "--patch",
+    "--stat",
+    "--shortstat",
+    "--numstat",
+    "--name-only",
+    "--name-status",
+    "--raw",
+    "--graph",
+];
+
+pub fn filter_for(s: &Simple) -> Option<Filter> {
+    if s.program() != "git" {
+        return None;
+    }
+    match s.arg(1) {
+        "status" if !s.has_flag(&["--porcelain", "-s", "--short"]) => Some(Filter::GitStatus),
+        "diff" | "show" if !s.has_flag(DIFF_OTHER_SHAPES) => Some(Filter::GitDiff),
+        "log"
+            if !s.has_flag(LOG_OTHER_SHAPES) && !s.words.iter().any(|w| w.starts_with("-S") || w.starts_with("-G")) =>
+        {
+            Some(Filter::GitLog)
+        }
+        _ => None,
+    }
+}
 
 /// `git status` (human format): drop hint lines and headers noise.
 pub fn status(text: &str) -> String {

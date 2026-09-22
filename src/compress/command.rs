@@ -157,6 +157,34 @@ pub fn head_tokens(cmd: &str) -> Vec<String> {
     toks
 }
 
+/// One simple command as the filter rules see it: its words as typed,
+/// and the leading tokens of the program that produces its output.
+pub struct Simple<'a> {
+    pub words: Vec<&'a str>,
+    pub toks: Vec<String>,
+}
+
+impl<'a> Simple<'a> {
+    pub fn new(text: &'a str) -> Self {
+        Self { words: text.split_whitespace().collect(), toks: head_tokens(text) }
+    }
+
+    /// The program, without its directory; empty for an empty command.
+    pub fn program(&self) -> &str {
+        self.toks.first().map_or("", |t| program(t))
+    }
+
+    /// The `i`th leading token as typed, empty when there is none.
+    pub fn arg(&self, i: usize) -> &str {
+        self.toks.get(i).map_or("", String::as_str)
+    }
+
+    /// Whether any word is one of `flags`, alone or as `flag=value`.
+    pub fn has_flag(&self, flags: &[&str]) -> bool {
+        self.words.iter().any(|w| flags.iter().any(|f| w == f || w.starts_with(&format!("{f}="))))
+    }
+}
+
 /// The program name without its directory: `./gradlew` → `gradlew`,
 /// `/usr/bin/git` → `git`.
 pub fn program(token: &str) -> &str {

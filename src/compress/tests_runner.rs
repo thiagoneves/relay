@@ -1,6 +1,24 @@
 //! Filters for test runners and build tools. Rule: passing noise goes,
 //! failures and the summary stay verbatim.
 
+use super::Filter;
+use super::command::Simple;
+
+pub fn filter_for(s: &Simple) -> Option<Filter> {
+    let t2 = s.arg(2);
+    Some(match (s.program(), s.arg(1)) {
+        ("cargo", "test" | "nextest") => Filter::CargoTest,
+        ("go", "test") => Filter::GoTest,
+        ("pytest", _) => Filter::Pytest,
+        ("python" | "python3", "-m") | ("uv", "run") if t2 == "pytest" => Filter::Pytest,
+        ("npx" | "bunx", "jest" | "vitest") | ("jest" | "vitest", _) | ("npm" | "pnpm" | "yarn" | "bun", "test") => {
+            Filter::JsTest
+        }
+        ("npm" | "pnpm" | "yarn", "run") if t2.contains("test") => Filter::JsTest,
+        _ => return None,
+    })
+}
+
 /// `cargo test`: drop `test x ... ok` lines, keep failures and summaries.
 pub fn cargo_test(text: &str) -> String {
     let mut out = Vec::new();

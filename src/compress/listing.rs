@@ -4,6 +4,15 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+use super::Filter;
+use super::command::Simple;
+
+/// `ls` with a short flag cluster that includes `l`.
+pub fn filter_for(s: &Simple) -> Option<Filter> {
+    let long = s.toks.iter().any(|t| t.starts_with('-') && !t.starts_with("--") && t.contains('l'));
+    (s.program() == "ls" && long).then_some(Filter::LsLong)
+}
+
 static LONG: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^([-dlcbps][rwxsStT-]{9}[@+.]?)\s+(\d+)\s+(\S+)\s+(\S+)\s+(.*)$").expect("valid regex")
 });
