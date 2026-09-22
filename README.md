@@ -38,6 +38,8 @@ to the repo, not to a vendor. Nothing to run, nothing to paste.
 **Memory that lives with the code.** `relay remember` saves a rule, a gotcha or
 a decision as one small file under `.relay/`. Commit it and every session, and
 every teammate, gets it; it shows up in a pull request like any other change.
+`.relay/` is an [Open Knowledge Format](https://okf.md) bundle, so anything
+that reads OKF reads relay's memory, and relay asks nothing extra of you.
 `relay compile` lists what recent sessions decided and lets you keep it with
 one flag. When the code an item describes moves on, relay says so:
 _may be stale: src/pay.rs changed since_. An item can carry an expiry, for the
@@ -146,7 +148,7 @@ You close the session. relay writes the handoff for the next one.
 
 | Place | What | Shared |
 |---|---|---|
-| `.relay/` | Project rules, remembered items, handoffs you chose to share | Yes, you commit it |
+| `.relay/` | An OKF bundle: project rules, remembered items, handoffs you chose to share, and an `index.md` | Yes, you commit it |
 | `.git/relay/` | Session events, handoffs, originals, logs | No, per worktree |
 | `$TMPDIR/relay-<uid>/` | Originals from sandboxed runs, until the next hook moves them | No, owner-only |
 

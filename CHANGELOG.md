@@ -23,6 +23,10 @@ All notable changes to relay. Dates are UTC.
 
 ### Added
 
+- `.relay/` is an Open Knowledge Format (v0.2) bundle: every item, the
+  project file and shared handoffs carry `type`, `title`, `timestamp` and
+  `generated`; an `index.md` lists them. `relay init` migrates items written
+  before.
 - `relay init` points `AGENTS.md` (and an existing `CLAUDE.md`) at `.relay/`,
   so agents without hooks read the memory too; `--no-agents-md` skips it.
 - `relay init --terse` adds an Answers section to `project.md` asking the
