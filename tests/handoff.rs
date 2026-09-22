@@ -103,3 +103,28 @@ fn status_reports_orientation_and_reads_are_not_edits() {
     assert_eq!(section("Files touched"), "- src/pay.rs", "reads leaked into Files touched:\n{handoff}");
     assert_eq!(section("Read first"), "- src/big.rs", "orientation reads missing:\n{handoff}");
 }
+
+/// A shared handoff reaches whoever clones the repo: the brief reads it
+/// even when the local store has nothing, and credentials are masked.
+#[test]
+fn a_shared_handoff_is_masked_and_read_from_the_repo() {
+    let repo = Repo::new("handoff-share");
+    let s = "share-1";
+    repo.hook("claude", json!({ "hook_event_name": "SessionStart", "session_id": s, "source": "startup" }));
+    repo.hook("claude", json!({ "hook_event_name": "UserPromptSubmit", "session_id": s, "prompt": "Ship it" }));
+    repo.hook(
+        "claude",
+        json!({ "hook_event_name": "Stop", "session_id": s, "last_assistant_message": "Deployed with token ghp_0123456789abcdefghijABCD; done." }),
+    );
+    repo.hook("claude", json!({ "hook_event_name": "SessionEnd", "session_id": s, "reason": "exit" }));
+
+    let out = repo.run(&["handoff", "--share"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let shared = repo.root.join(".relay/handoffs/share-1.md");
+    let body = std::fs::read_to_string(&shared).unwrap();
+    assert!(body.contains("***") && !body.contains("ghp_0123"), "{body}");
+
+    std::fs::remove_dir_all(repo.root.join(".git/relay/handoffs")).unwrap();
+    let brief = String::from_utf8(repo.run(&["brief"]).stdout).unwrap();
+    assert!(brief.contains("## Last session") && brief.contains("Ship it"), "{brief}");
+}

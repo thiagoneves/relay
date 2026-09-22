@@ -88,6 +88,9 @@ pub enum Commands {
         /// Show the latest handoff without rebuilding
         #[arg(long)]
         show: bool,
+        /// Copy the handoff into `.relay/handoffs/` (credentials masked) for the team
+        #[arg(long, conflicts_with = "show")]
+        share: bool,
     },
     /// Save a rule, gotcha or decision to `.relay/` (committed, one file per item)
     Remember {
@@ -210,7 +213,7 @@ fn run() -> anyhow::Result<i32> {
         }
         Commands::Pipe { cmd } => pipe::run(&cmd),
         Commands::Get { id, meta } => get::run(&id, meta),
-        Commands::Handoff { session, show } => handoff::run(session.as_deref(), show),
+        Commands::Handoff { session, show, share } => handoff::run(session.as_deref(), show, share),
         Commands::Remember { kind, text, paths, session, until } => {
             remember::run(kind, &text.join(" "), &paths, session.as_deref(), until.as_deref())
         }

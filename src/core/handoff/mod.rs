@@ -7,14 +7,14 @@ mod render;
 mod summary;
 
 use std::path::PathBuf;
-use std::time::SystemTime;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::core::outputs;
 use crate::core::paths::Paths;
 use crate::core::spool;
 use crate::helpers::git as gitstate;
+use crate::helpers::redact::redact;
 use crate::helpers::{frontmatter, now_iso, write_atomic};
 use render::Header;
 use summary::Summary;
@@ -59,11 +59,21 @@ pub fn build(paths: &Paths, session: &str, reason: &str, tail: Option<&Tail>) ->
     Ok(Handoff { path, body })
 }
 
+/// Copy a session's handoff into the shared tier, credentials masked, so
+/// whoever clones the repo gets it. Sharing is a decision, never a default.
+pub fn share(paths: &Paths, session: &str) -> Result<PathBuf> {
+    let body = std::fs::read_to_string(path_for(paths, session))
+        .with_context(|| format!("no handoff for session {session}; `relay handoff --session {session}` builds one"))?;
+    let shared = paths.shared.join("handoffs").join(format!("{session}.md"));
+    write_atomic(&shared, redact(&body).as_bytes())?;
+    Ok(shared)
+}
+
 /// Most recent handoff, preferring an interactive session over a headless
 /// one, then the current branch over others.
 pub fn latest(paths: &Paths, branch: &str) -> Option<(PathBuf, String)> {
     let mut all = stored(paths);
-    all.sort_by_key(|x| std::cmp::Reverse(x.0));
+    all.sort_by(|a, b| b.0.cmp(&a.0));
     let bodies: Vec<&str> = all.iter().map(|(_, _, b)| b.as_str()).collect();
     pick(&bodies, branch).map(|i| (all[i].1.clone(), all[i].2.clone()))
 }
@@ -83,17 +93,29 @@ pub fn count(paths: &Paths) -> usize {
     std::fs::read_dir(paths.handoffs()).map_or(0, Iterator::count)
 }
 
-fn stored(paths: &Paths) -> Vec<(SystemTime, PathBuf, String)> {
-    let Ok(rd) = std::fs::read_dir(paths.handoffs()) else { return Vec::new() };
-    rd.flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("md"))
-        .filter_map(|p| {
-            let body = std::fs::read_to_string(&p).ok()?;
-            let modified = p.metadata().and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH);
-            Some((modified, p, body))
-        })
-        .collect()
+/// Local handoffs plus the shared ones, ordered by when each session
+/// ended (the frontmatter, not the file: a clone rewrites mtimes). A
+/// session present in both tiers counts once, from the local copy.
+fn stored(paths: &Paths) -> Vec<(String, PathBuf, String)> {
+    let mut seen = std::collections::HashSet::new();
+    let mut all = Vec::new();
+    for dir in [paths.handoffs(), paths.shared.join("handoffs")] {
+        let Ok(rd) = std::fs::read_dir(dir) else { continue };
+        for p in rd.flatten().map(|e| e.path()) {
+            if p.extension().and_then(|s| s.to_str()) != Some("md") {
+                continue;
+            }
+            let Some(name) = p.file_name().map(std::ffi::OsStr::to_os_string) else { continue };
+            if !seen.insert(name) {
+                continue;
+            }
+            if let Ok(body) = std::fs::read_to_string(&p) {
+                let ended = frontmatter::get(&body, "ended").unwrap_or_default();
+                all.push((ended, p, body));
+            }
+        }
+    }
+    all
 }
 
 #[cfg(test)]
