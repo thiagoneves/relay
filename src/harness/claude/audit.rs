@@ -15,6 +15,7 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::core::audit::{Collector, Origin, SessionAudit};
+use crate::harness::jsonl;
 
 /// Hook events whose stdout Claude Code adds to the model's context.
 const INJECTING_HOOKS: &[&str] = &["SessionStart", "UserPromptSubmit"];
@@ -71,7 +72,7 @@ pub fn session(path: &Path) -> Option<SessionAudit> {
                 Some("tool_result") => {
                     let name = b["tool_use_id"].as_str().and_then(|id| tool_names.get(id)).cloned();
                     let name = name.unwrap_or_else(|| "tool".into());
-                    col.add(format!("Tool results: {name}"), Origin::Work, &text_of(&b["content"]));
+                    col.add(format!("Tool results: {name}"), Origin::Work, &jsonl::text_of(&b["content"]));
                 }
                 _ => {}
             }
@@ -176,14 +177,6 @@ fn tool_label(name: &str) -> String {
     match name.strip_prefix("mcp__") {
         Some(rest) => format!("MCP {}", rest.split("__").next().unwrap_or(rest)),
         None => name.to_string(),
-    }
-}
-
-fn text_of(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        Value::Array(parts) => parts.iter().filter_map(|p| p["text"].as_str()).collect::<Vec<_>>().join(""),
-        _ => String::new(),
     }
 }
 

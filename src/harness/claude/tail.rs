@@ -9,15 +9,19 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::core::handoff::Tail;
+use crate::harness::jsonl::{MAX_REPLIES, last};
 
-const MAX_REPLIES: usize = 8;
 const MAX_DECISIONS: usize = 8;
 
 pub fn read(path: &Path) -> Option<Tail> {
     let f = std::fs::File::open(path).ok()?;
+    Some(read_lines(BufReader::new(f).lines().map_while(Result::ok)))
+}
+
+fn read_lines(lines: impl Iterator<Item = String>) -> Tail {
     let mut tail = Tail::default();
     let mut turn_end: Option<String> = None;
-    for line in BufReader::new(f).lines().map_while(Result::ok) {
+    for line in lines {
         let prompt = line.contains("\"type\":\"user\"") && !line.contains("\"tool_result\"");
         let reply = line.contains("\"type\":\"assistant\"")
             && (line.contains("\"type\":\"text\"") || line.contains("\"ExitPlanMode\""));
@@ -50,7 +54,7 @@ pub fn read(path: &Path) -> Option<Tail> {
     tail.replies.extend(turn_end);
     tail.replies = last(tail.replies, MAX_REPLIES);
     tail.decisions = last(tail.decisions, MAX_DECISIONS);
-    Some(tail)
+    tail
 }
 
 /// A message the user typed, not a slash command, its output, a reminder
@@ -77,10 +81,6 @@ fn decisions(result: &Value, into: &mut Vec<String>) {
         let topic = q["header"].as_str().unwrap_or(question);
         into.push(format!("{topic}: {}", answer.trim_end_matches(" (Recommended)")));
     }
-}
-
-fn last(mut v: Vec<String>, n: usize) -> Vec<String> {
-    v.split_off(v.len().saturating_sub(n))
 }
 
 #[cfg(test)]

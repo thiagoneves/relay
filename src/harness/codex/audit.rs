@@ -14,6 +14,7 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::core::audit::{Collector, Origin, SessionAudit};
+use crate::harness::jsonl;
 
 /// Known context blocks by their opening, with a label and who controls them.
 const BLOCKS: &[(&str, &str, Origin)] = &[
@@ -73,7 +74,7 @@ pub fn session(path: &Path) -> Option<SessionAudit> {
             }
             (Some("response_item"), Some("function_call_output" | "custom_tool_call_output")) => {
                 let name = p["call_id"].as_str().and_then(|id| calls.get(id)).map_or("tool", String::as_str);
-                col.add(format!("Tool results: {name}"), Origin::Work, &output_text(&p["output"]));
+                col.add(format!("Tool results: {name}"), Origin::Work, &jsonl::text_of(&p["output"]));
             }
             _ => {}
         }
@@ -99,14 +100,6 @@ fn message(p: &Value, col: &mut Collector) {
         col.add("Conversation: your messages", Origin::Work, &text);
     } else if role == "assistant" {
         col.add("Conversation: agent replies", Origin::Work, &text);
-    }
-}
-
-fn output_text(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        Value::Array(parts) => parts.iter().filter_map(|p| p["text"].as_str()).collect::<Vec<_>>().join(""),
-        other => other["content"].as_str().unwrap_or("").to_string(),
     }
 }
 

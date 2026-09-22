@@ -10,6 +10,7 @@ use serde_json::Value;
 
 use crate::core::audit::Transcript;
 use crate::core::bench::ShellCall;
+use crate::harness::jsonl;
 
 /// Claude Code names a project's transcript dir after its path with every
 /// non-alphanumeric character turned into `-`.
@@ -49,26 +50,13 @@ fn transcript(path: PathBuf, id: String, parent: Option<String>) -> Transcript {
 }
 
 pub fn shell_calls(dir: &Path) -> Vec<ShellCall> {
-    let mut files = Vec::new();
-    collect_jsonl(dir, &mut files);
+    let mut files = jsonl::files_under(dir);
     files.sort();
     let mut calls = Vec::new();
     for f in files {
         read_file(&f, &mut calls);
     }
     calls
-}
-
-fn collect_jsonl(dir: &Path, into: &mut Vec<PathBuf>) {
-    let Ok(rd) = std::fs::read_dir(dir) else { return };
-    for e in rd.flatten() {
-        let p = e.path();
-        if p.is_dir() {
-            collect_jsonl(&p, into);
-        } else if p.extension().is_some_and(|x| x == "jsonl") {
-            into.push(p);
-        }
-    }
 }
 
 fn read_file(path: &Path, calls: &mut Vec<ShellCall>) {
@@ -90,20 +78,12 @@ fn read_file(path: &Path, calls: &mut Vec<ShellCall>) {
                 }
                 Some("tool_result") => {
                     if let Some(cmd) = b["tool_use_id"].as_str().and_then(|id| pending.remove(id)) {
-                        calls.push(ShellCall { cmd, output: result_text(&b["content"]) });
+                        calls.push(ShellCall { cmd, output: jsonl::text_of(&b["content"]) });
                     }
                 }
                 _ => {}
             }
         }
-    }
-}
-
-fn result_text(content: &Value) -> String {
-    match content {
-        Value::String(s) => s.clone(),
-        Value::Array(parts) => parts.iter().filter_map(|p| p["text"].as_str()).collect::<Vec<_>>().join(""),
-        _ => String::new(),
     }
 }
 

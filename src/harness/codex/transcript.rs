@@ -9,17 +9,15 @@ use serde_json::Value;
 
 use crate::core::audit::Transcript;
 use crate::core::handoff::Tail;
+use crate::harness::jsonl::{self, MAX_REPLIES};
 
 /// Rollouts under `sessions/`, filtered by the `cwd` in their first line
 /// (`session_meta`). Subagent rollouts name their parent thread.
 pub fn rollouts(dir: &Path, root: Option<&Path>) -> Vec<Transcript> {
-    let mut files = Vec::new();
-    collect(dir, &mut files);
-    files
+    jsonl::files_under(dir)
         .into_iter()
         .filter_map(|path| {
-            let first = BufReader::new(std::fs::File::open(&path).ok()?).lines().next()?.ok()?;
-            let meta: Value = serde_json::from_str(&first).ok()?;
+            let meta: Value = serde_json::from_str(&jsonl::first_line(&path)?).ok()?;
             let p = &meta["payload"];
             if let Some(r) = root
                 && p["cwd"].as_str().map(Path::new) != Some(r)
@@ -33,24 +31,11 @@ pub fn rollouts(dir: &Path, root: Option<&Path>) -> Vec<Transcript> {
         .collect()
 }
 
-fn collect(dir: &Path, into: &mut Vec<std::path::PathBuf>) {
-    let Ok(rd) = std::fs::read_dir(dir) else { return };
-    for e in rd.flatten() {
-        let p = e.path();
-        if p.is_dir() {
-            collect(&p, into);
-        } else if p.extension().is_some_and(|x| x == "jsonl") {
-            into.push(p);
-        }
-    }
-}
-
 /// Codex closes every turn with a `task_complete` event that carries the
 /// agent's last message.
 pub fn tail(path: &Path) -> Option<Tail> {
-    const MAX_REPLIES: usize = 8;
     let f = std::fs::File::open(path).ok()?;
-    let mut replies: Vec<String> = BufReader::new(f)
+    let replies = BufReader::new(f)
         .lines()
         .map_while(Result::ok)
         .filter(|l| l.contains("\"task_complete\""))
@@ -58,8 +43,7 @@ pub fn tail(path: &Path) -> Option<Tail> {
         .filter_map(|v| v["payload"]["last_agent_message"].as_str().map(str::to_string))
         .filter(|m| !m.trim().is_empty())
         .collect();
-    let replies = replies.split_off(replies.len().saturating_sub(MAX_REPLIES));
-    Some(Tail { replies, ..Tail::default() })
+    Some(Tail { replies: jsonl::last(replies, MAX_REPLIES), ..Tail::default() })
 }
 
 #[cfg(test)]
