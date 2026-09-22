@@ -16,29 +16,9 @@ pub enum Source {
 }
 
 pub fn run(source: Source, json: bool, min_recall: Option<f64>) -> anyhow::Result<i32> {
-    let (label, samples) = match source {
-        Source::Corpus(dir) => (
-            format!("corpus {}, current hook policy", dir.display()),
-            bench::from_corpus(&dir, |c| harness::protocol::policy::approved_target(c).is_some())?,
-        ),
-        Source::History(id, dir) => {
-            let h = id.adapter();
-            let calls = h.shell_history(dir.as_deref())?;
-            let label = format!("{} transcripts, current filters and hook policy", h.id());
-            let shrinks_after = h.replaces_output();
-            let wraps = |cmd: &str, failed: bool| {
-                harness::protocol::policy::approved_target(cmd).is_some() || (shrinks_after && !failed)
-            };
-            (label, bench::from_history(&calls, wraps))
-        }
-        Source::Store => {
-            let paths = Paths::from_cwd()?;
-            ("stored originals, recompressed with current filters".to_string(), bench::from_store(&paths))
-        }
-    };
+    let (label, samples) = collect(source)?;
     let (filters, total) = bench::totals(&samples, |s| &s.filter);
     let (families, _) = bench::totals(&samples, |s| &s.family);
-
     if json {
         let out = serde_json::json!({
             "source": label, "filters": filters, "families": families, "total": total, "samples": samples,
@@ -58,13 +38,33 @@ pub fn run(source: Source, json: bool, min_recall: Option<f64>) -> anyhow::Resul
             print_families(&families, &total);
         }
         print_losses(&samples, &total);
-        println!(
-            "\nTokens are estimates (calibrated against a BPE tokenizer, ~7% median error). Signal = lines with errors, failures or file:line references."
+        Ui::stdout().note(
+            "Tokens are estimates (calibrated against a BPE tokenizer, ~7% median error). Signal = lines with errors, failures or file:line references.",
         );
     }
-
     let failed = min_recall.is_some_and(|min| total.expect_kept < total.expect_total || total.signal_recall() < min);
     Ok(i32::from(failed))
+}
+
+/// The samples to measure and a label saying where they came from.
+fn collect(source: Source) -> anyhow::Result<(String, Vec<bench::Sample>)> {
+    let rewrites = |cmd: &str| harness::protocol::policy::approved_target(cmd).is_some();
+    Ok(match source {
+        Source::Corpus(dir) => {
+            (format!("corpus {}, current hook policy", dir.display()), bench::from_corpus(&dir, rewrites)?)
+        }
+        Source::History(id, dir) => {
+            let h = id.adapter();
+            let calls = h.shell_history(dir.as_deref())?;
+            let shrinks_after = h.replaces_output();
+            let label = format!("{} transcripts, current filters and hook policy", h.id());
+            (label, bench::from_history(&calls, |cmd, failed| rewrites(cmd) || (shrinks_after && !failed)))
+        }
+        Source::Store => {
+            let paths = Paths::from_cwd()?;
+            ("stored originals, recompressed with current filters".to_string(), bench::from_store(&paths))
+        }
+    })
 }
 
 fn in_out(t: &Totals, out: usize) -> String {
