@@ -1,23 +1,27 @@
 use crate::core::outputs;
 use crate::core::paths::Paths;
+use crate::helpers::env::tilde;
 use crate::helpers::{dir_size, human_bytes};
 
+use super::ui::Ui;
+
 pub fn run(yes: bool) -> anyhow::Result<i32> {
+    let ui = Ui::stdout();
     let paths = Paths::from_cwd()?;
-    let size = dir_size(&paths.local);
-    println!("relay purge would delete the LOCAL store only:");
-    println!("  {}  ({})", paths.local.display(), human_bytes(size));
-    println!("  spool, outputs, handoffs, log");
-    println!("  and originals spilled from sandboxed runs: {}", outputs::spill_dir(&paths).display());
-    println!("It never touches the committed tier: {}", paths.rel(&paths.shared));
     if !yes {
-        println!("Re-run with --yes to proceed.");
-        return Ok(1);
+        ui.heading("relay purge", "preview, nothing deleted");
+        let size = human_bytes(dir_size(&paths.local));
+        ui.field("Deletes", &format!("{} ({size}): sessions, outputs, handoffs, log", tilde(&paths.local)));
+        ui.field("Also", &format!("originals spilled from sandboxed runs in {}", tilde(&outputs::spill_dir(&paths))));
+        ui.field("Keeps", &format!("{}, the committed rules and memory", paths.rel(&paths.shared)));
+        ui.blank();
+        ui.next("Run `relay purge --yes` to delete.");
+        return Ok(0);
     }
     if paths.local.exists() {
         std::fs::remove_dir_all(&paths.local)?;
     }
     outputs::purge_spill(&paths)?;
-    println!("relay: local store removed");
+    ui.ok(&format!("Deleted the local store; {} is untouched.", paths.rel(&paths.shared)));
     Ok(0)
 }

@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::ValueEnum;
 
 use crate::core::paths::Paths;
@@ -63,14 +63,32 @@ pub struct NewItem<'a> {
     pub session: Option<&'a str>,
 }
 
+/// Why an item was not saved, for the CLI to explain.
+#[derive(Debug)]
+pub enum NotSaved {
+    Empty,
+    AlreadyRemembered(String),
+}
+
+impl std::fmt::Display for NotSaved {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Empty => f.write_str("nothing to remember: text is empty"),
+            Self::AlreadyRemembered(at) => write!(f, "already remembered in {at}"),
+        }
+    }
+}
+
+impl std::error::Error for NotSaved {}
+
 pub fn remember(paths: &Paths, item: &NewItem) -> Result<PathBuf> {
     let text = item.text.trim();
     if text.is_empty() {
-        bail!("nothing to remember: text is empty");
+        return Err(NotSaved::Empty.into());
     }
     let title = title_of(text);
     if let Some(dup) = list(paths).into_iter().find(|i| i.kind == item.kind && i.title == title) {
-        bail!("already remembered in {}", paths.rel(&dup.path));
+        return Err(NotSaved::AlreadyRemembered(paths.rel(&dup.path)).into());
     }
     let path = unique_path(&dir_for(paths, item.kind), &slug(&title));
     write_atomic(&path, render(item, &gitstate::state(&paths.root), &now_iso()).as_bytes())?;

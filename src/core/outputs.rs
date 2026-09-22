@@ -13,7 +13,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::core::paths::Paths;
@@ -69,12 +69,24 @@ fn find_meta(paths: &Paths, id: &str) -> Option<PathBuf> {
     [paths.outputs(), spill_dir(paths)].into_iter().map(|d| d.join(format!("{id}.json"))).find(|p| p.exists())
 }
 
+/// No stored original has this id (or the id is not one relay makes).
+#[derive(Debug)]
+pub struct Unknown(pub String);
+
+impl std::fmt::Display for Unknown {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "no stored output with id {}", self.0)
+    }
+}
+
+impl std::error::Error for Unknown {}
+
 pub fn get(paths: &Paths, id: &str) -> Result<(OutputMeta, String)> {
     let id = id.trim();
     if id.is_empty() || id.contains(['/', '\\']) || id.contains("..") {
-        bail!("invalid output id");
+        return Err(Unknown(id.to_string()).into());
     }
-    let meta_path = find_meta(paths, id).with_context(|| format!("no output with id {id}"))?;
+    let meta_path = find_meta(paths, id).ok_or_else(|| Unknown(id.to_string()))?;
     let meta: OutputMeta = serde_json::from_slice(&fs::read(&meta_path)?)?;
     let raw = fs::read_to_string(meta_path.with_extension("out"))?;
     Ok((meta, raw))
