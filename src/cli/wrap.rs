@@ -63,6 +63,7 @@ pub fn run(name: &str, last: bool, args: &[String]) -> anyhow::Result<i32> {
         if stale {
             let _ = handoff::build(&paths, &session, "wrapper-exit", harness::tail_for(&paths, &session).as_ref());
         }
+        outputs::prune(&paths, outputs::KEEP);
         let outs = outputs::for_session(&paths, &session);
         let saved: usize = outs.iter().map(super::super::core::outputs::OutputMeta::saved).sum();
         eprintln!(

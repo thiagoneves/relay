@@ -11,6 +11,7 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -175,6 +176,25 @@ pub fn for_session(paths: &Paths, session: &str) -> Vec<OutputMeta> {
     list(paths).into_iter().filter(|m| m.session.as_deref() == Some(session)).collect()
 }
 
+/// Originals older than this are deleted; handoffs cite recent ones.
+pub const KEEP: Duration = Duration::from_secs(30 * 24 * 3600);
+
+/// Delete stored originals (and their sidecars) last written before
+/// `now - keep`. Metadata only, no parsing: cheap enough for `SessionEnd`.
+/// Returns files removed.
+pub fn prune(paths: &Paths, keep: Duration) -> usize {
+    let Some(cutoff) = SystemTime::now().checked_sub(keep) else { return 0 };
+    let Ok(rd) = fs::read_dir(paths.outputs()) else { return 0 };
+    let mut removed = 0;
+    for e in rd.flatten() {
+        let old = e.metadata().and_then(|m| m.modified()).is_ok_and(|m| m < cutoff);
+        if old && fs::remove_file(e.path()).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,6 +249,17 @@ mod tests {
         write_pair(&spill, &meta("o_same"), "x").unwrap();
         assert_eq!(list(&p).len(), 1);
         let _ = fs::remove_dir_all(&spill);
+        let _ = fs::remove_dir_all(&p.root);
+    }
+
+    #[test]
+    fn prune_removes_only_old_files() {
+        let p = paths("prune");
+        write_pair(&p.outputs(), &meta("o_new"), "x").unwrap();
+        assert_eq!(prune(&p, KEEP), 0);
+        std::thread::sleep(Duration::from_millis(20));
+        assert_eq!(prune(&p, Duration::ZERO), 2);
+        assert!(list(&p).is_empty());
         let _ = fs::remove_dir_all(&p.root);
     }
 }

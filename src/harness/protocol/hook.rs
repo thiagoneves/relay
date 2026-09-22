@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use crate::core::paths::Paths;
 use crate::core::spool::{self, Event};
 use crate::core::usage;
-use crate::core::{brief, handoff};
+use crate::core::{brief, handoff, outputs};
 use crate::harness::protocol::permission::{self, Rewrite};
 use crate::helpers::{est_tokens, shell, slash, truncate_chars};
 
@@ -49,6 +49,8 @@ pub fn run(harness_id: &str) -> Result<()> {
             record(&paths, &session, "session_end", None, json!({ "reason": input["reason"] }))?;
             let tail = transcript_tail(harness_id, &input);
             let _ = handoff::build(&paths, &session, input["reason"].as_str().unwrap_or("end"), tail.as_ref());
+            // After the handoff, which lists this session's outputs.
+            outputs::prune(&paths, outputs::KEEP);
             Ok(())
         }
         "PreCompact" => {
@@ -106,7 +108,7 @@ fn post_tool_use(paths: &Paths, session: &str, input: &Value) -> Result<()> {
     if tool == "Bash" {
         // Hooks run outside the tool sandbox: pull in anything relay x
         // could not write to the local tier.
-        crate::core::outputs::absorb_spill(paths);
+        outputs::absorb_spill(paths);
     }
     let key = input["tool_use_id"].as_str();
     // What the agent read, for orientation cost. Edit responses echo the
