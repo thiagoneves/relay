@@ -118,10 +118,11 @@ fn addition(existing: &str, shell: Shell, shown: &str) -> String {
 }
 
 /// `$HOME/...` when under home, so the line survives a renamed user.
+/// Forward slashes always: on Windows the profile belongs to Git Bash.
 fn display_dir(dir: &Path, home: &Path) -> String {
     match dir.strip_prefix(home) {
-        Ok(rest) => format!("$HOME/{}", rest.display()),
-        Err(_) => dir.display().to_string(),
+        Ok(rest) => format!("$HOME/{}", super::slash(rest)),
+        Err(_) => super::slash(dir),
     }
 }
 
