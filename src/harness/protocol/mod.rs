@@ -4,3 +4,4 @@
 
 pub mod hook;
 pub mod hooks_json;
+pub mod permission;

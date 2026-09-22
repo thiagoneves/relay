@@ -9,6 +9,7 @@ use crate::core::paths::Paths;
 use crate::core::spool::{self, Event};
 use crate::core::usage;
 use crate::core::{brief, handoff};
+use crate::harness::protocol::permission::{self, Rewrite};
 use crate::helpers::{est_tokens, shell, slash, truncate_chars};
 
 /// Events relay wants, with the matcher used in settings.json.
@@ -163,17 +164,21 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness_id: &str) {
     if input["tool_input"]["run_in_background"].as_bool() == Some(true) {
         return;
     }
-    if accepts_bare_rewrite(harness_id)
-        && let Some(rewritten) = remember_with_session(cmd, session)
-    {
+    let bare = accepts_bare_rewrite(harness_id);
+    if bare && let Some(rewritten) = remember_with_session(cmd, session) {
         println!("{}", rewrite_output(&rewritten, false));
         return;
     }
     if !rewrites_commands(harness_id) || !should_wrap(cmd) {
         return;
     }
+    let approve = match permission::rewrite_for(cmd, bare) {
+        Rewrite::Skip => return,
+        Rewrite::Approve => true,
+        Rewrite::Defer => false,
+    };
     let rewritten = format!("{} x --session {} -- {}", relay_invocation(), shell::quote(session), shell::quote(cmd));
-    println!("{}", rewrite_output(&rewritten, true));
+    println!("{}", rewrite_output(&rewritten, approve));
 }
 
 /// `relay remember …` typed by the agent, with the session added so the
@@ -190,7 +195,7 @@ fn rewrite_output(command: &str, approve: bool) -> Value {
     let mut out = json!({ "hookEventName": "PreToolUse", "updatedInput": { "command": command } });
     if approve {
         out["permissionDecision"] = "allow".into();
-        out["permissionDecisionReason"] = "relay compress".into();
+        out["permissionDecisionReason"] = "relay: read-only command".into();
     }
     json!({ "hookSpecificOutput": out })
 }
