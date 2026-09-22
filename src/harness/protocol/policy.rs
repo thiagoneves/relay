@@ -54,6 +54,28 @@ pub fn rewrite(call: &Call, relay: impl FnOnce() -> String) -> Option<Rewritten>
     Some(Rewritten { command, approve: true })
 }
 
+/// The output to shrink after the harness ran `cmd` itself, stdout then
+/// stderr as `relay x` would merge them. `None` for images, background
+/// jobs and commands relay already ran through `relay x`.
+pub fn output_to_shrink(cmd: &str, response: &serde_json::Value) -> Option<String> {
+    let first = cmd.split_whitespace().next().unwrap_or("");
+    if matches!(program(first.trim_matches('\'')), "relay" | "rtk")
+        || response["isImage"].as_bool() == Some(true)
+        || !response["backgroundTaskId"].is_null()
+    {
+        return None;
+    }
+    let mut raw = response["stdout"].as_str()?.to_string();
+    let stderr = response["stderr"].as_str().unwrap_or("");
+    if !stderr.is_empty() {
+        if !raw.is_empty() && !raw.ends_with('\n') {
+            raw.push('\n');
+        }
+        raw.push_str(stderr);
+    }
+    Some(raw)
+}
+
 /// Whether `cwd` is inside a worktree Claude Code made for an isolated
 /// agent: `<repo>/.claude/worktrees/<name>`.
 pub fn in_isolated_worktree(cwd: &std::path::Path) -> bool {
@@ -268,6 +290,17 @@ mod tests {
 
     fn call(cmd: &str) -> Call<'_> {
         Call { cmd, session: "s1", background: false, isolated: false, support: RewriteSupport::Any }
+    }
+
+    #[test]
+    fn shrinks_plain_output_only() {
+        use serde_json::json;
+        let out = |r| output_to_shrink("cargo build", &r);
+        assert_eq!(out(json!({ "stdout": "a", "stderr": "warn" })), Some("a\nwarn".into()));
+        assert_eq!(out(json!({ "stdout": "a\n", "stderr": "" })), Some("a\n".into()));
+        assert_eq!(out(json!({ "stdout": "", "isImage": true })), None);
+        assert_eq!(out(json!({ "stdout": "", "backgroundTaskId": "b1" })), None);
+        assert_eq!(output_to_shrink("relay x -- ls", &json!({ "stdout": "a" })), None);
     }
 
     #[test]

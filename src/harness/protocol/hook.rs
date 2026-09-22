@@ -8,7 +8,7 @@ use super::policy::{self, Rewritten};
 use super::record::Recorder;
 use crate::core::paths::Paths;
 use crate::core::spool;
-use crate::core::{brief, handoff, outputs};
+use crate::core::{brief, condense, handoff, outputs};
 use crate::harness::{Harness, RewriteSupport};
 use crate::helpers::env::{self, Var};
 use crate::helpers::{est_tokens, shell, slash};
@@ -42,7 +42,7 @@ pub fn run(harness: &dyn Harness) -> Result<()> {
             pre_tool_use(&paths, session, &input, harness.rewrites());
             Ok(())
         }
-        "PostToolUse" => post_tool_use(&rec, &input),
+        "PostToolUse" => post_tool_use(&rec, &input, harness.replaces_output()),
         "UserPromptSubmit" => rec.prompt(&input),
         "SessionStart" => session_start(&rec, &input, harness),
         "SessionEnd" => session_end(&rec, &input, harness),
@@ -80,13 +80,37 @@ fn build_handoff(rec: &Recorder, input: &Value, harness: &dyn Harness, reason: &
     handoff::build(rec.paths, rec.session, reason, tail.as_ref()).map(|_| ())
 }
 
-fn post_tool_use(rec: &Recorder, input: &Value) -> Result<()> {
-    if input["tool_name"].as_str() == Some("Bash") {
-        // Hooks run outside the tool sandbox: pull in anything relay x
-        // could not write to the local tier.
-        outputs::absorb_spill(rec.paths);
+fn post_tool_use(rec: &Recorder, input: &Value, replaces_output: bool) -> Result<()> {
+    if input["tool_name"].as_str() != Some("Bash") {
+        return rec.tool_use(input);
     }
-    rec.tool_use(input)
+    // Hooks run outside the tool sandbox: pull in anything relay x could
+    // not write to the local tier.
+    outputs::absorb_spill(rec.paths);
+    rec.tool_use(input)?;
+    if replaces_output {
+        shrink_output(rec, input);
+    }
+    Ok(())
+}
+
+/// Replace what the model sees of a command the harness ran itself with
+/// relay's compressed view. Only reached on success: the harness reports
+/// a failed command through another event that cannot be rewritten.
+fn shrink_output(rec: &Recorder, input: &Value) {
+    let cmd = input["tool_input"]["command"].as_str().unwrap_or("");
+    let response = &input["tool_response"];
+    let Some(raw) = policy::output_to_shrink(cmd, response) else { return };
+    let cwd = input["cwd"].as_str().unwrap_or("");
+    let run = condense::Run { cmd, cwd, exit: 0, session: Some(rec.session.to_string()) };
+    let view = condense::view_of(Some(rec.paths), run, &raw);
+    if view == raw {
+        return;
+    }
+    let mut updated = response.clone();
+    updated["stdout"] = view.into();
+    updated["stderr"] = "".into();
+    println!("{}", json!({ "hookSpecificOutput": { "hookEventName": "PostToolUse", "updatedToolOutput": updated } }));
 }
 
 fn pre_tool_use(paths: &Paths, session: &str, input: &Value, support: RewriteSupport) {
@@ -118,7 +142,7 @@ fn reply(r: &Rewritten) -> Value {
     let mut out = json!({ "hookEventName": "PreToolUse", "updatedInput": { "command": r.command } });
     if r.approve {
         out["permissionDecision"] = "allow".into();
-        out["permissionDecisionReason"] = "relay: read-only command".into();
+        out["permissionDecisionReason"] = "relay: a read or routine dev task".into();
     }
     json!({ "hookSpecificOutput": out })
 }

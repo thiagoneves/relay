@@ -34,6 +34,10 @@ impl Harness for Claude {
         HarnessId::Claude
     }
 
+    fn replaces_output(&self) -> bool {
+        true
+    }
+
     fn command(&self) -> &'static str {
         "claude"
     }

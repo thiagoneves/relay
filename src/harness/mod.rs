@@ -94,6 +94,11 @@ pub trait Harness {
     fn rewrites(&self) -> RewriteSupport {
         RewriteSupport::Any
     }
+    /// Whether a `PostToolUse` hook may replace the shell output the model
+    /// sees, so relay can shrink it without rewriting the command.
+    fn replaces_output(&self) -> bool {
+        false
+    }
     /// Extra arguments to resume a native session by id.
     fn resume_args(&self, session_id: &str) -> Vec<String>;
     /// Session transcripts for the project at `root`, or for every
