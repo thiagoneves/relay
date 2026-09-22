@@ -46,12 +46,14 @@ pub fn run(harness_id: &str) -> Result<()> {
         "SessionStart" => session_start(&paths, &session, &input, harness_id),
         "SessionEnd" => {
             record(&paths, &session, "session_end", None, json!({ "reason": input["reason"] }))?;
-            let _ = handoff::build(&paths, &session, input["reason"].as_str().unwrap_or("end"));
+            let tail = transcript_tail(harness_id, &input);
+            let _ = handoff::build(&paths, &session, input["reason"].as_str().unwrap_or("end"), tail.as_ref());
             Ok(())
         }
         "PreCompact" => {
             record(&paths, &session, "compact", None, json!({ "trigger": input["trigger"] }))?;
-            let _ = handoff::build(&paths, &session, "compact");
+            let tail = transcript_tail(harness_id, &input);
+            let _ = handoff::build(&paths, &session, "compact", tail.as_ref());
             Ok(())
         }
         "Stop" => record(
@@ -63,6 +65,11 @@ pub fn run(harness_id: &str) -> Result<()> {
         ),
         _ => Ok(()),
     }
+}
+
+fn transcript_tail(harness_id: &str, input: &Value) -> Option<handoff::Tail> {
+    let path = input["transcript_path"].as_str()?;
+    crate::harness::by_name(harness_id).ok()?.session_tail(std::path::Path::new(path))
 }
 
 fn record(paths: &Paths, session: &str, name: &str, key: Option<&str>, data: Value) -> Result<()> {

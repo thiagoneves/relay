@@ -17,6 +17,7 @@ use anyhow::Result;
 use super::protocol::{hook, hooks_json};
 use super::{Harness, InstallReport};
 use crate::core::audit::{Finding, Kind, Report, SessionAudit, Transcript};
+use crate::core::handoff::Tail;
 use crate::core::paths::{home, tilde};
 
 pub struct Codex;
@@ -63,6 +64,10 @@ impl Harness for Codex {
 
     fn transcripts(&self, root: Option<&Path>) -> Vec<Transcript> {
         transcript::rollouts(&codex_home().join("sessions"), root)
+    }
+
+    fn session_tail(&self, transcript: &Path) -> Option<Tail> {
+        transcript::tail(transcript)
     }
 
     fn audit_session(&self, path: &Path) -> Option<SessionAudit> {

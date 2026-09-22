@@ -7,12 +7,14 @@ use anyhow::Result;
 
 mod advice;
 mod audit;
+mod tail;
 mod transcript;
 
 use super::protocol::{hook, hooks_json};
 use super::{Harness, InstallReport};
 use crate::core::audit::{Finding, Report, SessionAudit, Transcript};
 use crate::core::bench::ShellCall;
+use crate::core::handoff::Tail;
 use crate::core::paths::home;
 
 pub struct Claude;
@@ -59,6 +61,10 @@ impl Harness for Claude {
             None => std::fs::read_dir(&projects).map(|rd| rd.flatten().map(|e| e.path()).collect()).unwrap_or_default(),
         };
         dirs.iter().flat_map(|d| transcript::sessions_in(d)).collect()
+    }
+
+    fn session_tail(&self, transcript: &Path) -> Option<Tail> {
+        tail::read(transcript)
     }
 
     fn audit_session(&self, path: &Path) -> Option<SessionAudit> {

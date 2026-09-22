@@ -18,6 +18,7 @@ use serde_json::Value;
 
 use crate::core::audit::{Finding, Report, SessionAudit, Transcript};
 use crate::core::bench::ShellCall;
+use crate::core::handoff::Tail;
 use crate::core::paths::Paths;
 
 pub struct InstallReport {
@@ -55,6 +56,12 @@ pub trait Harness {
         let _ = root;
         None
     }
+    /// What the handoff needs from a session transcript that hooks never
+    /// see: how each turn ended, the user's answers, the approved plan.
+    fn session_tail(&self, transcript: &Path) -> Option<Tail> {
+        let _ = transcript;
+        None
+    }
     /// Where one session's context went; see `core::audit`.
     fn audit_session(&self, transcript: &Path) -> Option<SessionAudit> {
         let _ = transcript;
@@ -88,6 +95,15 @@ pub fn by_name(name: &str) -> Result<Box<dyn Harness>> {
         "codex" => Ok(Box::new(codex::Codex)),
         other => bail!("unknown harness `{other}` (available: claude, codex)"),
     }
+}
+
+/// The transcript tail of a recorded session, through the harness and
+/// transcript its `session_start` event names.
+pub fn tail_for(paths: &Paths, session: &str) -> Option<Tail> {
+    let events = crate::core::spool::read(paths, session);
+    let start = events.iter().find(|e| e.event == "session_start")?;
+    let h = by_name(start.data["harness"].as_str()?).ok()?;
+    h.session_tail(Path::new(start.data["transcript_path"].as_str()?))
 }
 
 /// Read the whole stdin as JSON. Empty stdin is not an error.
