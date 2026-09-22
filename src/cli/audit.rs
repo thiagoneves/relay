@@ -82,10 +82,6 @@ impl Source for Adapter<'_> {
     }
 }
 
-fn pct(n: usize, of: usize) -> f64 {
-    if of == 0 { 0.0 } else { n as f64 * 100.0 / of as f64 }
-}
-
 fn print_report(p: Paint, id: HarnessId, r: &Report, scope: &str) {
     let subs = if r.subagents > 0 { format!(" + {} subagents", r.subagents) } else { String::new() };
     println!("{} {}", p.bold(&format!("relay audit · {id}")), p.dim(&format!("· {scope}")));
@@ -94,7 +90,7 @@ fn print_report(p: Paint, id: HarnessId, r: &Report, scope: &str) {
         plural(r.sessions, "session"),
         r.calls,
         human_tokens(r.context_sent),
-        pct(r.cached, r.context_sent)
+        r.percent(r.cached)
     );
     print_split(p, r);
 
@@ -104,10 +100,7 @@ fn print_report(p: Paint, id: HarnessId, r: &Report, scope: &str) {
         println!(
             "{} {}",
             p.bold(&format!("Worth a look ({})", live.len())),
-            p.dim(&format!(
-                "· {:.0}% of what was sent · costs, not verdicts: keep what you need",
-                pct(total, r.context_sent)
-            ))
+            p.dim(&format!("· {:.0}% of what was sent · costs, not verdicts: keep what you need", r.percent(total)))
         );
         let mut shown = Vec::new();
         for f in live {
@@ -122,7 +115,7 @@ fn print_report(p: Paint, id: HarnessId, r: &Report, scope: &str) {
             p.dim("· still in sessions that started before the change")
         );
         for f in history {
-            let share = if f.resent > 0 { format!(" · {:.1}%", pct(f.resent, r.context_sent)) } else { String::new() };
+            let share = if f.resent > 0 { format!(" · {:.1}%", r.percent(f.resent)) } else { String::new() };
             println!(
                 "  {} {}{}",
                 p.color(Color::Green, "✓"),
@@ -137,24 +130,19 @@ fn print_report(p: Paint, id: HarnessId, r: &Report, scope: &str) {
 
 /// One stacked bar: who the context was spent on.
 fn print_split(p: Paint, r: &Report) {
-    let by = |o: Origin| r.costs.iter().filter(|c| c.origin == o).map(|c| c.resent).sum::<usize>();
-    let (work, config, harness) = (by(Origin::Work), by(Origin::Config), by(Origin::Harness));
-    let rest = r.context_sent.saturating_sub(work + config + harness);
     let parts = [
-        (work, Color::Cyan, "work"),
-        (config, Color::Yellow, "your config"),
-        (harness, Color::Magenta, "harness"),
-        (rest, Color::Blue, "unexplained"),
+        (r.spent_by(Origin::Work), Color::Cyan, "work"),
+        (r.spent_by(Origin::Config), Color::Yellow, "your config"),
+        (r.spent_by(Origin::Harness), Color::Magenta, "harness"),
+        (r.unexplained(), Color::Blue, "unexplained"),
     ];
     #[allow(clippy::cast_precision_loss)]
     let shares: Vec<f64> = parts.iter().map(|(n, ..)| *n as f64 / r.context_sent.max(1) as f64).collect();
     let cells = term::split(&shares, limits::audit::BAR_WIDTH);
     let bar: String = parts.iter().zip(&cells).map(|((_, c, _), n)| p.color(*c, &"█".repeat(*n))).collect();
     println!("  {bar}");
-    let legend: Vec<String> = parts
-        .iter()
-        .map(|(n, c, label)| format!("{} {label} {:.0}%", p.color(*c, "■"), pct(*n, r.context_sent)))
-        .collect();
+    let legend: Vec<String> =
+        parts.iter().map(|(n, c, label)| format!("{} {label} {:.0}%", p.color(*c, "■"), r.percent(*n))).collect();
     println!("  {}\n", legend.join("   "));
 }
 
@@ -165,7 +153,7 @@ fn print_live(p: Paint, f: &Finding, r: &Report, shown: &mut Vec<String>) {
         Severity::Broken => p.color(Color::Red, "✗"),
         Severity::Waste => p.color(Color::Yellow, "!"),
     };
-    let share = if f.resent > 0 { format!("  {:.1}%", pct(f.resent, r.context_sent)) } else { String::new() };
+    let share = if f.resent > 0 { format!("  {:.1}%", r.percent(f.resent)) } else { String::new() };
     println!("  {mark} {}{}", truncate_chars(&f.headline, 90), p.bold(&share));
     if let Some(s) = f.subject.as_deref().filter(|s| !f.headline.contains(*s)) {
         println!("    {}", p.dim(s));
@@ -196,18 +184,17 @@ fn print_sources(p: Paint, r: &Report) {
             "  {:<46} {} {:>5.1}% {:>7}  {}",
             truncate_chars(&c.source, 46),
             p.color(color, &format!("{bar:<16}")),
-            pct(c.resent, r.context_sent),
+            r.percent(c.resent),
             human_tokens(c.resent),
             p.dim(who)
         );
     }
-    let itemized: usize = r.costs.iter().map(|c| c.resent).sum();
-    let rest = r.context_sent.saturating_sub(itemized);
+    let rest = r.unexplained();
     println!(
         "  {} {:<16} {:>5.1}% {:>7}",
         p.dim(&format!("{:<46}", "unexplained: thinking, estimate error")),
         "",
-        pct(rest, r.context_sent),
+        r.percent(rest),
         human_tokens(rest)
     );
     println!();

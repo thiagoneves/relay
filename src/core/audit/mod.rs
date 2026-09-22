@@ -350,6 +350,23 @@ impl Merge {
     }
 }
 
+impl Report {
+    /// Context resent on account of sources from `origin`.
+    pub fn spent_by(&self, origin: Origin) -> usize {
+        self.costs.iter().filter(|c| c.origin == origin).map(|c| c.resent).sum()
+    }
+
+    /// Context no source accounts for: thinking, and estimate error.
+    pub fn unexplained(&self) -> usize {
+        self.context_sent.saturating_sub(self.costs.iter().map(|c| c.resent).sum())
+    }
+
+    /// `n` as a percentage of all context sent.
+    pub fn percent(&self, n: usize) -> f64 {
+        if self.context_sent == 0 { 0.0 } else { n as f64 * 100.0 / self.context_sent as f64 }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -366,6 +383,20 @@ mod tests {
         let a = col.finish().unwrap();
         let resent = |k: &str| a.costs.iter().find(|c| c.source == k).unwrap().resent;
         assert_eq!(resent("old"), resent("new") * 2);
+    }
+
+    #[test]
+    fn report_splits_what_was_sent_by_origin() {
+        let cost = |origin, resent| Cost { source: format!("{origin:?}"), origin, items: 1, tokens: 1, resent };
+        let r = Report {
+            context_sent: 1000,
+            costs: vec![cost(Origin::Work, 500), cost(Origin::Config, 200), cost(Origin::Harness, 100)],
+            ..Report::default()
+        };
+        assert_eq!((r.spent_by(Origin::Work), r.spent_by(Origin::Config)), (500, 200));
+        assert_eq!(r.unexplained(), 200);
+        assert!((r.percent(250) - 25.0).abs() < f64::EPSILON);
+        assert!(Report::default().percent(5).abs() < f64::EPSILON);
     }
 
     #[test]
