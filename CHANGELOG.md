@@ -23,6 +23,11 @@ All notable changes to relay. Dates are UTC.
 
 ### Added
 
+- `relay init` points `AGENTS.md` (and an existing `CLAUDE.md`) at `.relay/`,
+  so agents without hooks read the memory too; `--no-agents-md` skips it.
+- `relay init --terse` adds an Answers section to `project.md` asking the
+  agent for shorter replies.
+- `relay status` labels each number as estimated or exact.
 - `relay compile`: the decisions of recent sessions that memory does not
   hold yet, kept with `--save`.
 - `relay handoff --share` copies a session's handoff into `.relay/`,

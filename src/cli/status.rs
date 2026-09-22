@@ -147,7 +147,7 @@ fn print_compression(ui: Ui, paths: &Paths, outs: &[outputs::OutputMeta]) {
     ui.field(
         "Compression",
         &format!(
-            "{} → {} tokens · {}% saved over {} (estimate)",
+            "{} → {} tokens · {}% saved over {} · estimated, ~7% off",
             human_tokens(tokens_in),
             human_tokens(tokens_out),
             saved * 100 / tokens_in.max(1),
@@ -181,7 +181,7 @@ fn print_orientation(ui: Ui, paths: &Paths) {
         ui.field(
             "Orientation",
             &format!(
-                "tokens read before the first edit: {} · {} (median, estimate)",
+                "tokens read before the first edit: {} · {} · median, estimated",
                 side(with, "with a brief"),
                 side(without, "without")
             ),
@@ -208,7 +208,7 @@ fn print_last_session_context(ui: Ui, paths: &Paths) {
     ui.field(
         "Last session",
         &format!(
-            "{} calls · {} tokens sent, {}% cached · {} at the first call",
+            "{} calls · {} tokens sent, {}% cached · {} at the first call · exact, from the transcript",
             u.calls,
             human_tokens(u.context_sent),
             u.cached * 100 / u.context_sent.max(1),

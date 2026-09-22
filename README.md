@@ -174,6 +174,20 @@ never blocks, and the failure shows up in `relay status` and `relay log`.
 tokens, with no signal lost. Compression is the smaller half of relay. The
 larger half is not re-explaining your project every morning.
 
+**How are those numbers measured?** Every number relay shows says how. Token
+counts marked _estimated_ come from a calibrated estimator, about 7% off a
+real tokenizer. `relay bench --history` replays the filters on your own past
+shell output and counts the signal lines kept. Numbers marked _exact_ come
+from the usage your harness recorded in its transcript, and at the end of each
+session relay checks in that transcript that the model received the view it
+swapped in.
+
+**Does it work with agents that have no hooks?** Partly. `relay init` points
+`AGENTS.md` (and `CLAUDE.md`, when present) at `.relay/`, so any agent that
+reads those files gets the rules, gotchas, decisions and shared handoffs, and
+is told how to add one. Compression, the brief and automatic handoffs need
+the hooks.
+
 ## How each harness is handled
 
 relay speaks each harness's hook dialect and translates it.
