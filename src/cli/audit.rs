@@ -4,7 +4,7 @@ use std::time::SystemTime;
 use crate::core::audit::findings::Status;
 use crate::core::audit::{self, Finding, Now, Origin, Report, Severity};
 use crate::core::paths::Paths;
-use crate::harness::{self, Harness};
+use crate::harness::{self, Harness, HarnessId};
 use crate::helpers::term::{self, Color, Paint};
 use crate::helpers::{human_tokens, parse_since, truncate_chars};
 
@@ -12,7 +12,7 @@ const SOURCES_SHOWN: usize = 12;
 const BAR: usize = 40;
 
 pub struct Options {
-    pub only: Option<String>,
+    pub only: Option<HarnessId>,
     pub sessions: usize,
     pub all_projects: bool,
     pub since: Option<String>,
@@ -29,7 +29,7 @@ pub fn run(o: &Options) -> anyhow::Result<i32> {
         None => None,
     };
     let harnesses = match &o.only {
-        Some(name) => vec![harness::by_name(name)?],
+        Some(id) => vec![id.adapter()],
         None => harness::all(),
     };
     let mut scope = if o.all_projects { "all projects".to_string() } else { "this project".to_string() };
@@ -54,7 +54,7 @@ pub fn run(o: &Options) -> anyhow::Result<i32> {
     }
     let p = Paint::stdout();
     for (id, r) in &reports {
-        print_report(p, id, r, &scope);
+        print_report(p, *id, r, &scope);
     }
     println!("{}", p.dim("Sizes are estimates; calls and totals are exact, from the transcripts."));
     println!("{}", p.dim("Share = size × API calls after it entered the context: what it cost on your quota."));
@@ -103,7 +103,7 @@ fn pct(n: usize, of: usize) -> f64 {
     if of == 0 { 0.0 } else { n as f64 * 100.0 / of as f64 }
 }
 
-fn print_report(p: Paint, id: &str, r: &Report, scope: &str) {
+fn print_report(p: Paint, id: HarnessId, r: &Report, scope: &str) {
     let subs = if r.subagents > 0 { format!(" + {} subagents", r.subagents) } else { String::new() };
     println!("{} {}", p.bold(&format!("relay audit · {id}")), p.dim(&format!("· {scope}")));
     println!(
@@ -255,8 +255,8 @@ mod tests {
     }
 
     impl Harness for Fake {
-        fn id(&self) -> &'static str {
-            "fake"
+        fn id(&self) -> HarnessId {
+            HarnessId::Claude
         }
         fn command(&self) -> &'static str {
             "fake"
@@ -265,9 +265,6 @@ mod tests {
             unimplemented!()
         }
         fn uninstall(&self) -> anyhow::Result<InstallReport> {
-            unimplemented!()
-        }
-        fn handle_hook(&self) -> anyhow::Result<()> {
             unimplemented!()
         }
         fn resume_args(&self, _: &str) -> Vec<String> {

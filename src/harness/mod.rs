@@ -22,6 +22,58 @@ use crate::core::bench::ShellCall;
 use crate::core::handoff::Tail;
 use crate::core::paths::Paths;
 
+/// The harnesses relay has an adapter for. The CLI name is what users
+/// type and what installed hooks call (`relay hook claude`); the stored
+/// name is what spool events and handoffs record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum HarnessId {
+    #[value(alias = "claude-code")]
+    Claude,
+    Codex,
+}
+
+impl HarnessId {
+    pub fn stored(self) -> &'static str {
+        match self {
+            Self::Claude => "claude-code",
+            Self::Codex => "codex",
+        }
+    }
+
+    /// Accepts both the CLI and the stored name.
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "claude" | "claude-code" => Some(Self::Claude),
+            "codex" => Some(Self::Codex),
+            _ => None,
+        }
+    }
+
+    pub fn adapter(self) -> Box<dyn Harness> {
+        match self {
+            Self::Claude => Box::new(claude::Claude),
+            Self::Codex => Box::new(codex::Codex),
+        }
+    }
+}
+
+impl std::fmt::Display for HarnessId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.stored())
+    }
+}
+
+/// How far a harness lets a hook rewrite a shell command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RewriteSupport {
+    /// Rewrites with or without a permission decision.
+    Any,
+    /// Only rewrites the hook also approves.
+    ApprovedOnly,
+    /// Commands are left alone.
+    Never,
+}
+
 pub struct InstallReport {
     pub settings_path: std::path::PathBuf,
     pub backup_path: Option<std::path::PathBuf>,
@@ -30,8 +82,7 @@ pub struct InstallReport {
 }
 
 pub trait Harness {
-    /// Stable id used in spool events and handoffs, e.g. `claude-code`.
-    fn id(&self) -> &'static str;
+    fn id(&self) -> HarnessId;
     fn command(&self) -> &'static str;
     fn detect(&self) -> bool {
         crate::helpers::shell::which(self.command()).is_some()
@@ -39,8 +90,9 @@ pub trait Harness {
     /// Write hooks pointing at `exe`. Idempotent.
     fn install(&self, exe: &Path) -> Result<InstallReport>;
     fn uninstall(&self) -> Result<InstallReport>;
-    /// Handle one hook event delivered on stdin.
-    fn handle_hook(&self) -> Result<()>;
+    fn rewrites(&self) -> RewriteSupport {
+        RewriteSupport::Any
+    }
     /// Extra arguments to resume a native session by id.
     fn resume_args(&self, session_id: &str) -> Vec<String>;
     /// Session transcripts for the project at `root`, or for every
@@ -98,15 +150,7 @@ fn dir_or(value: Option<std::ffi::OsString>, default: impl FnOnce() -> PathBuf) 
 
 /// Every adapter relay has, for commands that look across harnesses.
 pub fn all() -> Vec<Box<dyn Harness>> {
-    vec![Box::new(claude::Claude), Box::new(codex::Codex)]
-}
-
-pub fn by_name(name: &str) -> Result<Box<dyn Harness>> {
-    match name {
-        "claude" | "claude-code" => Ok(Box::new(claude::Claude)),
-        "codex" => Ok(Box::new(codex::Codex)),
-        other => bail!("unknown harness `{other}` (available: claude, codex)"),
-    }
+    [HarnessId::Claude, HarnessId::Codex].into_iter().map(HarnessId::adapter).collect()
 }
 
 /// The transcript tail of a recorded session, through the harness and
@@ -114,7 +158,7 @@ pub fn by_name(name: &str) -> Result<Box<dyn Harness>> {
 pub fn tail_for(paths: &Paths, session: &str) -> Option<Tail> {
     let events = crate::core::spool::read(paths, session);
     let start = events.iter().find(|e| e.event == "session_start")?;
-    let h = by_name(start.data["harness"].as_str()?).ok()?;
+    let h = HarnessId::parse(start.data["harness"].as_str()?)?.adapter();
     h.session_tail(Path::new(start.data["transcript_path"].as_str()?))
 }
 

@@ -14,8 +14,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use super::protocol::{hook, hooks_json};
-use super::{Harness, InstallReport};
+use super::protocol::hooks_json;
+use super::{Harness, HarnessId, InstallReport, RewriteSupport};
 use crate::core::audit::{Finding, Kind, Report, SessionAudit, Transcript};
 use crate::core::handoff::Tail;
 use crate::core::paths::{home, tilde};
@@ -33,8 +33,14 @@ fn target() -> hooks_json::Target {
 }
 
 impl Harness for Codex {
-    fn id(&self) -> &'static str {
-        "codex"
+    fn id(&self) -> HarnessId {
+        HarnessId::Codex
+    }
+
+    /// Codex rejects a rewritten input without `allow`, and on Windows it
+    /// runs commands in `PowerShell`, which `relay x` does not speak.
+    fn rewrites(&self) -> RewriteSupport {
+        if cfg!(windows) { RewriteSupport::Never } else { RewriteSupport::ApprovedOnly }
     }
 
     fn command(&self) -> &'static str {
@@ -52,10 +58,6 @@ impl Harness for Codex {
 
     fn uninstall(&self) -> Result<InstallReport> {
         hooks_json::uninstall(&target())
-    }
-
-    fn handle_hook(&self) -> Result<()> {
-        hook::run(self.id())
     }
 
     fn resume_args(&self, session_id: &str) -> Vec<String> {

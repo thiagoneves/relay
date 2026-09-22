@@ -19,6 +19,8 @@ mod x;
 
 use clap::{Parser, Subcommand};
 
+use crate::harness::HarnessId;
+
 #[derive(Parser)]
 #[command(
     name = "relay",
@@ -37,11 +39,11 @@ pub enum Commands {
     /// Set up this repo: `.relay/` (shared) and the local store
     Init,
     /// Register hooks for a harness (claude, codex)
-    Install { harness: String },
+    Install { harness: HarnessId },
     /// Remove relay hooks from a harness (claude, codex)
-    Uninstall { harness: String },
+    Uninstall { harness: HarnessId },
     /// Hook entry point used by harnesses; reads JSON on stdin
-    Hook { harness: String },
+    Hook { harness: HarnessId },
     /// Run a command, print a compressed view, keep the original
     #[command(name = "x", trailing_var_arg = true, allow_hyphen_values = true)]
     Exec {
@@ -94,7 +96,7 @@ pub enum Commands {
     Audit {
         /// Harness to audit (default: every harness with transcripts)
         #[arg(long)]
-        harness: Option<String>,
+        harness: Option<HarnessId>,
         /// Newest top-level sessions to read, per harness (their subagents are included)
         #[arg(long, default_value_t = 20)]
         sessions: usize,
@@ -116,7 +118,7 @@ pub enum Commands {
         corpus: Option<std::path::PathBuf>,
         /// Replay the shell calls in a harness's own transcripts (claude)
         #[arg(long, value_name = "HARNESS", conflicts_with = "corpus")]
-        history: Option<String>,
+        history: Option<HarnessId>,
         /// Transcript directory for --history (default: the harness's own)
         #[arg(long, value_name = "DIR", requires = "history")]
         history_dir: Option<std::path::PathBuf>,
@@ -159,9 +161,9 @@ pub fn run() -> anyhow::Result<i32> {
     match cli.command {
         Commands::Setup => setup::run(),
         Commands::Init => init::run(),
-        Commands::Install { harness } => install::install(&harness),
-        Commands::Uninstall { harness } => install::uninstall(&harness),
-        Commands::Hook { harness } => hook::run(&harness),
+        Commands::Install { harness } => install::install(harness),
+        Commands::Uninstall { harness } => install::uninstall(harness),
+        Commands::Hook { harness } => hook::run(harness),
         Commands::Exec { raw, session, cmd } => x::run(&x::command_line(&cmd), raw, session.as_deref()),
         Commands::Pipe { cmd } => pipe::run(&cmd),
         Commands::Get { id, meta } => get::run(&id, meta),
@@ -183,7 +185,7 @@ pub fn run() -> anyhow::Result<i32> {
         Commands::Brief => brief::run(),
         Commands::Status => status::run(),
         Commands::Purge { yes } => purge::run(yes),
-        Commands::Claude { last, args } => wrap::run("claude", last, &args),
-        Commands::Codex { last, args } => wrap::run("codex", last, &args),
+        Commands::Claude { last, args } => wrap::run(HarnessId::Claude, last, &args),
+        Commands::Codex { last, args } => wrap::run(HarnessId::Codex, last, &args),
     }
 }

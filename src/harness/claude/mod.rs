@@ -10,8 +10,8 @@ mod audit;
 mod tail;
 mod transcript;
 
-use super::protocol::{hook, hooks_json};
-use super::{Harness, InstallReport};
+use super::protocol::hooks_json;
+use super::{Harness, HarnessId, InstallReport};
 use crate::core::audit::{Finding, Report, SessionAudit, Transcript};
 use crate::core::bench::ShellCall;
 use crate::core::handoff::Tail;
@@ -30,8 +30,8 @@ fn target() -> hooks_json::Target {
 }
 
 impl Harness for Claude {
-    fn id(&self) -> &'static str {
-        "claude-code"
+    fn id(&self) -> HarnessId {
+        HarnessId::Claude
     }
 
     fn command(&self) -> &'static str {
@@ -44,10 +44,6 @@ impl Harness for Claude {
 
     fn uninstall(&self) -> Result<InstallReport> {
         hooks_json::uninstall(&target())
-    }
-
-    fn handle_hook(&self) -> Result<()> {
-        hook::run(self.id())
     }
 
     fn resume_args(&self, session_id: &str) -> Vec<String> {

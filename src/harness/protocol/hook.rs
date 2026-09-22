@@ -10,6 +10,7 @@ use crate::core::spool::{self, Event};
 use crate::core::usage;
 use crate::core::{brief, handoff, outputs};
 use crate::harness::protocol::permission::{self, Rewrite};
+use crate::harness::{Harness, HarnessId, RewriteSupport};
 use crate::helpers::{est_tokens, shell, slash, truncate_chars};
 
 /// Events relay wants, with the matcher used in settings.json.
@@ -23,7 +24,7 @@ pub const EVENTS: &[(&str, Option<&str>, u32)] = &[
     ("Stop", None, 5),
 ];
 
-pub fn run(harness_id: &str) -> Result<()> {
+pub fn run(harness: &dyn Harness) -> Result<()> {
     let Some(input) = crate::harness::read_stdin_json()? else { return Ok(()) };
     let event = input["hook_event_name"].as_str().unwrap_or("").to_string();
     let session = input["session_id"].as_str().unwrap_or("unknown").to_string();
@@ -36,7 +37,7 @@ pub fn run(harness_id: &str) -> Result<()> {
 
     match event.as_str() {
         "PreToolUse" => {
-            pre_tool_use(&paths, &session, &input, harness_id);
+            pre_tool_use(&paths, &session, &input, harness.rewrites());
             Ok(())
         }
         "PostToolUse" => post_tool_use(&paths, &session, &input),
@@ -44,10 +45,10 @@ pub fn run(harness_id: &str) -> Result<()> {
             let prompt = input["prompt"].as_str().unwrap_or("");
             record(&paths, &session, "prompt", None, json!({ "text": truncate_chars(prompt, 600) }))
         }
-        "SessionStart" => session_start(&paths, &session, &input, harness_id),
+        "SessionStart" => session_start(&paths, &session, &input, harness.id()),
         "SessionEnd" => {
             record(&paths, &session, "session_end", None, json!({ "reason": input["reason"] }))?;
-            let tail = transcript_tail(harness_id, &input);
+            let tail = transcript_tail(harness, &input);
             let _ = handoff::build(&paths, &session, input["reason"].as_str().unwrap_or("end"), tail.as_ref());
             // After the handoff, which lists this session's outputs.
             outputs::prune(&paths, outputs::KEEP);
@@ -55,7 +56,7 @@ pub fn run(harness_id: &str) -> Result<()> {
         }
         "PreCompact" => {
             record(&paths, &session, "compact", None, json!({ "trigger": input["trigger"] }))?;
-            let tail = transcript_tail(harness_id, &input);
+            let tail = transcript_tail(harness, &input);
             let _ = handoff::build(&paths, &session, "compact", tail.as_ref());
             Ok(())
         }
@@ -70,16 +71,16 @@ pub fn run(harness_id: &str) -> Result<()> {
     }
 }
 
-fn transcript_tail(harness_id: &str, input: &Value) -> Option<handoff::Tail> {
+fn transcript_tail(harness: &dyn Harness, input: &Value) -> Option<handoff::Tail> {
     let path = input["transcript_path"].as_str()?;
-    crate::harness::by_name(harness_id).ok()?.session_tail(std::path::Path::new(path))
+    harness.session_tail(std::path::Path::new(path))
 }
 
 fn record(paths: &Paths, session: &str, name: &str, key: Option<&str>, data: Value) -> Result<()> {
     spool::append(paths, &Event::new(session, name, key, data))
 }
 
-fn session_start(paths: &Paths, session: &str, input: &Value, harness_id: &str) -> Result<()> {
+fn session_start(paths: &Paths, session: &str, input: &Value, harness: HarnessId) -> Result<()> {
     spool::set_current_session(paths, session);
     let text = brief::build(paths);
     record(
@@ -91,7 +92,7 @@ fn session_start(paths: &Paths, session: &str, input: &Value, harness_id: &str) 
             "source": input["source"],
             "transcript_path": input["transcript_path"],
             "cwd": input["cwd"],
-            "harness": harness_id,
+            "harness": harness.stored(),
             "brief_tokens": est_tokens(&text),
             "wrapper": std::env::var(spool::WRAPPER_ENV).ok(),
         }),
@@ -136,19 +137,7 @@ fn post_tool_use(paths: &Paths, session: &str, input: &Value) -> Result<()> {
     record(paths, session, "tool", key, data)
 }
 
-/// Codex on Windows runs tool commands in `PowerShell`; `relay x` speaks
-/// POSIX sh, so there the command is left alone (no compression).
-fn rewrites_commands(harness_id: &str) -> bool {
-    !(cfg!(windows) && harness_id == "codex")
-}
-
-/// Codex rejects `updatedInput` unless the hook also approves the call;
-/// Claude Code runs a bare rewrite through its normal permission flow.
-fn accepts_bare_rewrite(harness_id: &str) -> bool {
-    harness_id != "codex"
-}
-
-fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness_id: &str) {
+fn pre_tool_use(paths: &Paths, session: &str, input: &Value, support: RewriteSupport) {
     if input["tool_name"].as_str() != Some("Bash") {
         return;
     }
@@ -166,24 +155,18 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness_id: &str) {
     if input["tool_input"]["run_in_background"].as_bool() == Some(true) {
         return;
     }
-    let bare = accepts_bare_rewrite(harness_id);
-    if bare && let Some(rewritten) = remember_with_session(cmd, session) {
+    if support == RewriteSupport::Any
+        && let Some(rewritten) = remember_with_session(cmd, session)
+    {
         println!("{}", rewrite_output(&rewritten, false));
         return;
     }
-    if !rewrites_commands(harness_id) {
-        return;
-    }
     let Some((prefix, body)) = wrap_target(cmd) else { return };
-    let prefix_read_only = prefix.is_empty() || permission::is_read_only(prefix);
-    let approve = match permission::rewrite_for(body, bare) {
+    let approve = match permission::rewrite_for(prefix, body, support) {
         Rewrite::Skip => return,
-        Rewrite::Approve => prefix_read_only,
+        Rewrite::Approve => true,
         Rewrite::Defer => false,
     };
-    if !approve && !bare {
-        return;
-    }
     let rewritten =
         format!("{prefix}{} x --session {} -- {}", relay_invocation(), shell::quote(session), shell::quote(body));
     println!("{}", rewrite_output(&rewritten, approve));

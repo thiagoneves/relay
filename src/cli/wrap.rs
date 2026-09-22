@@ -9,11 +9,11 @@ use anyhow::{Context, bail};
 
 use crate::core::paths::Paths;
 use crate::core::{bootstrap, handoff, machine, outputs, spool};
-use crate::harness;
+use crate::harness::{self, HarnessId};
 use crate::helpers::{human_tokens, new_id, shell};
 
-pub fn run(name: &str, last: bool, args: &[String]) -> anyhow::Result<i32> {
-    let h = harness::by_name(name)?;
+pub fn run(id: HarnessId, last: bool, args: &[String]) -> anyhow::Result<i32> {
+    let h = id.adapter();
     let Some(program) = shell::which(h.command()) else {
         bail!("`{}` not found on PATH", h.command());
     };

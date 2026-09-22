@@ -85,8 +85,8 @@ fn print_last_session_context(paths: &Paths) {
     else {
         return;
     };
-    let Some(audit) =
-        crate::harness::by_name(harness).ok().and_then(|h| h.audit_session(std::path::Path::new(transcript)))
+    let Some(audit) = crate::harness::HarnessId::parse(harness)
+        .and_then(|id| id.adapter().audit_session(std::path::Path::new(transcript)))
     else {
         return;
     };

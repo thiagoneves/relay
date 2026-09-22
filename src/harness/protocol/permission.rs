@@ -7,6 +7,8 @@
 //! `git`; leaving it to the harness means the user's own allow rules no
 //! longer match. Only commands that cannot change anything are approved.
 
+use crate::harness::RewriteSupport;
+
 /// What the hook answers for a command it wants to route through relay.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rewrite {
@@ -18,13 +20,14 @@ pub enum Rewrite {
     Skip,
 }
 
-/// `bare_rewrite` is whether the harness accepts a rewritten input with
-/// no permission decision (Claude Code does; Codex rejects it).
-pub fn rewrite_for(cmd: &str, bare_rewrite: bool) -> Rewrite {
-    match (is_read_only(cmd), bare_rewrite) {
-        (true, _) => Rewrite::Approve,
-        (false, true) => Rewrite::Defer,
-        (false, false) => Rewrite::Skip,
+/// `prefix` is the `cd`/`export` part kept in the harness's shell, `body`
+/// the part routed through `relay x`; approval needs both read-only.
+pub fn rewrite_for(prefix: &str, body: &str, support: RewriteSupport) -> Rewrite {
+    let read_only = is_read_only(body) && (prefix.is_empty() || is_read_only(prefix));
+    match (support, read_only) {
+        (RewriteSupport::Never, _) | (RewriteSupport::ApprovedOnly, false) => Rewrite::Skip,
+        (_, true) => Rewrite::Approve,
+        (RewriteSupport::Any, false) => Rewrite::Defer,
     }
 }
 
@@ -198,8 +201,11 @@ mod tests {
 
     #[test]
     fn codex_skips_what_it_cannot_defer() {
-        assert_eq!(rewrite_for("git status", false), Rewrite::Approve);
-        assert_eq!(rewrite_for("cargo test", true), Rewrite::Defer);
-        assert_eq!(rewrite_for("cargo test", false), Rewrite::Skip);
+        assert_eq!(rewrite_for("", "git status", RewriteSupport::ApprovedOnly), Rewrite::Approve);
+        assert_eq!(rewrite_for("", "cargo test", RewriteSupport::Any), Rewrite::Defer);
+        assert_eq!(rewrite_for("", "cargo test", RewriteSupport::ApprovedOnly), Rewrite::Skip);
+        assert_eq!(rewrite_for("cd /x && ", "git status", RewriteSupport::Any), Rewrite::Approve);
+        assert_eq!(rewrite_for("export A=1 && ", "git status", RewriteSupport::Any), Rewrite::Defer);
+        assert_eq!(rewrite_for("", "git status", RewriteSupport::Never), Rewrite::Skip);
     }
 }

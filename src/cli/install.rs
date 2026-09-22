@@ -1,7 +1,7 @@
-use crate::harness;
+use crate::harness::HarnessId;
 
-pub fn install(name: &str) -> anyhow::Result<i32> {
-    let h = harness::by_name(name)?;
+pub fn install(id: HarnessId) -> anyhow::Result<i32> {
+    let h = id.adapter();
     let inst = crate::core::machine::install_self()?;
     super::setup::report(&inst);
     let r = h.install(&inst.exe)?;
@@ -20,8 +20,8 @@ pub fn install(name: &str) -> anyhow::Result<i32> {
     Ok(0)
 }
 
-pub fn uninstall(name: &str) -> anyhow::Result<i32> {
-    let h = harness::by_name(name)?;
+pub fn uninstall(id: HarnessId) -> anyhow::Result<i32> {
+    let h = id.adapter();
     let r = h.uninstall()?;
     if r.changed {
         println!("relay: hooks removed from {}", r.settings_path.display());
