@@ -1,10 +1,10 @@
-use crate::core::bootstrap;
 use crate::core::paths::Paths;
+use crate::core::{agents_md, bootstrap};
 use crate::helpers::env::tilde;
 
 use super::ui::Ui;
 
-pub fn run(local: bool) -> anyhow::Result<i32> {
+pub fn run(local: bool, terse: bool, agents_md: bool) -> anyhow::Result<i32> {
     let ui = Ui::stdout();
     let mut paths = Paths::from_cwd()?;
     if local {
@@ -21,6 +21,15 @@ pub fn run(local: bool) -> anyhow::Result<i32> {
         ui.ok(&format!("Created {project}: the rules a new session reads first. Edit it freely."));
     } else {
         ui.ok(&format!("{project} already exists; left as is."));
+    }
+    if terse && bootstrap::ensure_terse(&paths)? {
+        ui.ok(&format!("Added an Answers section to {project}: shorter replies from now on."));
+    }
+    // A repo that is not the user's to commit to gets no edits.
+    if agents_md && !paths.memory_local {
+        for f in agents_md::ensure(&paths)? {
+            ui.ok(&format!("Pointed {} at relay's memory, for agents without hooks.", paths.rel(&f)));
+        }
     }
     ui.ok(&format!("Local store at {}", tilde(&paths.local)));
     if !paths.in_git {

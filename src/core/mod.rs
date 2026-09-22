@@ -1,5 +1,6 @@
 //! Domain layer: what relay is, independent of any harness or CLI.
 
+pub mod agents_md;
 pub mod audit;
 pub mod bench;
 pub mod bootstrap;

@@ -45,6 +45,12 @@ pub enum Commands {
         /// Keep memory in the local store instead of `.relay/` (a repo you cannot commit to)
         #[arg(long)]
         local: bool,
+        /// Ask the agent for shorter replies (an Answers section in project.md)
+        #[arg(long)]
+        terse: bool,
+        /// Leave AGENTS.md and CLAUDE.md alone (by default they get a pointer to relay's memory)
+        #[arg(long)]
+        no_agents_md: bool,
     },
     /// Register hooks for a harness (claude, codex)
     Install { harness: HarnessId },
@@ -210,7 +216,7 @@ fn run() -> anyhow::Result<i32> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Setup => setup::run(),
-        Commands::Init { local } => init::run(local),
+        Commands::Init { local, terse, no_agents_md } => init::run(local, terse, !no_agents_md),
         Commands::Install { harness } => install::install(harness),
         Commands::Uninstall { harness } => install::uninstall(harness),
         Commands::Hook { harness } => hook::run(harness),

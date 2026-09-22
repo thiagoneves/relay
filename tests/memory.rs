@@ -100,3 +100,32 @@ fn compile_promotes_decisions_from_handoffs() {
     assert!(repo.run(&["compile", "--save", "all"]).status.success());
     assert!(String::from_utf8(repo.run(&["compile"]).stdout).unwrap().contains("Nothing new to promote"));
 }
+
+#[test]
+fn init_points_agent_instruction_files_at_the_memory() {
+    let repo = Repo::new("memory-agents-md");
+    std::fs::write(repo.root.join("CLAUDE.md"), "# House rules\n\nRun the tests.\n").unwrap();
+    let init = repo.run(&["init"]);
+    assert!(init.status.success(), "{}", String::from_utf8_lossy(&init.stderr));
+    let agents = std::fs::read_to_string(repo.root.join("AGENTS.md")).unwrap();
+    assert!(agents.starts_with("<!-- relay -->") && agents.contains("`.relay/project.md`"), "{agents}");
+    let claude = std::fs::read_to_string(repo.root.join("CLAUDE.md")).unwrap();
+    assert!(claude.starts_with("# House rules") && claude.contains("<!-- /relay -->"), "{claude}");
+    assert!(repo.run(&["init"]).status.success());
+    assert_eq!(std::fs::read_to_string(repo.root.join("AGENTS.md")).unwrap(), agents, "a second init changes nothing");
+
+    let plain = Repo::new("memory-no-agents-md");
+    assert!(plain.run(&["init", "--no-agents-md"]).status.success());
+    assert!(!plain.root.join("AGENTS.md").exists());
+}
+
+#[test]
+fn terse_adds_the_answers_section_once() {
+    let repo = Repo::new("memory-terse");
+    assert!(repo.run(&["init", "--terse"]).status.success());
+    let project = std::fs::read_to_string(repo.root.join(".relay/project.md")).unwrap();
+    assert_eq!(project.matches("## Answers").count(), 1, "{project}");
+    assert!(repo.run(&["init", "--terse"]).status.success());
+    assert_eq!(std::fs::read_to_string(repo.root.join(".relay/project.md")).unwrap(), project);
+    assert!(String::from_utf8(repo.run(&["brief"]).stdout).unwrap().contains("Lead with the answer"));
+}
