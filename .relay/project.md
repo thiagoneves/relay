@@ -1,6 +1,8 @@
 ---
-generated: 2026-09-22T07:44:13Z
-by: relay init (rules only, edit freely)
+type: Project
+title: "relay"
+timestamp: 2026-09-22T07:44:13Z
+generated: {by: "process:relay init", at: 2026-09-22T07:44:13Z}
 ---
 
 # relay
