@@ -180,14 +180,44 @@ pub fn read_stdin_json() -> Result<Option<Value>> {
     Ok(Some(serde_json::from_str(&buf)?))
 }
 
-/// Run a hook handler fail-open: errors go to the local log, exit 0.
+/// Run a hook handler fail-open: errors and panics go to the local log,
+/// never to the harness. Some harnesses block the tool call when a hook
+/// exits with an unexpected code or prints to stderr (Gemini CLI denies on
+/// a panic's exit 101), so a panic is caught and kept silent.
 pub fn run_fail_open(name: &str, f: impl FnOnce() -> Result<()>) {
     if env::is_set(Var::RelayDisable) {
         return;
     }
-    if let Err(e) = f()
-        && let Ok(p) = Paths::from_cwd()
-    {
-        crate::core::log::write(&p, &format!("hook {name} error: {e:#}"));
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+    std::panic::set_hook(previous);
+    let failure = match outcome {
+        Ok(Ok(())) => return,
+        Ok(Err(e)) => format!("hook {name} error: {e:#}"),
+        Err(panic) => format!("hook {name} panicked: {}", panic_message(panic.as_ref())),
+    };
+    if let Ok(p) = Paths::from_cwd() {
+        crate::core::log::write(&p, &failure);
+    }
+}
+
+fn panic_message(panic: &(dyn std::any::Any + Send)) -> &str {
+    panic
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("unknown")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_panic_in_a_hook_is_caught() {
+        run_fail_open("test", || panic!("boom"));
+        assert_eq!(panic_message(&"boom"), "boom");
+        assert_eq!(panic_message(&String::from("owned")), "owned");
     }
 }
