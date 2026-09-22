@@ -119,6 +119,30 @@ pub fn ensure_private_dir(dir: &Path, _: u32) -> std::io::Result<()> {
     fs::create_dir_all(dir)
 }
 
+/// Append `line` to a log-style file, and past `max_bytes` cut it back
+/// to its newest half. Never fails loudly: callers run where nothing can
+/// report an error.
+pub fn append_capped(file: &Path, line: &str, max_bytes: u64) {
+    if let Some(dir) = file.parent()
+        && fs::create_dir_all(dir).is_err()
+    {
+        return;
+    }
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(file) {
+        let _ = writeln!(f, "{line}");
+    }
+    if fs::metadata(file).is_ok_and(|m| m.len() > max_bytes) {
+        keep_newest_half(file);
+    }
+}
+
+fn keep_newest_half(file: &Path) {
+    let Ok(text) = fs::read_to_string(file) else { return };
+    let lines: Vec<&str> = text.lines().collect();
+    let kept = lines[lines.len() / 2..].join("\n") + "\n";
+    let _ = write_atomic(file, kept.as_bytes());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,5 +209,17 @@ mod tests {
         assert!(ensure_private_dir(&open, uid).is_err());
         assert!(ensure_private_dir(&mine, uid + 1).is_err());
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_capped_file_keeps_its_newest_half() {
+        let file = std::env::temp_dir().join(format!("relay-capped-{}.log", std::process::id()));
+        let _ = fs::remove_file(&file);
+        for i in 1..=4 {
+            append_capped(&file, &i.to_string(), 1024);
+        }
+        append_capped(&file, "5", 8);
+        assert_eq!(fs::read_to_string(&file).unwrap(), "3\n4\n5\n");
+        let _ = fs::remove_file(&file);
     }
 }
