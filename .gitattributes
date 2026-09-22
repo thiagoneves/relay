@@ -1,3 +1,4 @@
 # Fixtures are byte-exact tool output; never convert line endings.
 tests/corpus/** -text
 *.sh text eol=lf
+.relay/** text eol=lf
