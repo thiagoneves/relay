@@ -1,11 +1,15 @@
-use crate::core::audit::{self, Origin, Report, Severity};
-use crate::core::paths::Paths;
-use crate::harness;
+use std::path::PathBuf;
 use std::time::SystemTime;
 
+use crate::core::audit::findings::Status;
+use crate::core::audit::{self, Finding, Now, Origin, Report, Severity};
+use crate::core::paths::Paths;
+use crate::harness::{self, Harness};
+use crate::helpers::term::{self, Color, Paint};
 use crate::helpers::{human_tokens, parse_since, truncate_chars};
 
-const SOURCES_SHOWN: usize = 15;
+const SOURCES_SHOWN: usize = 12;
+const BAR: usize = 40;
 
 pub struct Options {
     pub only: Option<String>,
@@ -34,20 +38,8 @@ pub fn run(o: &Options) -> anyhow::Result<i32> {
     }
     let mut reports = Vec::new();
     for h in harnesses {
-        let recent: Vec<_> =
-            h.transcripts(root.as_deref()).into_iter().filter(|t| since.is_none_or(|s| t.started >= s)).collect();
-        let picked = audit::select(recent, o.sessions);
-        let audits: Vec<_> = picked
-            .iter()
-            .filter_map(|t| {
-                let mut a = h.audit_session(&t.path)?;
-                a.seen = Some(t.modified);
-                Some(a)
-            })
-            .collect();
-        if !audits.is_empty() {
-            let hooks = h.configured_hooks(root.as_deref());
-            reports.push((h.id(), audit::report(audits, hooks.as_deref())));
+        if let Some(r) = audit_one(h.as_ref(), root.as_ref(), since, o.sessions) {
+            reports.push((h.id(), r));
         }
     }
     if o.json {
@@ -60,72 +52,182 @@ pub fn run(o: &Options) -> anyhow::Result<i32> {
         println!("relay audit: no transcripts found for {scope}");
         return Ok(0);
     }
+    let p = Paint::stdout();
     for (id, r) in &reports {
-        print_report(id, r, &scope);
+        print_report(p, id, r, &scope);
     }
-    println!("Sizes are estimates; calls and totals are exact, from the transcripts.");
-    println!("`resent` = size × API calls after it entered the context: what it cost on your quota.");
+    println!("{}", p.dim("Sizes are estimates; calls and totals are exact, from the transcripts."));
+    println!("{}", p.dim("Share = size × API calls after it entered the context: what it cost on your quota."));
     Ok(0)
+}
+
+fn audit_one(h: &dyn Harness, root: Option<&PathBuf>, since: Option<SystemTime>, limit: usize) -> Option<Report> {
+    let recent: Vec<_> = h
+        .transcripts(root.map(PathBuf::as_path))
+        .into_iter()
+        .filter(|t| since.is_none_or(|s| t.started >= s))
+        .collect();
+    let audits: Vec<_> = audit::select(recent, limit)
+        .iter()
+        .filter_map(|t| {
+            let mut a = h.audit_session(&t.path)?;
+            a.seen = Some(t.modified);
+            Some(a)
+        })
+        .collect();
+    if audits.is_empty() {
+        return None;
+    }
+    // The newest session anywhere shows what the global config loads today.
+    let newest = audit::newest(h.transcripts(None));
+    let now = Now {
+        hooks: h.configured_hooks(root.map(PathBuf::as_path)),
+        newest: newest.as_ref().and_then(|t| h.audit_session(&t.path)),
+        newest_started: newest.map(|t| t.started),
+        root: root.cloned(),
+    };
+    let mut r = audit::report(audits, &now);
+    for f in &mut r.findings {
+        if let Some(why) = h.settled(f) {
+            f.status = Status::Gone;
+            f.fix = format!("Already removed: {why}");
+        }
+    }
+    let steps: Vec<Vec<String>> = r.findings.iter().map(|f| h.advise(f, &r)).collect();
+    for (f, s) in r.findings.iter_mut().zip(steps) {
+        f.steps = s;
+    }
+    Some(r)
 }
 
 fn pct(n: usize, of: usize) -> f64 {
     if of == 0 { 0.0 } else { n as f64 * 100.0 / of as f64 }
 }
 
-fn print_report(id: &str, r: &Report, scope: &str) {
-    println!("relay audit · {id} · {} sessions + {} subagents in {scope}\n", r.sessions, r.subagents);
+fn print_report(p: Paint, id: &str, r: &Report, scope: &str) {
+    let subs = if r.subagents > 0 { format!(" + {} subagents", r.subagents) } else { String::new() };
+    println!("{} {}", p.bold(&format!("relay audit · {id}")), p.dim(&format!("· {scope}")));
     println!(
-        "Context sent: {} tokens over {} calls ({:.0}% from cache). Subagents: {} ({:.0}%).\n",
-        human_tokens(r.context_sent),
+        "{}{subs} · {} calls · {} tokens sent ({:.0}% from cache)\n",
+        plural(r.sessions, "session"),
         r.calls,
-        pct(r.cached, r.context_sent),
-        human_tokens(r.subagent_context_sent),
-        pct(r.subagent_context_sent, r.context_sent)
+        human_tokens(r.context_sent),
+        pct(r.cached, r.context_sent)
     );
-    if !r.findings.is_empty() {
-        println!("Findings, worst first:");
-        for f in &r.findings {
-            let mark = match (f.severity, f.still_configured) {
-                (_, Some(false)) => "✓",
-                (Severity::Broken, _) => "✗",
-                (Severity::Waste, _) => "!",
-            };
-            let cost = if f.resent > 0 {
-                format!(" · {} resent ({:.1}%)", human_tokens(f.resent), pct(f.resent, r.context_sent))
-            } else {
-                String::new()
-            };
-            let seen = f.last_seen.as_deref().map(|t| format!(" · last seen {t}")).unwrap_or_default();
-            println!("  {mark} {}{cost}{seen}", truncate_chars(&f.text, 100));
-            println!("    → {}", f.fix);
+    print_split(p, r);
+
+    let (history, live): (Vec<&Finding>, Vec<&Finding>) = r.findings.iter().partition(|f| f.is_history());
+    if !live.is_empty() {
+        let total: usize = live.iter().map(|f| f.resent).sum();
+        println!(
+            "{} {}",
+            p.bold(&format!("To fix ({})", live.len())),
+            p.dim(&format!("· {:.0}% of what was sent", pct(total, r.context_sent)))
+        );
+        let mut shown = Vec::new();
+        for f in live {
+            print_live(p, f, r, &mut shown);
         }
         println!();
     }
-    println!("Where the context went (largest first):");
-    println!("  {:<62} {:>6} {:>9} {:>9} {:>6}", "source", "items", "size", "resent", "share");
-    for c in r.costs.iter().take(SOURCES_SHOWN) {
-        let who = match c.origin {
-            Origin::Config => "you",
-            Origin::Harness => "harness",
-            Origin::Work => "work",
-        };
+    if !history.is_empty() {
         println!(
-            "  {:<62} {:>6} {:>9} {:>9} {:>5.1}%  [{who}]",
-            truncate_chars(&c.source, 62),
-            c.items,
-            human_tokens(c.tokens),
+            "{} {}",
+            p.bold(&format!("Already fixed ({})", history.len())),
+            p.dim("· still in sessions that started before the change")
+        );
+        for f in history {
+            let share = if f.resent > 0 { format!(" · {:.1}%", pct(f.resent, r.context_sent)) } else { String::new() };
+            println!(
+                "  {} {}{}",
+                p.color(Color::Green, "✓"),
+                truncate_chars(&f.headline, 100),
+                p.dim(&format!("{share} · {}", f.fix.trim_start_matches("Already removed: ")))
+            );
+        }
+        println!();
+    }
+    print_sources(p, r);
+}
+
+/// One stacked bar: who the context was spent on.
+fn print_split(p: Paint, r: &Report) {
+    let by = |o: Origin| r.costs.iter().filter(|c| c.origin == o).map(|c| c.resent).sum::<usize>();
+    let (work, config, harness) = (by(Origin::Work), by(Origin::Config), by(Origin::Harness));
+    let rest = r.context_sent.saturating_sub(work + config + harness);
+    let parts = [
+        (work, Color::Cyan, "work"),
+        (config, Color::Yellow, "your config"),
+        (harness, Color::Magenta, "harness"),
+        (rest, Color::Blue, "unexplained"),
+    ];
+    #[allow(clippy::cast_precision_loss)]
+    let shares: Vec<f64> = parts.iter().map(|(n, ..)| *n as f64 / r.context_sent.max(1) as f64).collect();
+    let cells = term::split(&shares, BAR);
+    let bar: String = parts.iter().zip(&cells).map(|((_, c, _), n)| p.color(*c, &"█".repeat(*n))).collect();
+    println!("  {bar}");
+    let legend: Vec<String> = parts
+        .iter()
+        .map(|(n, c, label)| format!("{} {label} {:.0}%", p.color(*c, "■"), pct(*n, r.context_sent)))
+        .collect();
+    println!("  {}\n", legend.join("   "));
+}
+
+/// Steps already printed for an earlier finding (MCP servers behind both
+/// tool names and server instructions) are referred to, not repeated.
+fn print_live(p: Paint, f: &Finding, r: &Report, shown: &mut Vec<String>) {
+    let mark = match f.severity {
+        Severity::Broken => p.color(Color::Red, "✗"),
+        Severity::Waste => p.color(Color::Yellow, "!"),
+    };
+    let share = if f.resent > 0 { format!("  {:.1}%", pct(f.resent, r.context_sent)) } else { String::new() };
+    println!("  {mark} {}{}", truncate_chars(&f.headline, 90), p.bold(&share));
+    if let Some(s) = f.subject.as_deref().filter(|s| !f.headline.contains(*s)) {
+        println!("    {}", p.dim(s));
+    }
+    println!("    → {}", f.fix);
+    if !f.steps.is_empty() && f.steps.iter().all(|s| shown.contains(s)) {
+        println!("      {} {}", p.dim("·"), p.dim("same steps as above"));
+        return;
+    }
+    for s in &f.steps {
+        println!("      {} {s}", p.dim("·"));
+        shown.push(s.clone());
+    }
+}
+
+fn print_sources(p: Paint, r: &Report) {
+    println!("{}", p.bold("Where the context went"));
+    let top = r.costs.first().map_or(1, |c| c.resent.max(1));
+    for c in r.costs.iter().take(SOURCES_SHOWN) {
+        let (color, who) = match c.origin {
+            Origin::Config => (Color::Yellow, "you"),
+            Origin::Harness => (Color::Magenta, "harness"),
+            Origin::Work => (Color::Cyan, "work"),
+        };
+        #[allow(clippy::cast_precision_loss)]
+        let bar = term::bar(c.resent as f64 / top as f64, 16);
+        println!(
+            "  {:<46} {} {:>5.1}% {:>7}  {}",
+            truncate_chars(&c.source, 46),
+            p.color(color, &format!("{bar:<16}")),
+            pct(c.resent, r.context_sent),
             human_tokens(c.resent),
-            pct(c.resent, r.context_sent)
+            p.dim(who)
         );
     }
     let itemized: usize = r.costs.iter().map(|c| c.resent).sum();
+    let rest = r.context_sent.saturating_sub(itemized);
     println!(
-        "  {:<62} {:>6} {:>9} {:>9} {:>5.1}%",
-        "not itemized: tool schemas, replies, reasoning",
+        "  {} {:<16} {:>5.1}% {:>7}",
+        p.dim(&format!("{:<46}", "unexplained: thinking, estimate error")),
         "",
-        "",
-        human_tokens(r.context_sent.saturating_sub(itemized)),
-        pct(r.context_sent.saturating_sub(itemized), r.context_sent)
+        pct(rest, r.context_sent),
+        human_tokens(rest)
     );
     println!();
+}
+
+fn plural(n: usize, word: &str) -> String {
+    if n == 1 { format!("1 {word}") } else { format!("{n} {word}s") }
 }
