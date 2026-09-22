@@ -6,6 +6,7 @@
 //! resent on each of them), adds sessions up, and ranks findings.
 
 pub mod findings;
+pub mod run;
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;

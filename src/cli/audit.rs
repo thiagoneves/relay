@@ -1,8 +1,8 @@
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::SystemTime;
 
-use crate::core::audit::findings::Status;
-use crate::core::audit::{self, Finding, Now, Origin, Report, Severity};
+use crate::core::audit::run::{Scope, Source};
+use crate::core::audit::{self, Finding, Origin, Report, SessionAudit, Severity, Transcript};
 use crate::core::paths::Paths;
 use crate::harness::{self, Harness, HarnessId};
 use crate::helpers::term::{self, Color, Paint};
@@ -34,9 +34,10 @@ pub fn run(o: &Options) -> anyhow::Result<i32> {
     if let Some(s) = &o.since {
         scope.push_str(&format!(", since {s}"));
     }
+    let audited = Scope { root: root.as_deref(), since, sessions: o.sessions };
     let mut reports = Vec::new();
     for h in harnesses {
-        if let Some(r) = audit_one(h.as_ref(), root.as_ref(), since, o.sessions) {
+        if let Some(r) = audit::run::run(&Adapter(h.as_ref()), &audited) {
             reports.push((h.id(), r));
         }
     }
@@ -59,42 +60,26 @@ pub fn run(o: &Options) -> anyhow::Result<i32> {
     Ok(0)
 }
 
-fn audit_one(h: &dyn Harness, root: Option<&PathBuf>, since: Option<SystemTime>, limit: usize) -> Option<Report> {
-    let all = h.transcripts(root.map(PathBuf::as_path));
-    // The newest session of the audited scope shows what its config loads
-    // today. Another project's newest session would not list this
-    // project's skills or MCP servers, and mark them removed.
-    let newest = audit::newest(&all);
-    let recent: Vec<_> = all.into_iter().filter(|t| since.is_none_or(|s| t.started >= s)).collect();
-    let audits: Vec<_> = audit::select(recent, limit)
-        .iter()
-        .filter_map(|t| {
-            let mut a = h.audit_session(&t.path)?;
-            a.seen = Some(t.modified);
-            Some(a)
-        })
-        .collect();
-    if audits.is_empty() {
-        return None;
+/// The audit reads a harness through `audit::run::Source`; this is that
+/// view of an adapter.
+struct Adapter<'a>(&'a dyn Harness);
+
+impl Source for Adapter<'_> {
+    fn transcripts(&self, root: Option<&Path>) -> Vec<Transcript> {
+        self.0.transcripts(root)
     }
-    let now = Now {
-        hooks: h.configured_hooks(root.map(PathBuf::as_path)),
-        newest: newest.as_ref().and_then(|t| h.audit_session(&t.path)),
-        newest_started: newest.map(|t| t.started),
-        root: root.cloned(),
-    };
-    let mut r = audit::report(audits, &now);
-    for f in &mut r.findings {
-        if let Some(why) = h.settled(f) {
-            f.status = Status::Gone;
-            f.fix = format!("Already removed: {why}");
-        }
+    fn audit_session(&self, transcript: &Path) -> Option<SessionAudit> {
+        self.0.audit_session(transcript)
     }
-    let steps: Vec<Vec<String>> = r.findings.iter().map(|f| h.advise(f, &r)).collect();
-    for (f, s) in r.findings.iter_mut().zip(steps) {
-        f.steps = s;
+    fn configured_hooks(&self, root: Option<&Path>) -> Option<Vec<String>> {
+        self.0.configured_hooks(root)
     }
-    Some(r)
+    fn settled(&self, f: &Finding) -> Option<String> {
+        self.0.settled(f)
+    }
+    fn advise(&self, f: &Finding, r: &Report) -> Vec<String> {
+        self.0.advise(f, r)
+    }
 }
 
 fn pct(n: usize, of: usize) -> f64 {
@@ -230,60 +215,4 @@ fn print_sources(p: Paint, r: &Report) {
 
 fn plural(n: usize, word: &str) -> String {
     if n == 1 { format!("1 {word}") } else { format!("{n} {word}s") }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::cell::RefCell;
-    use std::path::Path;
-    use std::time::{Duration, UNIX_EPOCH};
-
-    use super::*;
-    use crate::core::audit::{SessionAudit, Transcript};
-    use crate::harness::InstallReport;
-
-    /// This project's session, and a newer one in another project.
-    struct Fake {
-        audited: RefCell<Vec<PathBuf>>,
-    }
-
-    fn t(name: &str, secs: u64) -> Transcript {
-        let at = UNIX_EPOCH + Duration::from_secs(secs);
-        Transcript { path: PathBuf::from(name), id: name.into(), parent: None, started: at, modified: at }
-    }
-
-    impl Harness for Fake {
-        fn id(&self) -> HarnessId {
-            HarnessId::Claude
-        }
-        fn command(&self) -> &'static str {
-            "fake"
-        }
-        fn install(&self, _: &Path) -> anyhow::Result<InstallReport> {
-            unimplemented!()
-        }
-        fn uninstall(&self) -> anyhow::Result<InstallReport> {
-            unimplemented!()
-        }
-        fn resume_args(&self, _: &str) -> Vec<String> {
-            Vec::new()
-        }
-        fn transcripts(&self, root: Option<&Path>) -> Vec<Transcript> {
-            match root {
-                Some(_) => vec![t("this", 10)],
-                None => vec![t("this", 10), t("other-project", 20)],
-            }
-        }
-        fn audit_session(&self, path: &Path) -> Option<SessionAudit> {
-            self.audited.borrow_mut().push(path.to_path_buf());
-            Some(SessionAudit::default())
-        }
-    }
-
-    #[test]
-    fn project_audit_judges_findings_against_its_own_newest_session() {
-        let h = Fake { audited: RefCell::new(Vec::new()) };
-        audit_one(&h, Some(&PathBuf::from("/repo")), None, 5);
-        assert!(!h.audited.borrow().contains(&PathBuf::from("other-project")), "{:?}", h.audited.borrow());
-    }
 }
