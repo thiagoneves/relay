@@ -1,0 +1,18 @@
+# Notas de produto e pesquisa ficam locais por enquanto
+docs/
+
+
+# Added by cargo
+
+/target
+
+# Build and local state
+target/
+.DS_Store
+.claude-flow/
+.claude/settings.local.json
+.claude/.headroom_wrap_*
+
+# Agent instruction files stay local
+CLAUDE.md
+.claude/

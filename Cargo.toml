@@ -1,0 +1,24 @@
+[package]
+name = "relay"
+version = "0.1.0"
+edition = "2024"
+description = "Context layer for coding agents: compresses what goes in, remembers what matters, lives in your repo."
+license = "MIT"
+
+[[bin]]
+name = "relay"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+time = { version = "0.3", features = ["formatting", "parsing", "macros"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
