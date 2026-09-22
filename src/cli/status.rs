@@ -1,6 +1,6 @@
 use crate::core::memory::{self, Kind};
 use crate::core::paths::Paths;
-use crate::core::{outputs, spool, usage};
+use crate::core::{handoff, outputs, spool, usage};
 use crate::helpers::{dir_size, human_bytes, human_tokens};
 
 pub fn run() -> anyhow::Result<i32> {
@@ -12,7 +12,7 @@ pub fn run() -> anyhow::Result<i32> {
     let pct = if tokens_in > 0 { saved * 100 / tokens_in } else { 0 };
     let refetched = outputs::fetched_ids(&paths).len();
     let sessions = spool::sessions(&paths).len();
-    let handoffs = std::fs::read_dir(paths.handoffs()).map(std::iter::Iterator::count).unwrap_or(0);
+    let handoffs = handoff::count(&paths);
 
     println!("relay status · {}", paths.root.display());
     println!();
