@@ -244,20 +244,24 @@ fn headline(c: &Cost, kind: Kind, status: Status, r: &Report) -> String {
 
 fn fix_for(kind: Kind, source: &str) -> String {
     match kind {
-        Kind::Skills => "Uninstall or disable the skills you do not use; the listing loads in every project".into(),
+        Kind::Skills => {
+            "The listing loads in every project; a skill you rarely need can live in the projects that use it".into()
+        }
         Kind::Instructions if source.contains("/projects/") || source.contains("/memory/") => {
-            "Project memory: prune entries the agent no longer needs".into()
+            "Project memory: worth pruning entries that no longer hold".into()
         }
         Kind::Instructions if source.starts_with("Instruction file ~/") => {
-            "Applies to every project below it: keep only what every project needs".into()
+            "Applies to every project below it: what only some projects need can move into theirs".into()
         }
-        Kind::HookOutput => "Make it silent or remove it".into(),
-        Kind::Mcp | Kind::ToolNames => "Disable MCP servers you do not use, or enable them per project".into(),
-        Kind::Agents => "Remove custom agent definitions you do not use".into(),
+        Kind::HookOutput => "If the agent does not need what it prints, the hook can run silently".into(),
+        Kind::Mcp | Kind::ToolNames => "Servers you need only in some projects can be enabled just there".into(),
+        Kind::Agents => "Agent types you no longer use can go".into(),
         Kind::AutoReview => {
-            "Every approval sends the conversation to a reviewer model; review approvals yourself or allow more".into()
+            "Every approval sends the conversation to a reviewer model; reviewing approvals yourself avoids it".into()
         }
-        Kind::Instructions | Kind::Other | Kind::FailingHooks => "Trim it to what the agent needs on every call".into(),
+        Kind::Instructions | Kind::Other | Kind::FailingHooks => {
+            "Worth trimming to what the agent needs on every call".into()
+        }
     }
 }
 

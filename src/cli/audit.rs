@@ -121,8 +121,11 @@ fn print_report(p: Paint, id: &str, r: &Report, scope: &str) {
         let total: usize = live.iter().map(|f| f.resent).sum();
         println!(
             "{} {}",
-            p.bold(&format!("To fix ({})", live.len())),
-            p.dim(&format!("· {:.0}% of what was sent", pct(total, r.context_sent)))
+            p.bold(&format!("Worth a look ({})", live.len())),
+            p.dim(&format!(
+                "· {:.0}% of what was sent · costs, not verdicts: keep what you need",
+                pct(total, r.context_sent)
+            ))
         );
         let mut shown = Vec::new();
         for f in live {
