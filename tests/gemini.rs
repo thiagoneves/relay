@@ -16,6 +16,16 @@ fn before_tool(repo: &Repo, command: &str) -> String {
     .to_string()
 }
 
+/// On Windows Gemini CLI runs commands in `PowerShell`, which `relay x`
+/// does not speak, so nothing is rewritten there.
+#[cfg(windows)]
+#[test]
+fn nothing_is_rewritten_on_windows() {
+    let repo = Repo::new("gemini-pre-win");
+    assert_eq!(before_tool(&repo, "cargo test"), "");
+}
+
+#[cfg(unix)]
 #[test]
 fn routine_commands_are_rewritten_and_the_rest_left_alone() {
     let repo = Repo::new("gemini-pre");

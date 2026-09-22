@@ -20,6 +20,16 @@ fn pre(repo: &Repo, command: &str) -> Value {
     serde_json::from_str(&out).unwrap_or_else(|_| panic!("preToolUse must always print JSON: {out:?}"))
 }
 
+/// On Windows Cursor runs commands in a shell `relay x` does not speak,
+/// so nothing is rewritten there.
+#[cfg(windows)]
+#[test]
+fn nothing_is_rewritten_on_windows() {
+    let repo = Repo::new("cursor-pre-win");
+    assert_eq!(pre(&repo, "cargo test"), json!({}));
+}
+
+#[cfg(unix)]
 #[test]
 fn routine_commands_are_rewritten_and_the_rest_left_alone() {
     let repo = Repo::new("cursor-pre");
