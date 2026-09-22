@@ -77,6 +77,12 @@ pub mod handoff {
     pub const COMMAND_CHARS: usize = 80;
 }
 
+/// `relay compile`.
+pub mod compile {
+    /// Handoffs read for candidates.
+    pub const SESSIONS: usize = 10;
+}
+
 /// `relay status` and `relay log`.
 pub mod status {
     use std::time::Duration;

@@ -4,6 +4,7 @@
 mod audit;
 mod bench;
 mod brief;
+mod compile;
 mod get;
 mod handoff;
 mod hook;
@@ -91,6 +92,12 @@ pub enum Commands {
         /// Copy the handoff into `.relay/handoffs/` (credentials masked) for the team
         #[arg(long, conflicts_with = "show")]
         share: bool,
+    },
+    /// Promote decisions from recent sessions into `.relay/`
+    Compile {
+        /// Which candidates to keep: numbers like 1,3 or `all`
+        #[arg(long, value_name = "WHICH")]
+        save: Option<String>,
     },
     /// Save a rule, gotcha or decision to `.relay/` (committed, one file per item)
     Remember {
@@ -214,6 +221,7 @@ fn run() -> anyhow::Result<i32> {
         Commands::Pipe { cmd } => pipe::run(&cmd),
         Commands::Get { id, meta } => get::run(&id, meta),
         Commands::Handoff { session, show, share } => handoff::run(session.as_deref(), show, share),
+        Commands::Compile { save } => compile::run(save.as_deref()),
         Commands::Remember { kind, text, paths, session, until } => {
             remember::run(kind, &text.join(" "), &paths, session.as_deref(), until.as_deref())
         }

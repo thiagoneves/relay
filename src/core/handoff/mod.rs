@@ -79,6 +79,17 @@ pub fn latest(paths: &Paths, branch: &str) -> Option<(PathBuf, String)> {
     pick(&bodies, branch).map(|i| (all[i].1.clone(), all[i].2.clone()))
 }
 
+/// The newest `max` handoffs, interactive sessions only.
+pub fn recent(paths: &Paths, max: usize) -> Vec<(PathBuf, String)> {
+    let mut all = stored(paths);
+    all.sort_by(|a, b| b.0.cmp(&a.0));
+    all.into_iter()
+        .filter(|(_, _, body)| frontmatter::get(body, "headless").is_none())
+        .take(max)
+        .map(|(_, p, body)| (p, body))
+        .collect()
+}
+
 /// One line about a session: when it ended, where it ran, and where it
 /// stopped.
 pub struct Glance {

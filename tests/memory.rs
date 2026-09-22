@@ -71,3 +71,32 @@ fn local_memory_stays_out_of_the_repo() {
     let status = String::from_utf8(repo.run(&["status"]).stdout).unwrap();
     assert!(status.contains("local memory, never committed"), "{status}");
 }
+
+#[test]
+fn compile_promotes_decisions_from_handoffs() {
+    let repo = Repo::new("memory-compile");
+    assert!(repo.run(&["init"]).status.success());
+    let dir = repo.root.join(".git/relay/handoffs");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("c-1.md"),
+        "---\nsession: c-1\nharness: claude-code\nbranch: main\nended: 2026-09-22T10:00:00Z\n---\n# Handoff\n## Decisions\n- Backoff: exponential with jitter\n- DB: postgres\n",
+    )
+    .unwrap();
+    let listed = String::from_utf8(repo.run(&["compile"]).stdout).unwrap();
+    assert!(listed.contains("1. 2026-09-22") && listed.contains("Backoff: exponential with jitter"), "{listed}");
+    assert!(listed.contains("2. 2026-09-22") && listed.contains("DB: postgres"), "{listed}");
+
+    let bad = repo.run(&["compile", "--save", "9"]);
+    assert!(!bad.status.success());
+    let saved = repo.run(&["compile", "--save", "2"]);
+    assert!(saved.status.success(), "{}", String::from_utf8_lossy(&saved.stderr));
+    let items: Vec<_> = std::fs::read_dir(repo.root.join(".relay/decisions")).unwrap().flatten().collect();
+    assert_eq!(items.len(), 1);
+    assert!(std::fs::read_to_string(items[0].path()).unwrap().contains("DB: postgres"));
+
+    let again = String::from_utf8(repo.run(&["compile"]).stdout).unwrap();
+    assert!(again.contains("Backoff") && !again.contains("DB: postgres"), "{again}");
+    assert!(repo.run(&["compile", "--save", "all"]).status.success());
+    assert!(String::from_utf8(repo.run(&["compile"]).stdout).unwrap().contains("Nothing new to promote"));
+}

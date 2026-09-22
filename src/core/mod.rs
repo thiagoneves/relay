@@ -4,6 +4,7 @@ pub mod audit;
 pub mod bench;
 pub mod bootstrap;
 pub mod brief;
+pub mod compile;
 pub mod condense;
 pub mod exec;
 pub mod handoff;
