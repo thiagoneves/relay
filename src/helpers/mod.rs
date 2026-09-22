@@ -2,6 +2,7 @@
 //! relay's storage layout or commands.
 
 pub mod env;
+pub mod frontmatter;
 pub mod fs;
 pub mod git;
 pub mod ids;

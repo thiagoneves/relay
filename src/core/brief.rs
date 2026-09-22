@@ -2,8 +2,10 @@
 //! handoff, capped at roughly 600 tokens. File reads and one git call; no LLM.
 
 use crate::core::paths::Paths;
-use crate::core::{frontmatter, handoff, memory};
+use crate::core::{handoff, memory};
+use crate::helpers::frontmatter;
 use crate::helpers::git as gitstate;
+use crate::helpers::text::cut_lines;
 use crate::limits;
 
 pub fn build(paths: &Paths) -> String {
@@ -109,16 +111,10 @@ fn memory_section(paths: &Paths, items: &[memory::Item]) -> String {
 }
 
 fn cut(s: &str, max: usize) -> String {
-    if s.len() <= max {
-        return s.to_string();
+    match cut_lines(s, max) {
+        (head, true) => format!("{}\n…", head.trim_end()),
+        (all, false) => all,
     }
-    let mut end = max;
-    while !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    let head = &s[..end];
-    let head = head.rfind('\n').map_or(head, |i| &head[..i]);
-    format!("{head}\n…")
 }
 
 #[cfg(test)]

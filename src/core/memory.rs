@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use anyhow::{Result, bail};
 use clap::ValueEnum;
 
-use crate::core::frontmatter;
 use crate::core::paths::Paths;
+use crate::helpers::frontmatter;
 use crate::helpers::git as gitstate;
 use crate::helpers::{now_iso, truncate_chars, write_atomic};
 

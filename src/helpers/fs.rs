@@ -58,6 +58,12 @@ pub fn dir_size(path: &Path) -> u64 {
 
 /// Display with forward slashes on Windows, so paths in handoffs and
 /// hook commands read the same on every machine.
+/// `path` with every non-alphanumeric character turned into `-`: a flat
+/// directory name that stays stable for the same path.
+pub fn path_slug(path: &Path) -> String {
+    path.display().to_string().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
+}
+
 pub fn slash(p: &Path) -> String {
     let s = p.display().to_string();
     if cfg!(windows) { s.replace('\\', "/") } else { s }

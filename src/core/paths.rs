@@ -8,7 +8,7 @@ use std::process::Command;
 use anyhow::{Context, Result};
 
 use crate::helpers::env::{self, Var};
-use crate::helpers::fs::simplify;
+use crate::helpers::fs::{path_slug, simplify};
 use crate::helpers::slash;
 
 #[derive(Debug, Clone)]
@@ -30,7 +30,7 @@ impl Paths {
             Ok(Self { shared: root.join(".relay"), local: gitdir.join("relay"), root, in_git: true })
         } else {
             let root = start.clone();
-            let slug = slugify(&root);
+            let slug = path_slug(&root);
             Ok(Self {
                 shared: root.join(".relay"),
                 local: data_home().join("projects").join(slug),
@@ -127,10 +127,6 @@ pub fn data_home() -> PathBuf {
         return local.join("relay");
     }
     env::home().join(".local").join("share").join("relay")
-}
-
-fn slugify(p: &Path) -> String {
-    p.display().to_string().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
 }
 
 /// Append one line to the local log. Never fails loudly.

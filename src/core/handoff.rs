@@ -7,11 +7,13 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 
+use crate::core::outputs;
 use crate::core::paths::Paths;
 use crate::core::spool::{self, Event};
 use crate::core::usage;
-use crate::core::{frontmatter, outputs};
+use crate::helpers::frontmatter;
 use crate::helpers::git as gitstate;
+use crate::helpers::text::cut_lines;
 use crate::helpers::{now_iso, truncate_chars, write_atomic};
 use crate::limits;
 
@@ -244,14 +246,8 @@ fn excerpt(text: &str, max: usize) -> String {
             _ => l.to_string(),
         })
         .collect();
-    let mut out = String::new();
-    let mut cut = false;
-    for l in &flat {
-        if out.len() + l.len() + 1 > max && !out.is_empty() {
-            cut = true;
-            break;
-        }
-        out.push_str(&truncate_chars(l, max));
+    let (mut out, cut) = cut_lines(&flat.join("\n"), max);
+    if !out.ends_with('\n') {
         out.push('\n');
     }
     if out.matches("```").count() % 2 == 1 {

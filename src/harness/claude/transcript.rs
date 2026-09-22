@@ -15,7 +15,7 @@ use crate::harness::jsonl;
 /// Claude Code names a project's transcript dir after its path with every
 /// non-alphanumeric character turned into `-`.
 pub fn project_slug(root: &Path) -> String {
-    root.display().to_string().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
+    crate::helpers::fs::path_slug(root)
 }
 
 /// Transcript dirs under `projects` for the project at `root`: its own,

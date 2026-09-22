@@ -16,6 +16,7 @@ use serde_json::Value;
 
 use crate::core::audit::{Collector, Origin, SessionAudit};
 use crate::harness::jsonl;
+use crate::helpers::env::tilde;
 
 /// Hook events whose stdout Claude Code adds to the model's context.
 const INJECTING_HOOKS: &[&str] = &["SessionStart", "UserPromptSubmit"];
@@ -86,12 +87,12 @@ fn attachment(a: &Value, col: &mut Collector) {
     match kind {
         "instructions" => {
             for f in a["files"].as_array().into_iter().flatten() {
-                let path = home_short(f["path"].as_str().unwrap_or("?"));
+                let path = tilde(Path::new(f["path"].as_str().unwrap_or("?")));
                 col.add(format!("Instruction file {path}"), Origin::Config, f["content"].as_str().unwrap_or(""));
             }
         }
         "nested_memory" => {
-            let path = home_short(a["path"].as_str().unwrap_or("?"));
+            let path = tilde(Path::new(a["path"].as_str().unwrap_or("?")));
             col.add(format!("Instruction file {path}"), Origin::Config, a["content"].as_str().unwrap_or(""));
         }
         "skill_listing" => {
@@ -186,11 +187,6 @@ fn strings(v: &Value) -> Vec<String> {
 
 fn short_cmd(cmd: &str) -> String {
     crate::helpers::truncate_chars(cmd.split_whitespace().collect::<Vec<_>>().join(" ").as_str(), 70)
-}
-
-fn home_short(path: &str) -> String {
-    let home = crate::helpers::env::home().display().to_string();
-    path.strip_prefix(&home).map_or_else(|| path.to_string(), |rest| format!("~{rest}"))
 }
 
 #[cfg(test)]

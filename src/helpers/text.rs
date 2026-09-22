@@ -65,6 +65,23 @@ pub fn est_tokens(s: &str) -> usize {
     rounded
 }
 
+/// Whole lines of `text` that fit in `max` bytes, and whether any were
+/// left out. A first line longer than `max` is truncated instead.
+pub fn cut_lines(text: &str, max: usize) -> (String, bool) {
+    let mut out = String::new();
+    for l in text.lines() {
+        if out.len() + l.len() + 1 > max {
+            if out.is_empty() {
+                out = truncate_chars(l, max);
+            }
+            return (out, true);
+        }
+        out.push_str(l);
+        out.push('\n');
+    }
+    (out.trim_end().to_string(), false)
+}
+
 /// Truncate to at most `max` chars, appending an ellipsis.
 pub fn truncate_chars(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
@@ -113,5 +130,12 @@ mod tests {
     fn truncates_with_ellipsis() {
         assert_eq!(truncate_chars("hello", 10), "hello");
         assert_eq!(truncate_chars("hello world", 6), "hello…");
+    }
+
+    #[test]
+    fn cut_lines_keeps_whole_lines() {
+        assert_eq!(cut_lines("a\nbb\nccc", 5), ("a\nbb\n".to_string(), true));
+        assert_eq!(cut_lines("a\nbb", 50), ("a\nbb".to_string(), false));
+        assert_eq!(cut_lines("abcdefgh", 4), ("abc…".to_string(), true));
     }
 }
