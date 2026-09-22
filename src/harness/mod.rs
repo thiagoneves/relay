@@ -218,17 +218,23 @@ pub fn run_fail_open(name: &str, f: impl FnOnce() -> Result<()>) {
     if env::is_set(Var::RelayDisable) {
         return;
     }
+    if let Some(failure) = fail_open(name, f)
+        && let Ok(p) = Paths::from_cwd()
+    {
+        crate::core::log::write(&p, &failure);
+    }
+}
+
+/// What went wrong in `f`, as one log line, or `None` when nothing did.
+fn fail_open(name: &str, f: impl FnOnce() -> Result<()>) -> Option<String> {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
     std::panic::set_hook(previous);
-    let failure = match outcome {
-        Ok(Ok(())) => return,
-        Ok(Err(e)) => format!("hook {name} error: {e:#}"),
-        Err(panic) => format!("hook {name} panicked: {}", panic_message(panic.as_ref())),
-    };
-    if let Ok(p) = Paths::from_cwd() {
-        crate::core::log::write(&p, &failure);
+    match outcome {
+        Ok(Ok(())) => None,
+        Ok(Err(e)) => Some(format!("hook {name} error: {e:#}")),
+        Err(panic) => Some(format!("hook {name} panicked: {}", panic_message(panic.as_ref()))),
     }
 }
 
@@ -246,8 +252,9 @@ mod tests {
 
     #[test]
     fn a_panic_in_a_hook_is_caught() {
-        run_fail_open("test", || panic!("boom"));
-        assert_eq!(panic_message(&"boom"), "boom");
+        assert_eq!(fail_open("test", || panic!("boom")).as_deref(), Some("hook test panicked: boom"));
+        assert_eq!(fail_open("test", || anyhow::bail!("bad")).as_deref(), Some("hook test error: bad"));
+        assert_eq!(fail_open("test", || Ok(())), None);
         assert_eq!(panic_message(&String::from("owned")), "owned");
     }
 }
