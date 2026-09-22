@@ -11,46 +11,62 @@ use crate::helpers::git;
 use crate::helpers::{now_iso, write_atomic};
 
 pub fn project_md(paths: &Paths) -> String {
-    let root = &paths.root;
-    let name = detect_name(root);
-    let readme = readme_lead(root);
-    let files = git::tracked_files(root);
-    let langs = languages(&files);
-    let hot = git::hot_files(root, 300, 8);
-    let recent = git::recent_commits(root, 5);
-    let agent_files: Vec<&str> =
-        ["CLAUDE.md", "AGENTS.md", "GEMINI.md", ".cursorrules"].into_iter().filter(|f| root.join(f).exists()).collect();
+    render(&Facts::read(&paths.root), &now_iso())
+}
 
-    let mut b = String::new();
-    b.push_str("---\n");
-    b.push_str(&format!("generated: {}\nby: relay init (rules only, edit freely)\n", now_iso()));
-    b.push_str("---\n\n");
-    b.push_str(&format!("# {name}\n\n"));
-    if !readme.is_empty() {
-        b.push_str(&format!("{readme}\n\n"));
-    }
-    if !langs.is_empty() {
-        b.push_str(&format!("**Stack:** {}\n\n", langs.join(", ")));
-    }
-    if !agent_files.is_empty() {
-        b.push_str(&format!("**Agent instructions:** {} (read them first)\n\n", agent_files.join(", ")));
-    }
-    if !hot.is_empty() {
-        b.push_str("**Most changed files:**\n");
-        for (f, n) in &hot {
-            b.push_str(&format!("- {f} ({n})\n"));
+/// What the rules can tell about a repo without an LLM.
+struct Facts {
+    name: String,
+    readme: String,
+    langs: Vec<String>,
+    agent_files: Vec<&'static str>,
+    hot: Vec<(String, usize)>,
+    recent: Vec<String>,
+}
+
+impl Facts {
+    fn read(root: &Path) -> Self {
+        let agent_files = ["CLAUDE.md", "AGENTS.md", "GEMINI.md", ".cursorrules"];
+        Self {
+            name: detect_name(root),
+            readme: readme_lead(root),
+            langs: languages(&git::tracked_files(root)),
+            agent_files: agent_files.into_iter().filter(|f| root.join(f).exists()).collect(),
+            hot: git::hot_files(root, 300, 8),
+            recent: git::recent_commits(root, 5),
         }
-        b.push('\n');
     }
-    if !recent.is_empty() {
-        b.push_str("**Recent commits:**\n");
-        for c in &recent {
-            b.push_str(&format!("- {c}\n"));
-        }
-        b.push('\n');
+}
+
+fn render(f: &Facts, generated: &str) -> String {
+    let mut b =
+        format!("---\ngenerated: {generated}\nby: relay init (rules only, edit freely)\n---\n\n# {}\n\n", f.name);
+    if !f.readme.is_empty() {
+        b.push_str(&format!("{}\n\n", f.readme));
     }
+    if !f.langs.is_empty() {
+        b.push_str(&format!("**Stack:** {}\n\n", f.langs.join(", ")));
+    }
+    if !f.agent_files.is_empty() {
+        b.push_str(&format!("**Agent instructions:** {} (read them first)\n\n", f.agent_files.join(", ")));
+    }
+    list(&mut b, "**Most changed files:**", f.hot.iter().map(|(f, n)| format!("{f} ({n})")));
+    list(&mut b, "**Recent commits:**", f.recent.iter().cloned());
     b.push_str("## Conventions\n\n_Add the rules a new contributor needs on day one. Keep it short; decisions and gotchas go in their own files._\n");
     b
+}
+
+fn list(b: &mut String, title: &str, items: impl Iterator<Item = String>) {
+    let items: Vec<String> = items.collect();
+    if items.is_empty() {
+        return;
+    }
+    b.push_str(title);
+    b.push('\n');
+    for it in items {
+        b.push_str(&format!("- {it}\n"));
+    }
+    b.push('\n');
 }
 
 /// Create `.relay/` with a project.md. Never overwrites an existing one.
@@ -150,6 +166,24 @@ fn languages(files: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn renders_only_what_it_found() {
+        let f = Facts {
+            name: "app".into(),
+            readme: String::new(),
+            langs: vec!["Rust".into()],
+            agent_files: vec![],
+            hot: vec![("src/main.rs".into(), 3)],
+            recent: vec![],
+        };
+        let out = render(&f, "2026-09-22T10:00:00Z");
+        assert!(out.starts_with("---\ngenerated: 2026-09-22T10:00:00Z\n"), "{out}");
+        assert!(
+            out.contains("# app\n\n**Stack:** Rust\n\n**Most changed files:**\n- src/main.rs (3)\n\n## Conventions"),
+            "{out}"
+        );
+    }
 
     #[test]
     fn lf_rule_is_added_once_after_existing_lines() {
