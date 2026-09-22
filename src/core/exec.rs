@@ -33,10 +33,7 @@ pub fn run(cmd: &str, raw_only: bool, session: Option<&str>) -> Result<Outcome> 
         c.arg("-c").arg(&wrapped);
         c
     } else {
-        // Windows without Git Bash: the harness ran it in cmd, so do we.
-        let mut c = Command::new("cmd");
-        c.arg("/C").arg(cmd);
-        c
+        cmd_shell(cmd)
     };
     let out = command
         .env("RELAY_ACTIVE", "1")
@@ -92,4 +89,32 @@ pub fn run(cmd: &str, raw_only: bool, session: Option<&str>) -> Result<Outcome> 
         _ => c.text,
     };
     Ok(Outcome { exit, printed })
+}
+
+/// Windows without Git Bash: the harness ran it in cmd, so do we. The
+/// line goes through verbatim; `Command::arg` would apply C-runtime
+/// quoting, which cmd does not undo (`--format="%h %s"` would break).
+#[cfg(windows)]
+fn cmd_shell(cmd: &str) -> Command {
+    use std::os::windows::process::CommandExt;
+    let mut c = Command::new("cmd");
+    c.arg("/C").raw_arg(cmd);
+    c
+}
+
+/// Unreachable off Windows: `posix_shell` always finds one there.
+#[cfg(not(windows))]
+fn cmd_shell(cmd: &str) -> Command {
+    let mut c = Command::new("sh");
+    c.arg("-c").arg(cmd);
+    c
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    #[test]
+    fn cmd_gets_quotes_verbatim() {
+        let out = super::cmd_shell(r#"echo "a b""#).output().unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), r#""a b""#);
+    }
 }
