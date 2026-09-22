@@ -1,6 +1,6 @@
-//! Claude Code adapter. Events arrive as JSON on stdin; the command is
-//! the same for every event (`relay hook claude`) and dispatches on
-//! `hook_event_name`.
+//! Hook protocol shared by Claude Code and Codex: one JSON event on
+//! stdin, `hook_event_name` selects the handler, JSON on stdout only
+//! when rewriting a tool input. Both harnesses speak this same dialect.
 
 use anyhow::Result;
 use serde_json::{Value, json};
@@ -9,8 +9,6 @@ use crate::helpers::truncate_chars;
 use crate::core::paths::Paths;
 use crate::core::spool::{self, Event};
 use crate::core::{brief, handoff};
-
-pub const HARNESS: &str = "claude-code";
 
 /// Events relay wants, with the matcher used in settings.json.
 pub const EVENTS: &[(&str, Option<&str>, u32)] = &[
@@ -23,7 +21,7 @@ pub const EVENTS: &[(&str, Option<&str>, u32)] = &[
     ("Stop", None, 5),
 ];
 
-pub fn run() -> Result<()> {
+pub fn run(harness_id: &str, hook_cmd: &str) -> Result<()> {
     let Some(input) = crate::harness::read_stdin_json()? else { return Ok(()) };
     let event = input["hook_event_name"].as_str().unwrap_or("").to_string();
     let session = input["session_id"].as_str().unwrap_or("unknown").to_string();
@@ -35,13 +33,13 @@ pub fn run() -> Result<()> {
     paths.ensure_local()?;
 
     match event.as_str() {
-        "PreToolUse" => pre_tool_use(&paths, &session, &input),
+        "PreToolUse" => pre_tool_use(&paths, &session, &input, hook_cmd),
         "PostToolUse" => post_tool_use(&paths, &session, &input),
         "UserPromptSubmit" => {
             let prompt = input["prompt"].as_str().unwrap_or("");
             record(&paths, &session, "prompt", None, json!({ "text": truncate_chars(prompt, 600) }))
         }
-        "SessionStart" => session_start(&paths, &session, &input),
+        "SessionStart" => session_start(&paths, &session, &input, harness_id),
         "SessionEnd" => {
             record(&paths, &session, "session_end", None, json!({ "reason": input["reason"] }))?;
             let _ = handoff::build(&paths, &session, input["reason"].as_str().unwrap_or("end"));
@@ -67,7 +65,7 @@ fn record(paths: &Paths, session: &str, name: &str, key: Option<&str>, data: Val
     spool::append(paths, &Event::new(session, name, key, data))
 }
 
-fn session_start(paths: &Paths, session: &str, input: &Value) -> Result<()> {
+fn session_start(paths: &Paths, session: &str, input: &Value, harness_id: &str) -> Result<()> {
     spool::set_current_session(paths, session);
     record(
         paths,
@@ -78,7 +76,7 @@ fn session_start(paths: &Paths, session: &str, input: &Value) -> Result<()> {
             "source": input["source"],
             "transcript_path": input["transcript_path"],
             "cwd": input["cwd"],
-            "harness": HARNESS,
+            "harness": harness_id,
         }),
     )?;
     let text = brief::build(paths);
@@ -112,7 +110,7 @@ fn post_tool_use(paths: &Paths, session: &str, input: &Value) -> Result<()> {
     record(paths, session, "tool", key, data)
 }
 
-fn pre_tool_use(paths: &Paths, session: &str, input: &Value) -> Result<()> {
+fn pre_tool_use(paths: &Paths, session: &str, input: &Value, _hook_cmd: &str) -> Result<()> {
     if input["tool_name"].as_str() != Some("Bash") {
         return Ok(());
     }

@@ -1,6 +1,7 @@
-//! Register relay hooks in `~/.claude/settings.json`. Idempotent: any
-//! existing relay entries are removed before ours are written, so
-//! upgrades and path changes converge. A backup is taken once per run.
+//! Register relay hooks in a Claude-style hooks JSON file (Claude Code's
+//! `settings.json`, Codex's `hooks.json`). Idempotent: existing relay
+//! entries are removed before ours are written, so upgrades and path
+//! changes converge. A backup is taken once per run.
 
 use std::path::{Path, PathBuf};
 
@@ -8,17 +9,15 @@ use anyhow::{Context, Result};
 use serde_json::{Map, Value, json};
 
 use super::hook::EVENTS;
-use crate::core::paths::home;
 use crate::harness::InstallReport;
 use crate::helpers::{now_millis, write_atomic};
 
-pub const MARKER: &str = " hook claude";
-
-pub fn settings_path() -> PathBuf {
-    std::env::var_os("CLAUDE_CONFIG_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home().join(".claude"))
-        .join("settings.json")
+/// Where hooks live for one harness.
+pub struct Target {
+    pub path: PathBuf,
+    /// Suffix of the hook command, e.g. ` hook claude`. Identifies relay
+    /// entries regardless of the binary path.
+    pub marker: &'static str,
 }
 
 fn load(path: &Path) -> Result<Map<String, Value>> {
@@ -36,19 +35,19 @@ fn load(path: &Path) -> Result<Map<String, Value>> {
     }
 }
 
-fn is_relay_hook(h: &Value) -> bool {
-    h["command"].as_str().is_some_and(|c| c.contains("relay") && c.contains(MARKER))
+fn is_relay_hook(h: &Value, marker: &str) -> bool {
+    h["command"].as_str().is_some_and(|c| c.contains("relay") && c.ends_with(marker))
 }
 
 /// Drop every relay handler; drop matcher groups left empty.
-fn strip_relay(hooks: &mut Map<String, Value>) -> bool {
+fn strip_relay(hooks: &mut Map<String, Value>, marker: &str) -> bool {
     let mut changed = false;
     for (_, groups) in hooks.iter_mut() {
         let Some(arr) = groups.as_array_mut() else { continue };
         for g in arr.iter_mut() {
             if let Some(hs) = g["hooks"].as_array_mut() {
                 let before = hs.len();
-                hs.retain(|h| !is_relay_hook(h));
+                hs.retain(|h| !is_relay_hook(h, marker));
                 changed |= hs.len() != before;
             }
         }
@@ -64,19 +63,20 @@ fn backup(path: &Path) -> Result<Option<PathBuf>> {
     if !path.exists() {
         return Ok(None);
     }
-    let bak = path.with_file_name(format!("settings.json.relay-bak-{}", now_millis()));
+    let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("hooks.json");
+    let bak = path.with_file_name(format!("{name}.relay-bak-{}", now_millis()));
     std::fs::copy(path, &bak)?;
     Ok(Some(bak))
 }
 
-pub fn install(exe: &Path) -> Result<InstallReport> {
-    let path = settings_path();
+pub fn install(target: &Target, exe: &Path) -> Result<InstallReport> {
+    let path = target.path.clone();
     let mut root = load(&path)?;
     let before = serde_json::to_string(&root)?;
     let mut hooks = root.remove("hooks").and_then(|v| v.as_object().cloned()).unwrap_or_default();
-    strip_relay(&mut hooks);
+    strip_relay(&mut hooks, target.marker);
 
-    let command = format!("{}{}", exe.display(), MARKER);
+    let command = format!("{}{}", exe.display(), target.marker);
     let mut events = Vec::new();
     for (event, matcher, timeout) in EVENTS {
         let mut group = Map::new();
@@ -97,11 +97,11 @@ pub fn install(exe: &Path) -> Result<InstallReport> {
     Ok(InstallReport { settings_path: path, backup_path, events, changed })
 }
 
-pub fn uninstall() -> Result<InstallReport> {
-    let path = settings_path();
+pub fn uninstall(target: &Target) -> Result<InstallReport> {
+    let path = target.path.clone();
     let mut root = load(&path)?;
     let mut hooks = root.remove("hooks").and_then(|v| v.as_object().cloned()).unwrap_or_default();
-    let changed = strip_relay(&mut hooks);
+    let changed = strip_relay(&mut hooks, target.marker);
     if !hooks.is_empty() {
         root.insert("hooks".into(), Value::Object(hooks));
     }
@@ -126,9 +126,9 @@ mod tests {
             "Stop": [ { "hooks": [ { "type": "command", "command": "/x/relay hook claude" } ] } ]
         }))
         .unwrap();
-        assert!(strip_relay(&mut hooks));
+        assert!(strip_relay(&mut hooks, " hook claude"));
         assert_eq!(hooks["PreToolUse"].as_array().unwrap().len(), 1);
         assert!(hooks.get("Stop").is_none());
-        assert!(!strip_relay(&mut hooks));
+        assert!(!strip_relay(&mut hooks, " hook claude"));
     }
 }

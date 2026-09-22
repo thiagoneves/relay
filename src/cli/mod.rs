@@ -25,9 +25,9 @@ pub struct Cli {
 pub enum Commands {
     /// Set up this repo: `.relay/` (shared) and the local store
     Init,
-    /// Register hooks for a harness (claude)
+    /// Register hooks for a harness (claude, codex)
     Install { harness: String },
-    /// Remove relay hooks from a harness (claude)
+    /// Remove relay hooks from a harness (claude, codex)
     Uninstall { harness: String },
     /// Hook entry point used by harnesses; reads JSON on stdin
     Hook { harness: String },
@@ -73,6 +73,14 @@ pub enum Commands {
         last: bool,
         args: Vec<String>,
     },
+    /// Launch Codex supervised by relay (installs hooks, writes handoff on exit)
+    #[command(trailing_var_arg = true, allow_hyphen_values = true)]
+    Codex {
+        /// Resume the last relay-supervised session on this branch
+        #[arg(long)]
+        last: bool,
+        args: Vec<String>,
+    },
 }
 
 pub fn run() -> anyhow::Result<i32> {
@@ -89,5 +97,6 @@ pub fn run() -> anyhow::Result<i32> {
         Commands::Status => status::run(),
         Commands::Purge { yes } => purge::run(yes),
         Commands::Claude { last, args } => wrap::run("claude", last, &args),
+        Commands::Codex { last, args } => wrap::run("codex", last, &args),
     }
 }

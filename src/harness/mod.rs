@@ -7,6 +7,8 @@
 //! Any failure is logged locally and swallowed (fail-open).
 
 pub mod claude;
+pub mod codex;
+pub mod protocol;
 
 use std::io::Read;
 use std::path::Path;
@@ -43,7 +45,8 @@ pub trait Harness {
 pub fn by_name(name: &str) -> Result<Box<dyn Harness>> {
     match name {
         "claude" | "claude-code" => Ok(Box::new(claude::Claude)),
-        other => bail!("unknown harness `{other}` (available: claude)"),
+        "codex" => Ok(Box::new(codex::Codex)),
+        other => bail!("unknown harness `{other}` (available: claude, codex)"),
     }
 }
 
