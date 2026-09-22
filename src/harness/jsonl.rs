@@ -62,6 +62,16 @@ pub fn text_of(v: &Value) -> String {
     }
 }
 
+/// A JSON count as `usize`; `None` when missing, negative or not a number.
+pub fn count(v: &Value) -> Option<usize> {
+    v.as_u64().and_then(|n| usize::try_from(n).ok())
+}
+
+/// The strings of a JSON array; anything else reads as empty.
+pub fn strings(v: &Value) -> Vec<String> {
+    v.as_array().into_iter().flatten().filter_map(|x| x.as_str().map(str::to_string)).collect()
+}
+
 /// The last `n` items, in order.
 pub fn last<T>(mut v: Vec<T>, n: usize) -> Vec<T> {
     v.split_off(v.len().saturating_sub(n))
@@ -126,6 +136,15 @@ mod tests {
             let _ = std::fs::remove_file(&link);
         }
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn counts_and_strings_tolerate_other_shapes() {
+        assert_eq!(count(&serde_json::json!(3)), Some(3));
+        assert_eq!(count(&serde_json::json!(-1)), None);
+        assert_eq!(count(&serde_json::json!("3")), None);
+        assert_eq!(strings(&serde_json::json!(["a", 1, "b"])), ["a", "b"]);
+        assert!(strings(&serde_json::json!("a")).is_empty());
     }
 
     #[test]

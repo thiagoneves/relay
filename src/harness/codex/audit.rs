@@ -46,51 +46,69 @@ const BLOCKS: &[(&str, &str, Origin)] = &[
 
 pub fn session(path: &Path) -> Option<SessionAudit> {
     let f = std::fs::File::open(path).ok()?;
-    let mut col = Collector::default();
-    let mut last_total = 0;
-    let mut calls: HashMap<String, String> = HashMap::new();
-
+    let mut walk = Walk { col: Collector::default(), last_total: 0, calls: HashMap::new() };
     for line in BufReader::new(f).lines().map_while(Result::ok) {
-        let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
+        if let Ok(v) = serde_json::from_str::<Value>(&line) {
+            walk.line(&v);
+        }
+    }
+    walk.col.finish()
+}
+
+/// One pass over a rollout, in order.
+struct Walk {
+    col: Collector,
+    /// `token_count` repeats; a call happened only when the total grew.
+    last_total: usize,
+    /// `call_id` → tool name, to name the output that answers it.
+    calls: HashMap<String, String>,
+}
+
+impl Walk {
+    fn line(&mut self, v: &Value) {
         let p = &v["payload"];
         match (v["type"].as_str(), p["type"].as_str()) {
-            (Some("session_meta"), _) => {
-                col.audit.subagent = p["parent_thread_id"].as_str().is_some_and(|s| !s.is_empty());
-                let text = p["base_instructions"]["text"].as_str().or_else(|| p["base_instructions"].as_str());
-                col.add_pinned("Codex system prompt", Origin::Harness, text.unwrap_or(""));
-            }
-            (Some("event_msg"), Some("token_count")) => {
-                let info = &p["info"];
-                let n = |u: &Value, k: &str| u[k].as_u64().and_then(|x| usize::try_from(x).ok()).unwrap_or(0);
-                let total = n(&info["total_token_usage"], "total_tokens");
-                if total > last_total {
-                    last_total = total;
-                    let last = &info["last_token_usage"];
-                    col.call(n(last, "input_tokens"), n(last, "cached_input_tokens"), n(last, "output_tokens"));
-                }
-            }
-            (Some("compacted"), _) | (Some("response_item"), Some("compaction")) => col.compacted(),
-            (Some("response_item"), Some("message")) => message(p, &mut col),
-            (Some("response_item"), Some("function_call" | "custom_tool_call")) => {
-                let args = p["arguments"].as_str().or_else(|| p["input"].as_str()).unwrap_or("");
-                col.add("Conversation: agent tool calls", Origin::Work, args);
-                if let (Some(id), Some(name)) = (p["call_id"].as_str(), p["name"].as_str()) {
-                    calls.insert(id.to_string(), name.to_string());
-                }
-            }
+            (Some("session_meta"), _) => self.meta(p),
+            (Some("event_msg"), Some("token_count")) => self.token_count(&p["info"]),
+            (Some("compacted"), _) | (Some("response_item"), Some("compaction")) => self.col.compacted(),
+            (Some("response_item"), Some("message")) => message(p, &mut self.col),
+            (Some("response_item"), Some("function_call" | "custom_tool_call")) => self.tool_call(p),
             (Some("response_item"), Some("function_call_output" | "custom_tool_call_output")) => {
-                let name = p["call_id"].as_str().and_then(|id| calls.get(id)).map_or("tool", String::as_str);
-                col.add(format!("Tool results: {name}"), Origin::Work, &jsonl::text_of(&p["output"]));
+                let name = p["call_id"].as_str().and_then(|id| self.calls.get(id)).map_or("tool", String::as_str);
+                self.col.add(format!("Tool results: {name}"), Origin::Work, &jsonl::text_of(&p["output"]));
             }
             _ => {}
         }
     }
-    col.finish()
+
+    fn meta(&mut self, p: &Value) {
+        self.col.audit.subagent = p["parent_thread_id"].as_str().is_some_and(|s| !s.is_empty());
+        let text = p["base_instructions"]["text"].as_str().or_else(|| p["base_instructions"].as_str());
+        self.col.add_pinned("Codex system prompt", Origin::Harness, text.unwrap_or(""));
+    }
+
+    fn token_count(&mut self, info: &Value) {
+        let n = |u: &Value, k: &str| jsonl::count(&u[k]).unwrap_or(0);
+        let total = n(&info["total_token_usage"], "total_tokens");
+        if total > self.last_total {
+            self.last_total = total;
+            let last = &info["last_token_usage"];
+            self.col.call(n(last, "input_tokens"), n(last, "cached_input_tokens"), n(last, "output_tokens"));
+        }
+    }
+
+    fn tool_call(&mut self, p: &Value) {
+        let args = p["arguments"].as_str().or_else(|| p["input"].as_str()).unwrap_or("");
+        self.col.add("Conversation: agent tool calls", Origin::Work, args);
+        if let (Some(id), Some(name)) = (p["call_id"].as_str(), p["name"].as_str()) {
+            self.calls.insert(id.to_string(), name.to_string());
+        }
+    }
 }
 
 fn message(p: &Value, col: &mut Collector) {
     let role = p["role"].as_str().unwrap_or("");
-    let text: String = p["content"].as_array().into_iter().flatten().filter_map(|c| c["text"].as_str()).collect();
+    let text = jsonl::text_of(&p["content"]);
     let head = text.trim_start();
     if let Some((_, label, origin)) = BLOCKS.iter().find(|(open, _, _)| head.starts_with(open)) {
         if *label == "Skills listing" {

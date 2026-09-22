@@ -23,124 +23,154 @@ const INJECTING_HOOKS: &[&str] = &["SessionStart", "UserPromptSubmit"];
 
 pub fn session(path: &Path) -> Option<SessionAudit> {
     let f = std::fs::File::open(path).ok()?;
-    let mut col = Collector::default();
-    col.audit.skills_tracked = true;
-    col.audit.subagent = path.parent().is_some_and(|d| d.ends_with("subagents"));
-    let mut seen_msgs = HashSet::new();
-    let mut tool_names: HashMap<String, String> = HashMap::new();
-
+    let mut walk = Walk { col: Collector::default(), seen_msgs: HashSet::new(), tool_names: HashMap::new() };
+    walk.col.audit.skills_tracked = true;
+    walk.col.audit.subagent = path.parent().is_some_and(|d| d.ends_with("subagents"));
     for line in BufReader::new(f).lines().map_while(Result::ok) {
-        let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
-        if v["subtype"] == "compact_boundary" {
-            col.compacted();
-            continue;
-        }
-        if let Some(a) = v.get("attachment") {
-            attachment(a, &mut col);
-            continue;
-        }
-        let m = &v["message"];
-        if let Some(u) = m.get("usage").filter(|u| u.is_object())
-            && m["id"].as_str().is_some_and(|id| seen_msgs.insert(id.to_string()))
-        {
-            let n = |k: &str| u[k].as_u64().and_then(|x| usize::try_from(x).ok()).unwrap_or(0);
-            let cached = n("cache_read_input_tokens");
-            col.call(n("input_tokens") + cached + n("cache_creation_input_tokens"), cached, n("output_tokens"));
-        }
-        if let Some(prompt) = m["content"].as_str().filter(|_| m["role"] == "user") {
-            col.add("Conversation: your messages", Origin::Work, prompt);
-        }
-        let Some(content) = m["content"].as_array() else { continue };
-        for b in content {
-            match b["type"].as_str() {
-                Some("text") if m["role"] == "assistant" => {
-                    col.add("Conversation: agent replies", Origin::Work, b["text"].as_str().unwrap_or(""));
-                }
-                Some("text") if m["role"] == "user" => {
-                    col.add("Conversation: your messages", Origin::Work, b["text"].as_str().unwrap_or(""));
-                }
-                Some("tool_use") => {
-                    col.add("Conversation: agent tool calls", Origin::Work, &b["input"].to_string());
-                    if b["name"] == "Skill"
-                        && let Some(skill) = b["input"]["skill"].as_str()
-                    {
-                        col.audit.skills_invoked.insert(skill.to_string());
-                    }
-                    if let (Some(id), Some(name)) = (b["id"].as_str(), b["name"].as_str()) {
-                        tool_names.insert(id.to_string(), tool_label(name));
-                    }
-                }
-                Some("tool_result") => {
-                    let name = b["tool_use_id"].as_str().and_then(|id| tool_names.get(id)).cloned();
-                    let name = name.unwrap_or_else(|| "tool".into());
-                    col.add(format!("Tool results: {name}"), Origin::Work, &jsonl::text_of(&b["content"]));
-                }
-                _ => {}
-            }
+        if let Ok(v) = serde_json::from_str::<Value>(&line) {
+            walk.line(&v);
         }
     }
-    col.finish()
+    walk.col.finish()
+}
+
+/// One pass over a transcript, in order.
+struct Walk {
+    col: Collector,
+    /// A message is split over several lines that repeat its usage.
+    seen_msgs: HashSet<String>,
+    /// `tool_use` id → label, to name the result that answers it.
+    tool_names: HashMap<String, String>,
+}
+
+impl Walk {
+    fn line(&mut self, v: &Value) {
+        if v["subtype"] == "compact_boundary" {
+            self.col.compacted();
+            return;
+        }
+        if let Some(a) = v.get("attachment") {
+            attachment(a, &mut self.col);
+            return;
+        }
+        let m = &v["message"];
+        self.usage(m);
+        if let Some(prompt) = m["content"].as_str().filter(|_| m["role"] == "user") {
+            self.col.add("Conversation: your messages", Origin::Work, prompt);
+        }
+        for b in m["content"].as_array().into_iter().flatten() {
+            self.block(b, m["role"].as_str().unwrap_or(""));
+        }
+    }
+
+    fn usage(&mut self, m: &Value) {
+        let Some(u) = m.get("usage").filter(|u| u.is_object()) else { return };
+        if !m["id"].as_str().is_some_and(|id| self.seen_msgs.insert(id.to_string())) {
+            return;
+        }
+        let n = |k: &str| jsonl::count(&u[k]).unwrap_or(0);
+        let cached = n("cache_read_input_tokens");
+        self.col.call(n("input_tokens") + cached + n("cache_creation_input_tokens"), cached, n("output_tokens"));
+    }
+
+    fn block(&mut self, b: &Value, role: &str) {
+        match (b["type"].as_str(), role) {
+            (Some("text"), "assistant") => {
+                self.col.add("Conversation: agent replies", Origin::Work, b["text"].as_str().unwrap_or(""));
+            }
+            (Some("text"), "user") => {
+                self.col.add("Conversation: your messages", Origin::Work, b["text"].as_str().unwrap_or(""));
+            }
+            (Some("tool_use"), _) => self.tool_use(b),
+            (Some("tool_result"), _) => {
+                let name = b["tool_use_id"].as_str().and_then(|id| self.tool_names.get(id)).cloned();
+                let name = name.unwrap_or_else(|| "tool".into());
+                self.col.add(format!("Tool results: {name}"), Origin::Work, &jsonl::text_of(&b["content"]));
+            }
+            _ => {}
+        }
+    }
+
+    fn tool_use(&mut self, b: &Value) {
+        self.col.add("Conversation: agent tool calls", Origin::Work, &b["input"].to_string());
+        if b["name"] == "Skill"
+            && let Some(skill) = b["input"]["skill"].as_str()
+        {
+            self.col.audit.skills_invoked.insert(skill.to_string());
+        }
+        if let (Some(id), Some(name)) = (b["id"].as_str(), b["name"].as_str()) {
+            self.tool_names.insert(id.to_string(), tool_label(name));
+        }
+    }
 }
 
 fn attachment(a: &Value, col: &mut Collector) {
     let kind = a["type"].as_str().unwrap_or("");
     match kind {
-        "instructions" => {
-            for f in a["files"].as_array().into_iter().flatten() {
-                let path = tilde(Path::new(f["path"].as_str().unwrap_or("?")));
-                col.add(format!("Instruction file {path}"), Origin::Config, f["content"].as_str().unwrap_or(""));
-            }
-        }
-        "nested_memory" => {
-            let path = tilde(Path::new(a["path"].as_str().unwrap_or("?")));
-            col.add(format!("Instruction file {path}"), Origin::Config, a["content"].as_str().unwrap_or(""));
-        }
-        "skill_listing" => {
-            let names = strings(&a["names"]);
-            let count = a["skillCount"].as_u64().and_then(|n| usize::try_from(n).ok()).unwrap_or(names.len());
-            col.audit.skills_listed.extend(names);
-            col.add_listing("Skills listing", Origin::Config, a["content"].as_str().unwrap_or(""), count);
-        }
-        "invoked_skills" => {
-            for s in a["skills"].as_array().into_iter().flatten() {
-                if let Some(n) = s.as_str().or_else(|| s["name"].as_str()) {
-                    col.audit.skills_invoked.insert(n.to_string());
-                }
-            }
-        }
-        "agent_listing_delta" => {
-            let lines = strings(&a["addedLines"]);
-            col.add_listing("Agent types listing", Origin::Config, &lines.join("\n"), lines.len());
-        }
-        "mcp_instructions_delta" => {
-            let names = strings(&a["addedNames"]);
-            let text = strings(&a["addedBlocks"]).join("\n");
-            col.audit.mcp_servers.extend(names.iter().cloned());
-            let count = col.audit.mcp_servers.len();
-            col.add_listing("MCP server instructions", Origin::Config, &text, count);
-        }
-        "deferred_tools_delta" => {
-            let lines = strings(&a["addedLines"]);
-            col.add_listing("Deferred tool names (MCP and built-in)", Origin::Config, &lines.join("\n"), lines.len());
-        }
-        "hook_success" | "hook_additional_context" | "hook_system_message" => {
-            let event = a["hookEvent"].as_str().unwrap_or("");
-            if kind == "hook_success" && !INJECTING_HOOKS.contains(&event) {
-                return;
-            }
-            let who =
-                a["command"].as_str().map_or_else(|| a["hookName"].as_str().unwrap_or("?").to_string(), short_cmd);
-            col.add(format!("Hook output on {event}: {who}"), Origin::Config, a["content"].as_str().unwrap_or(""));
-        }
-        "hook_non_blocking_error" => {
-            let why = a["stderr"].as_str().unwrap_or("").lines().next().unwrap_or("");
-            col.hook_error(a["command"].as_str().unwrap_or("?"), why);
+        "instructions" | "nested_memory" => instructions(a, col),
+        "skill_listing" | "invoked_skills" => skills(kind, a, col),
+        "agent_listing_delta" | "mcp_instructions_delta" | "deferred_tools_delta" => listing(kind, a, col),
+        "hook_success" | "hook_additional_context" | "hook_system_message" | "hook_non_blocking_error" => {
+            hook(kind, a, col);
         }
         "prompt_snapshot" => {
             col.add_pinned("Claude Code system prompt", Origin::Harness, a["systemPrompt"].as_str().unwrap_or(""));
         }
         _ => {}
     }
+}
+
+/// `instructions` lists every file loaded at start; `nested_memory` is one
+/// file loaded later, when the agent entered its directory.
+fn instructions(a: &Value, col: &mut Collector) {
+    let files = a["files"].as_array().map_or_else(|| vec![a], |fs| fs.iter().collect());
+    for f in files {
+        let path = tilde(Path::new(f["path"].as_str().unwrap_or("?")));
+        col.add(format!("Instruction file {path}"), Origin::Config, f["content"].as_str().unwrap_or(""));
+    }
+}
+
+fn skills(kind: &str, a: &Value, col: &mut Collector) {
+    if kind == "invoked_skills" {
+        for s in a["skills"].as_array().into_iter().flatten() {
+            if let Some(n) = s.as_str().or_else(|| s["name"].as_str()) {
+                col.audit.skills_invoked.insert(n.to_string());
+            }
+        }
+        return;
+    }
+    let names = jsonl::strings(&a["names"]);
+    let count = jsonl::count(&a["skillCount"]).unwrap_or(names.len());
+    col.audit.skills_listed.extend(names);
+    col.add_listing("Skills listing", Origin::Config, a["content"].as_str().unwrap_or(""), count);
+}
+
+fn listing(kind: &str, a: &Value, col: &mut Collector) {
+    if kind == "mcp_instructions_delta" {
+        let text = jsonl::strings(&a["addedBlocks"]).join("\n");
+        col.audit.mcp_servers.extend(jsonl::strings(&a["addedNames"]));
+        let count = col.audit.mcp_servers.len();
+        col.add_listing("MCP server instructions", Origin::Config, &text, count);
+        return;
+    }
+    let source =
+        if kind == "agent_listing_delta" { "Agent types listing" } else { "Deferred tool names (MCP and built-in)" };
+    let lines = jsonl::strings(&a["addedLines"]);
+    col.add_listing(source, Origin::Config, &lines.join("\n"), lines.len());
+}
+
+fn hook(kind: &str, a: &Value, col: &mut Collector) {
+    if kind == "hook_non_blocking_error" {
+        let why = a["stderr"].as_str().unwrap_or("").lines().next().unwrap_or("");
+        col.hook_error(a["command"].as_str().unwrap_or("?"), why);
+        return;
+    }
+    let event = a["hookEvent"].as_str().unwrap_or("");
+    if kind == "hook_success" && !INJECTING_HOOKS.contains(&event) {
+        return;
+    }
+    let who = a["command"].as_str().map_or_else(|| a["hookName"].as_str().unwrap_or("?").to_string(), short_cmd);
+    col.add(format!("Hook output on {event}: {who}"), Origin::Config, a["content"].as_str().unwrap_or(""));
 }
 
 /// Every `command` of every hook in a settings or plugin hooks file.
@@ -179,10 +209,6 @@ fn tool_label(name: &str) -> String {
         Some(rest) => format!("MCP {}", rest.split("__").next().unwrap_or(rest)),
         None => name.to_string(),
     }
-}
-
-fn strings(v: &Value) -> Vec<String> {
-    v.as_array().into_iter().flatten().filter_map(|x| x.as_str().map(str::to_string)).collect()
 }
 
 fn short_cmd(cmd: &str) -> String {

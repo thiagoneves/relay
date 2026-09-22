@@ -60,11 +60,7 @@ fn is_prompt(v: &Value) -> bool {
     if v["isMeta"] == true || v["isCompactSummary"] == true {
         return false;
     }
-    let c = &v["message"]["content"];
-    let text = c.as_str().map_or_else(
-        || c.as_array().into_iter().flatten().filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join(""),
-        str::to_string,
-    );
+    let text = jsonl::text_of(&v["message"]["content"]);
     let t = text.trim_start();
     !t.is_empty() && !t.starts_with('<')
 }
