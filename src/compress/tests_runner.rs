@@ -21,6 +21,7 @@ pub fn filter_for(s: &Simple) -> Option<Filter> {
 
 /// `cargo test`: drop `test x ... ok` lines, keep failures and summaries.
 pub fn cargo_test(text: &str) -> String {
+    const PROGRESS: &[&str] = &["   Compiling ", "    Finished ", "     Running ", "   Doc-tests "];
     let mut out = Vec::new();
     let mut ok = 0usize;
     for l in text.lines() {
@@ -29,11 +30,7 @@ pub fn cargo_test(text: &str) -> String {
             ok += 1;
             continue;
         }
-        if t.starts_with("   Compiling ")
-            || t.starts_with("    Finished ")
-            || t.starts_with("     Running ")
-            || t.starts_with("   Doc-tests ")
-        {
+        if PROGRESS.iter().any(|p| t.starts_with(p)) {
             continue;
         }
         if t.starts_with("running ") && t.ends_with(" tests") || t == "running 1 test" {
@@ -76,17 +73,12 @@ pub fn js_test(text: &str) -> String {
 
 /// pytest: drop progress dots and the header, keep FAILED/ERROR and summary.
 pub fn pytest(text: &str) -> String {
+    const HEADER: &[&str] = &["platform ", "rootdir:", "cachedir:", "plugins:", "collected ", "configfile:"];
     let mut out = Vec::new();
     for l in text.lines() {
         let t = l.trim_end();
         let tt = t.trim();
-        if tt.starts_with("platform ")
-            || tt.starts_with("rootdir:")
-            || tt.starts_with("cachedir:")
-            || tt.starts_with("plugins:")
-            || tt.starts_with("collected ")
-            || tt.starts_with("configfile:")
-        {
+        if HEADER.iter().any(|h| tt.starts_with(h)) {
             continue;
         }
         // Progress lines: "tests/test_x.py ......F..   [ 40%]"
@@ -107,14 +99,11 @@ pub fn pytest(text: &str) -> String {
 
 /// `go test`: keep one `ok` per package, drop `=== RUN` and `--- PASS`.
 pub fn go_test(text: &str) -> String {
+    const NOISE: &[&str] = &["=== RUN", "--- PASS", "=== PAUSE", "=== CONT"];
     text.lines()
         .filter(|l| {
             let t = l.trim_start();
-            !(t.starts_with("=== RUN")
-                || t.starts_with("--- PASS")
-                || t.starts_with("=== PAUSE")
-                || t.starts_with("=== CONT")
-                || t == "PASS")
+            !(NOISE.iter().any(|n| t.starts_with(n)) || t == "PASS")
         })
         .collect::<Vec<_>>()
         .join("\n")

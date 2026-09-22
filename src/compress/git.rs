@@ -58,15 +58,13 @@ pub fn filter_for(s: &Simple) -> Option<Filter> {
 
 /// `git status` (human format): drop hint lines and headers noise.
 pub fn status(text: &str) -> String {
+    const HINTS: &[&str] =
+        &["(use \"git", "(commit or discard", "no changes added to commit", "nothing added to commit"];
     let mut out = Vec::new();
     for l in text.lines() {
         let t = l.trim_end();
         let tt = t.trim_start();
-        if tt.starts_with("(use \"git")
-            || tt.starts_with("(commit or discard")
-            || tt.starts_with("no changes added to commit")
-            || tt.starts_with("nothing added to commit")
-        {
+        if HINTS.iter().any(|h| tt.starts_with(h)) {
             continue;
         }
         let mapped = match tt {
