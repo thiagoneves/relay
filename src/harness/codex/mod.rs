@@ -16,8 +16,8 @@ use anyhow::Result;
 
 use super::protocol::{hook, hooks_json};
 use super::{Harness, InstallReport};
-use crate::core::audit::{SessionAudit, Transcript};
-use crate::core::paths::home;
+use crate::core::audit::{Finding, Kind, Report, SessionAudit, Transcript};
+use crate::core::paths::{home, tilde};
 
 pub struct Codex;
 
@@ -67,5 +67,33 @@ impl Harness for Codex {
 
     fn audit_session(&self, path: &Path) -> Option<SessionAudit> {
         audit::session(path)
+    }
+
+    /// The desktop app can still pick auto-review for a single session.
+    fn settled(&self, f: &Finding) -> Option<String> {
+        let text = std::fs::read_to_string(codex_home().join("config.toml")).ok()?;
+        (f.kind == Kind::AutoReview && config_toml::top_level(&text, "approvals_reviewer")? == "user")
+            .then(|| "config.toml now sets approvals_reviewer = \"user\"".to_string())
+    }
+
+    fn advise(&self, f: &Finding, _r: &Report) -> Vec<String> {
+        if f.is_history() {
+            return Vec::new();
+        }
+        let home = codex_home();
+        let config = tilde(&home.join("config.toml"));
+        let step = match f.kind {
+            Kind::Skills => format!(
+                "Skills load from {} and ~/.agents/skills; for a plugin's skills set `enabled = false` under its [plugins.\"…\"] in {config}",
+                tilde(&home.join("skills"))
+            ),
+            Kind::AutoReview => format!("Set `approvals_reviewer = \"user\"` in {config}"),
+            Kind::HookOutput | Kind::FailingHooks => {
+                format!("Hooks live in {} and in plugins listed in {config}", tilde(&home.join("hooks.json")))
+            }
+            Kind::Mcp | Kind::ToolNames => format!("MCP servers are the [mcp_servers.*] tables in {config}"),
+            Kind::Instructions | Kind::Agents | Kind::Other => return Vec::new(),
+        };
+        vec![step]
     }
 }

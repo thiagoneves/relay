@@ -113,12 +113,9 @@ fn attachment(a: &Value, col: &mut Collector) {
         "mcp_instructions_delta" => {
             let names = strings(&a["addedNames"]);
             let text = strings(&a["addedBlocks"]).join("\n");
-            col.add_listing(
-                format!("MCP server instructions ({})", names.join(", ")),
-                Origin::Config,
-                &text,
-                names.len(),
-            );
+            col.audit.mcp_servers.extend(names.iter().cloned());
+            let count = col.audit.mcp_servers.len();
+            col.add_listing("MCP server instructions", Origin::Config, &text, count);
         }
         "deferred_tools_delta" => {
             let lines = strings(&a["addedLines"]);

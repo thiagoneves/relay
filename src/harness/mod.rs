@@ -16,7 +16,7 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use serde_json::Value;
 
-use crate::core::audit::{SessionAudit, Transcript};
+use crate::core::audit::{Finding, Report, SessionAudit, Transcript};
 use crate::core::bench::ShellCall;
 use crate::core::paths::Paths;
 
@@ -58,6 +58,17 @@ pub trait Harness {
     /// Where one session's context went; see `core::audit`.
     fn audit_session(&self, transcript: &Path) -> Option<SessionAudit> {
         let _ = transcript;
+        None
+    }
+    /// Concrete steps to fix `f` in this harness: commands, files, menus.
+    fn advise(&self, f: &Finding, r: &Report) -> Vec<String> {
+        let _ = (f, r);
+        Vec::new()
+    }
+    /// Why `f` no longer applies, when the adapter can tell from today's
+    /// config and the audited sessions cannot (they predate the change).
+    fn settled(&self, f: &Finding) -> Option<String> {
+        let _ = f;
         None
     }
     fn shell_history(&self, dir: Option<&Path>) -> Result<Vec<ShellCall>> {

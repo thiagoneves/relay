@@ -22,6 +22,16 @@ pub fn enable_hooks(path: &Path) -> Result<bool> {
     Ok(false)
 }
 
+/// A top-level `key = "value"`, before the first table.
+pub fn top_level(text: &str, key: &str) -> Option<String> {
+    text.lines()
+        .map(str::trim)
+        .take_while(|l| !l.starts_with('['))
+        .filter_map(|l| l.split_once('='))
+        .find(|(k, _)| k.trim() == key)
+        .map(|(_, v)| v.trim().trim_matches('"').to_string())
+}
+
 /// `None` when nothing needs to change.
 fn with_hooks_enabled(text: &str) -> Option<String> {
     let lines: Vec<&str> = text.lines().collect();
@@ -92,5 +102,12 @@ mod tests {
     fn appends_section_when_missing() {
         let out = with_hooks_enabled("model = \"x\"\n").unwrap();
         assert_eq!(out, "model = \"x\"\n\n[features]\nhooks = true\n");
+    }
+
+    #[test]
+    fn reads_top_level_keys_only() {
+        let text = "model = \"x\"\napprovals_reviewer = \"user\"\n[features]\nhooks = true\n";
+        assert_eq!(top_level(text, "approvals_reviewer").as_deref(), Some("user"));
+        assert_eq!(top_level(text, "hooks"), None);
     }
 }

@@ -5,12 +5,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
+mod advice;
 mod audit;
 mod transcript;
 
 use super::protocol::{hook, hooks_json};
 use super::{Harness, InstallReport};
-use crate::core::audit::{SessionAudit, Transcript};
+use crate::core::audit::{Finding, Report, SessionAudit, Transcript};
 use crate::core::bench::ShellCall;
 use crate::core::paths::home;
 
@@ -62,6 +63,10 @@ impl Harness for Claude {
 
     fn audit_session(&self, path: &Path) -> Option<SessionAudit> {
         audit::session(path)
+    }
+
+    fn advise(&self, f: &Finding, r: &Report) -> Vec<String> {
+        advice::steps(f, r, &config_dir())
     }
 
     /// Project settings live in each project, so only a single project can
