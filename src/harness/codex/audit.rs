@@ -36,6 +36,12 @@ const BLOCKS: &[(&str, &str, Origin)] = &[
     ("<multi_agent", "Multi-agent instructions", Origin::Harness),
     ("You are `/root`", "Multi-agent instructions", Origin::Harness),
     ("<in-app-browser-context", "In-app browser context", Origin::Harness),
+    ("You are an agent in a team of agents", "Multi-agent instructions", Origin::Harness),
+    ("You are running inside the Codex Chrome extension", "Chrome extension context", Origin::Harness),
+    ("Use prior reviews as context", "Auto-review guidance", Origin::Harness),
+    ("<image_resize_notice>", "Image resize notices", Origin::Harness),
+    ("<turn_aborted>", "Turn aborted notices", Origin::Harness),
+    ("Approved command prefix saved:", "Approved command notices", Origin::Harness),
 ];
 
 pub fn session(path: &Path) -> Option<SessionAudit> {
@@ -94,8 +100,7 @@ fn message(p: &Value, col: &mut Collector) {
         }
     } else if role == "developer" {
         // Plugin and hook output (claude-mem, design linters) lands here.
-        let first = crate::helpers::truncate_chars(head.lines().next().unwrap_or(""), 50);
-        col.add(format!("Hook or plugin output: {first}"), Origin::Config, &text);
+        col.add(developer_label(head), Origin::Config, &text);
     } else if role == "user" {
         col.add("Conversation: your messages", Origin::Work, &text);
     } else if role == "assistant" {
@@ -103,9 +108,51 @@ fn message(p: &Value, col: &mut Collector) {
     }
 }
 
+/// One label per source, not per message: the same hook reports a
+/// different file each time (`[impeccable@1] Design hook scanned a.tsx`),
+/// and split by content its cost falls below the audit's threshold.
+fn developer_label(head: &str) -> String {
+    let first = head.lines().next().unwrap_or("").trim();
+    if first.starts_with('[')
+        && let Some(end) = first.find(']')
+    {
+        return format!("Hook or plugin output: {}", &first[..=end]);
+    }
+    if let Some(name) = first.strip_prefix("Capabilities from the `").and_then(|r| r.split('`').next()) {
+        return format!("Plugin capabilities: {name}");
+    }
+    let stem = first.split([':', '.']).next().unwrap_or(first).trim();
+    format!("Hook or plugin output: {}", crate::helpers::truncate_chars(stem, 40))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn developer_messages_from_one_source_share_a_label() {
+        let a = developer_label("[impeccable@1] Design hook scanned apps/a.tsx. No issues");
+        let b = developer_label("[impeccable@1] Suppressing further design hints on apps/b.ts");
+        assert_eq!(a, "Hook or plugin output: [impeccable@1]");
+        assert_eq!(a, b);
+        assert_eq!(developer_label("Capabilities from the `Canva` plugin:\n- x"), "Plugin capabilities: Canva");
+        assert_eq!(developer_label("# claude-mem status\nlots"), "Hook or plugin output: # claude-mem status");
+    }
+
+    #[test]
+    fn harness_notices_are_not_charged_to_config() {
+        let mut col = Collector::default();
+        for text in ["<image_resize_notice>\nresized", "<turn_aborted>", "Approved command prefix saved: git"] {
+            message(&serde_json::json!({ "role": "developer", "content": [{ "text": text }] }), &mut col);
+        }
+        col.call(1000, 0, 1);
+        let a = col.finish().unwrap();
+        assert!(
+            a.costs.iter().all(|c| c.origin == Origin::Harness),
+            "{:?}",
+            a.costs.iter().map(|c| &c.source).collect::<Vec<_>>()
+        );
+    }
 
     #[test]
     fn classifies_blocks_and_prices_them_by_later_calls() {
