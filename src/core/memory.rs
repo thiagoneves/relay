@@ -72,12 +72,14 @@ pub fn remember(paths: &Paths, item: &NewItem) -> Result<PathBuf> {
     if let Some(dup) = list(paths).into_iter().find(|i| i.kind == item.kind && i.title == title) {
         bail!("already remembered in {}", paths.rel(&dup.path));
     }
-    let dir = dir_for(paths, item.kind);
-    let path = unique_path(&dir, &slug(&title));
-    let git = gitstate::state(&paths.root);
+    let path = unique_path(&dir_for(paths, item.kind), &slug(&title));
+    write_atomic(&path, render(item, &gitstate::state(&paths.root), &now_iso()).as_bytes())?;
+    Ok(path)
+}
 
-    let mut b = String::from("---\n");
-    b.push_str(&format!("kind: {}\ncreated: {}\n", item.kind, now_iso()));
+/// The item file: where and when it was learned, then the text.
+fn render(item: &NewItem, git: &gitstate::GitState, created: &str) -> String {
+    let mut b = format!("---\nkind: {}\ncreated: {created}\n", item.kind);
     if !git.branch.is_empty() {
         b.push_str(&format!("branch: {}\n", git.branch));
     }
@@ -90,11 +92,7 @@ pub fn remember(paths: &Paths, item: &NewItem) -> Result<PathBuf> {
     if !item.files.is_empty() {
         b.push_str(&format!("paths: {}\n", item.files.join(", ")));
     }
-    b.push_str("---\n\n");
-    b.push_str(text);
-    b.push('\n');
-    write_atomic(&path, b.as_bytes())?;
-    Ok(path)
+    format!("{b}---\n\n{}\n", item.text.trim())
 }
 
 /// All items, newest first within each kind, kinds in `Kind::ALL` order.
@@ -182,6 +180,16 @@ mod tests {
         assert_eq!(items[0].title, "Hooks fail open");
         assert_eq!(items[0].created, "2026-09-22");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn item_records_where_it_was_learned() {
+        let git = gitstate::GitState { branch: "main".into(), sha: "abc1234".into(), dirty: vec![] };
+        let item = NewItem { kind: Kind::Gotcha, text: " Hooks fail open \n", files: &[], session: Some("s1") };
+        assert_eq!(
+            render(&item, &git, "2026-09-22T10:00:00Z"),
+            "---\nkind: gotcha\ncreated: 2026-09-22T10:00:00Z\nbranch: main\nsha: abc1234\nsession: s1\n---\n\nHooks fail open\n"
+        );
     }
 
     #[test]
