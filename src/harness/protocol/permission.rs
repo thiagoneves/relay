@@ -1,44 +1,27 @@
-//! Whether a rewritten command may skip the harness's permission prompt.
+//! Which commands relay may rewrite, and so approve.
 //!
-//! A rewrite is `relay x … -- '<cmd>'`, and harness permission rules are
-//! matched against that rewritten text, not the original. Approving it
-//! outright would let any command through that merely contains `ls` or
-//! `git`; leaving it to the harness means the user's own allow rules no
-//! longer match. Only commands that cannot change anything are approved.
+//! A rewrite is `relay x … -- '<cmd>'`, and the harness judges that text,
+//! not the original: permission rules stop matching and auto mode reads
+//! the wrapper as an attempt to get around it. So relay only rewrites
+//! what it can approve itself, reads and routine development tasks, and
+//! leaves every other command untouched for the harness to judge.
 
 use crate::compress::command::segments;
-use crate::harness::RewriteSupport;
 
-/// What the hook answers for a command it wants to route through relay.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Rewrite {
-    /// Rewrite and approve: every segment is read-only.
-    Approve,
-    /// Rewrite and let the harness's rules and mode decide.
-    Defer,
-    /// Leave the command alone.
-    Skip,
-}
-
-/// `prefix` is the `cd`/`export` part kept in the harness's shell, `body`
-/// the part routed through `relay x`; approval needs both read-only.
-pub fn rewrite_for(prefix: &str, body: &str, support: RewriteSupport) -> Rewrite {
-    let read_only = is_read_only(body) && (prefix.is_empty() || is_read_only(prefix));
-    match (support, read_only) {
-        (RewriteSupport::Never, _) | (RewriteSupport::ApprovedOnly, false) => Rewrite::Skip,
-        (_, true) => Rewrite::Approve,
-        (RewriteSupport::Any, false) => Rewrite::Defer,
-    }
+/// Whether `prefix` (the `cd`/`export` part kept in the harness's shell)
+/// and `body` (the part routed through `relay x`) are safe to approve.
+pub fn approves(prefix: &str, body: &str) -> bool {
+    safe_chain(body) && (prefix.is_empty() || safe_chain(prefix))
 }
 
 /// Redirections that only merge or discard streams.
 const HARMLESS_REDIRECTS: &[&str] = &["2>&1", "1>&2", ">&2", "2>/dev/null", ">/dev/null", "&>/dev/null"];
 
-/// True when every segment of the chain is a known read-only command and
-/// nothing writes to a file or runs a substituted command. Unknown means
-/// not read-only: a false negative costs a prompt, a false positive
-/// skips one.
-fn is_read_only(cmd: &str) -> bool {
+/// True when every segment of the chain is a read or a routine dev task
+/// and nothing writes to a file or runs a substituted command. Unknown
+/// means unsafe: a false negative costs compression, a false positive
+/// skips a prompt.
+fn safe_chain(cmd: &str) -> bool {
     let mut cleaned = cmd.to_string();
     for r in HARMLESS_REDIRECTS {
         cleaned = cleaned.replace(r, " ");
@@ -47,7 +30,7 @@ fn is_read_only(cmd: &str) -> bool {
         return false;
     }
     let segs = segments(&cleaned);
-    !segs.is_empty() && segs.iter().all(|s| segment_read_only(s.text))
+    !segs.is_empty() && segs.iter().all(|s| segment_safe(s.text))
 }
 
 /// A redirection outside quotes, or a command substitution outside single
@@ -71,19 +54,29 @@ fn writes_or_substitutes(cmd: &str) -> bool {
     false
 }
 
-fn segment_read_only(seg: &str) -> bool {
+fn segment_safe(seg: &str) -> bool {
     let mut words = seg.split_whitespace().skip_while(|w| is_env_assignment(w));
-    let Some(program) = words.next() else { return false };
+    let Some(first) = words.next() else { return false };
+    let program = crate::compress::command::program(first);
     let args: Vec<&str> = words.collect();
-    let has = |flags: &[&str]| args.iter().any(|a| flags.iter().any(|f| a == f || a.starts_with(&format!("{f}="))));
+    reads(program, &args) || super::dev_tasks::is_dev_task(program, &args)
+}
+
+fn has(args: &[&str], flags: &[&str]) -> bool {
+    args.iter().any(|a| flags.iter().any(|f| a == f || a.starts_with(&format!("{f}="))))
+}
+
+fn reads(program: &str, args: &[&str]) -> bool {
+    let has = |flags: &[&str]| has(args, flags);
     match program {
-        "ls" | "cat" | "head" | "wc" | "grep" | "pwd" | "du" | "df" | "stat" | "which" | "cd" => true,
+        "ls" | "cat" | "head" | "wc" | "grep" | "pwd" | "du" | "df" | "stat" | "which" | "diff" | "sort" | "uniq"
+        | "cut" | "nl" | "jq" | "basename" | "dirname" | "realpath" | "cd" | "pushd" | "popd" | "export" => true,
         "rg" => !has(&["--pre"]),
         "tree" => !has(&["-o"]),
         "file" => !has(&["-C", "--compile"]),
         "tail" => !has(&["-f", "-F", "--follow"]),
         "find" => !has(&["-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0", "-fprintf", "-fls"]),
-        "git" => git_read_only(&args),
+        "git" => git_read_only(args),
         _ => false,
     }
 }
@@ -150,7 +143,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn approves_read_only_chains() {
+    fn approves_reads() {
         for cmd in [
             "git status",
             "git -C sub log --oneline -5",
@@ -164,12 +157,12 @@ mod tests {
             "tail -n 50 log.txt",
             "cat f 2>/dev/null",
         ] {
-            assert!(is_read_only(cmd), "{cmd}");
+            assert!(safe_chain(cmd), "{cmd}");
         }
     }
 
     #[test]
-    fn refuses_anything_that_can_change_state() {
+    fn refuses_anything_else() {
         for cmd in [
             "rm -rf build && ls",
             "git push --force origin main",
@@ -188,21 +181,21 @@ mod tests {
             "tail -f server.log",
             "ls $(rm -rf x)",
             "ls `rm -rf x`",
-            "cargo test",
-            "npm run build",
+            "cargo run",
+            "npm install",
+            "make deploy",
             "",
         ] {
-            assert!(!is_read_only(cmd), "{cmd}");
+            assert!(!safe_chain(cmd), "{cmd}");
         }
     }
 
     #[test]
-    fn codex_skips_what_it_cannot_defer() {
-        assert_eq!(rewrite_for("", "git status", RewriteSupport::ApprovedOnly), Rewrite::Approve);
-        assert_eq!(rewrite_for("", "cargo test", RewriteSupport::Any), Rewrite::Defer);
-        assert_eq!(rewrite_for("", "cargo test", RewriteSupport::ApprovedOnly), Rewrite::Skip);
-        assert_eq!(rewrite_for("cd /x && ", "git status", RewriteSupport::Any), Rewrite::Approve);
-        assert_eq!(rewrite_for("export A=1 && ", "git status", RewriteSupport::Any), Rewrite::Defer);
-        assert_eq!(rewrite_for("", "git status", RewriteSupport::Never), Rewrite::Skip);
+    fn prefix_and_body_both_count() {
+        assert!(approves("", "git status"));
+        assert!(approves("cd /x && ", "cargo test"));
+        assert!(approves("export CI=1 && ", "git status"));
+        assert!(!approves("", "rm -rf build && ls"));
+        assert!(!approves("rm -rf x; ", "git status"));
     }
 }

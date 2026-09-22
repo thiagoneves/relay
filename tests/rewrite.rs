@@ -15,25 +15,21 @@ fn pre(repo: &Repo, harness: &str, tool_input: &Value) -> Option<Value> {
     (!out.is_empty()).then(|| serde_json::from_str::<Value>(out).unwrap()["hookSpecificOutput"].clone())
 }
 
+/// Every rewrite is approved; whatever relay would not approve stays
+/// untouched, so the harness judges the agent's own command.
 #[test]
-fn only_read_only_commands_are_approved() {
+fn rewrites_are_approved_and_the_rest_left_alone() {
     let repo = Repo::new("rewrite-perm");
-    let ro = pre(&repo, "claude", &json!({ "command": "git status" })).unwrap();
-    assert_eq!(ro["permissionDecision"], "allow");
-
-    assert!(pre(&repo, "claude", &json!({ "command": "git push --force origin main" })).is_none());
-    for cmd in ["rm -rf build && ls", "cargo test"] {
-        let out = pre(&repo, "claude", &json!({ "command": cmd })).unwrap();
-        assert!(out["updatedInput"]["command"].as_str().unwrap().contains(" x --session "), "{cmd}");
-        assert!(out.get("permissionDecision").is_none(), "{cmd} must go through the normal permission flow: {out}");
+    for harness in ["claude", "codex"] {
+        for cmd in ["git status", "cargo test"] {
+            let out = pre(&repo, harness, &json!({ "command": cmd })).unwrap();
+            assert!(out["updatedInput"]["command"].as_str().unwrap().contains(" x --session "), "{cmd}");
+            assert_eq!(out["permissionDecision"], "allow", "{harness}: {cmd}");
+        }
+        for cmd in ["git push --force origin main", "rm -rf build && ls", "cargo run"] {
+            assert!(pre(&repo, harness, &json!({ "command": cmd })).is_none(), "{harness}: {cmd}");
+        }
     }
-}
-
-#[test]
-fn codex_leaves_what_it_would_have_to_approve() {
-    let repo = Repo::new("rewrite-codex");
-    assert_eq!(pre(&repo, "codex", &json!({ "command": "git status" })).unwrap()["permissionDecision"], "allow");
-    assert!(pre(&repo, "codex", &json!({ "command": "cargo test" })).is_none());
 }
 
 #[test]
@@ -63,8 +59,8 @@ fn leading_cd_stays_in_the_harness_shell() {
     assert!(cmd.starts_with("cd /repo && ") && cmd.ends_with("-- 'git status'"), "{cmd}");
     assert_eq!(out["permissionDecision"], "allow");
 
-    let out = pre(&repo, "claude", &json!({ "command": "export CI=1 && git status" })).unwrap();
-    assert!(out.get("permissionDecision").is_none(), "an export prefix is not read-only: {out}");
+    let out = pre(&repo, "claude", &json!({ "command": "export CI=1 && cargo test" })).unwrap();
+    assert!(out["updatedInput"]["command"].as_str().unwrap().starts_with("export CI=1 && "), "{out}");
 
     assert!(pre(&repo, "claude", &json!({ "command": "cd /repo" })).is_none());
 }

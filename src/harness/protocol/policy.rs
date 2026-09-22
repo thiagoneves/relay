@@ -3,7 +3,7 @@
 
 use crate::compress::command::{Joint, head_tokens, program, segments, split_shell_state};
 use crate::harness::RewriteSupport;
-use crate::harness::protocol::permission::{self, Rewrite};
+use crate::harness::protocol::permission;
 use crate::helpers::shell;
 
 /// A command line the hook hands back to the harness in place of the
@@ -43,17 +43,15 @@ pub fn rewrite(call: &Call, relay: impl FnOnce() -> String) -> Option<Rewritten>
     {
         return Some(Rewritten { command, approve: false });
     }
-    let (prefix, body) = wrap_target(cmd)?;
+    if support == RewriteSupport::Never {
+        return None;
+    }
+    let (prefix, body) = approved_target(cmd)?;
     if isolated && body.contains("git") {
         return None;
     }
-    let approve = match permission::rewrite_for(prefix, body, support) {
-        Rewrite::Skip => return None,
-        Rewrite::Approve => true,
-        Rewrite::Defer => false,
-    };
     let command = format!("{prefix}{} x --session {} -- {}", relay(), shell::quote(session), shell::quote(body));
-    Some(Rewritten { command, approve })
+    Some(Rewritten { command, approve: true })
 }
 
 /// Whether `cwd` is inside a worktree Claude Code made for an isolated
@@ -71,6 +69,12 @@ fn remember_with_session(cmd: &str, session: &str) -> Option<String> {
         return None;
     }
     Some(format!("relay remember --session {} {rest}", shell::quote(session)))
+}
+
+/// The `(prefix, body)` split of a command relay would rewrite and
+/// approve. `bench` uses it to model the hook.
+pub fn approved_target(cmd: &str) -> Option<(&str, &str)> {
+    wrap_target(cmd).filter(|(prefix, body)| permission::approves(prefix, body))
 }
 
 /// The part of `cmd` to route through `relay x`, after any leading
@@ -364,7 +368,8 @@ mod tests {
         assert_eq!(r.command, "cd /repo && relay x --session 's1' -- 'git status'");
         assert!(r.approve);
         assert_eq!(rewrite(&Call { background: true, ..call("git status") }, relay), None);
-        assert_eq!(rewrite(&Call { support: RewriteSupport::ApprovedOnly, ..call("cargo test") }, relay), None);
+        assert_eq!(rewrite(&Call { support: RewriteSupport::Never, ..call("cargo test") }, relay), None);
+        assert_eq!(rewrite(&call("rm -rf build && ls"), relay), None);
     }
 
     #[test]

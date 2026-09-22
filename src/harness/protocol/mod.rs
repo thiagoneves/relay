@@ -2,6 +2,7 @@
 //! events on stdin and a `hooks.json`-style registration file. Adapters
 //! that speak it only need to say where their file lives.
 
+mod dev_tasks;
 pub mod hook;
 pub mod hooks_json;
 mod permission;

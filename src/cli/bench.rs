@@ -17,13 +17,13 @@ pub fn run(source: Source, json: bool, min_recall: Option<f64>) -> anyhow::Resul
     let (label, samples) = match source {
         Source::Corpus(dir) => (
             format!("corpus {}, current hook policy", dir.display()),
-            bench::from_corpus(&dir, |c| harness::protocol::policy::wrap_target(c).is_some())?,
+            bench::from_corpus(&dir, |c| harness::protocol::policy::approved_target(c).is_some())?,
         ),
         Source::History(id, dir) => {
             let h = id.adapter();
             let calls = h.shell_history(dir.as_deref())?;
             let label = format!("{} transcripts, current filters and hook policy", h.id());
-            (label, bench::from_history(&calls, |c| harness::protocol::policy::wrap_target(c).is_some()))
+            (label, bench::from_history(&calls, |c| harness::protocol::policy::approved_target(c).is_some()))
         }
         Source::Store => {
             let paths = Paths::from_cwd()?;
