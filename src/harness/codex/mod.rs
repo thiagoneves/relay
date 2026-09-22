@@ -6,7 +6,9 @@
 //! `.git/` is read-only, so `relay x` cannot keep originals there. See
 //! `core::exec` for the degraded path.
 
+mod audit;
 mod config_toml;
+mod transcript;
 
 use std::path::{Path, PathBuf};
 
@@ -14,6 +16,7 @@ use anyhow::Result;
 
 use super::protocol::{hook, hooks_json};
 use super::{Harness, InstallReport};
+use crate::core::audit::{SessionAudit, Transcript};
 use crate::core::paths::home;
 
 pub struct Codex;
@@ -56,5 +59,13 @@ impl Harness for Codex {
 
     fn resume_args(&self, session_id: &str) -> Vec<String> {
         vec!["resume".into(), session_id.into()]
+    }
+
+    fn transcripts(&self, root: Option<&Path>) -> Vec<Transcript> {
+        transcript::rollouts(&codex_home().join("sessions"), root)
+    }
+
+    fn audit_session(&self, path: &Path) -> Option<SessionAudit> {
+        audit::session(path)
     }
 }

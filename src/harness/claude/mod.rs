@@ -5,10 +5,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
+mod audit;
 mod transcript;
 
 use super::protocol::{hook, hooks_json};
 use super::{Harness, InstallReport};
+use crate::core::audit::{SessionAudit, Transcript};
 use crate::core::bench::ShellCall;
 use crate::core::paths::home;
 
@@ -47,6 +49,19 @@ impl Harness for Claude {
 
     fn resume_args(&self, session_id: &str) -> Vec<String> {
         vec!["--resume".into(), session_id.into()]
+    }
+
+    fn transcripts(&self, root: Option<&Path>) -> Vec<Transcript> {
+        let projects = config_dir().join("projects");
+        let dirs: Vec<PathBuf> = match root {
+            Some(r) => vec![projects.join(transcript::project_slug(r))],
+            None => std::fs::read_dir(&projects).map(|rd| rd.flatten().map(|e| e.path()).collect()).unwrap_or_default(),
+        };
+        dirs.iter().flat_map(|d| transcript::sessions_in(d)).collect()
+    }
+
+    fn audit_session(&self, path: &Path) -> Option<SessionAudit> {
+        audit::session(path)
     }
 
     fn shell_history(&self, dir: Option<&Path>) -> Result<Vec<ShellCall>> {

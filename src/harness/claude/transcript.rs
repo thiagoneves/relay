@@ -1,7 +1,6 @@
-//! Shell calls recorded in Claude Code transcripts
-//! (`<config>/projects/<project>/<session>.jsonl`): an assistant
-//! `tool_use` named `Bash`, answered later by a user `tool_result` with
-//! the same id. Read only, for `relay bench --history`.
+//! Claude Code transcripts (`<config>/projects/<project>/<session>.jsonl`),
+//! read only: where they live, and the shell calls in them (an assistant
+//! `tool_use` named `Bash`, answered later by a user `tool_result`).
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
@@ -9,7 +8,39 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
+use crate::core::audit::Transcript;
 use crate::core::bench::ShellCall;
+
+/// Claude Code names a project's transcript dir after its path with every
+/// non-alphanumeric character turned into `-`.
+pub fn project_slug(root: &Path) -> String {
+    root.display().to_string().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
+}
+
+/// `<dir>/<session>.jsonl`, and `<dir>/<session>/subagents/*.jsonl` for
+/// the subagents that session spawned.
+pub fn sessions_in(dir: &Path) -> Vec<Transcript> {
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir(dir) else { return out };
+    for e in rd.flatten() {
+        let p = e.path();
+        let Some(stem) = p.file_stem().and_then(|s| s.to_str()).map(str::to_string) else { continue };
+        if p.extension().is_some_and(|x| x == "jsonl") {
+            out.push(transcript(p, stem, None));
+        } else if let Ok(subs) = std::fs::read_dir(p.join("subagents")) {
+            for s in subs.flatten().map(|s| s.path()).filter(|s| s.extension().is_some_and(|x| x == "jsonl")) {
+                let id = s.file_stem().and_then(|x| x.to_str()).unwrap_or("").to_string();
+                out.push(transcript(s, id, Some(stem.clone())));
+            }
+        }
+    }
+    out
+}
+
+fn transcript(path: PathBuf, id: String, parent: Option<String>) -> Transcript {
+    let modified = std::fs::metadata(&path).and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH);
+    Transcript { path, id, parent, modified }
+}
 
 pub fn shell_calls(dir: &Path) -> Vec<ShellCall> {
     let mut files = Vec::new();

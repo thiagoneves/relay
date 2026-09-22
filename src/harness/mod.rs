@@ -16,6 +16,7 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use serde_json::Value;
 
+use crate::core::audit::{SessionAudit, Transcript};
 use crate::core::bench::ShellCall;
 use crate::core::paths::Paths;
 
@@ -42,10 +43,26 @@ pub trait Harness {
     fn resume_args(&self, session_id: &str) -> Vec<String>;
     /// Shell calls from the harness's own transcripts, for benchmarking
     /// against real history. `dir` overrides the default location.
+    /// Session transcripts for the project at `root`, or for every
+    /// project when `None`, subagents included.
+    fn transcripts(&self, root: Option<&Path>) -> Vec<Transcript> {
+        let _ = root;
+        Vec::new()
+    }
+    /// Where one session's context went; see `core::audit`.
+    fn audit_session(&self, transcript: &Path) -> Option<SessionAudit> {
+        let _ = transcript;
+        None
+    }
     fn shell_history(&self, dir: Option<&Path>) -> Result<Vec<ShellCall>> {
         let _ = dir;
         bail!("reading {} history is not supported yet", self.id())
     }
+}
+
+/// Every adapter relay has, for commands that look across harnesses.
+pub fn all() -> Vec<Box<dyn Harness>> {
+    vec![Box::new(claude::Claude), Box::new(codex::Codex)]
 }
 
 pub fn by_name(name: &str) -> Result<Box<dyn Harness>> {
