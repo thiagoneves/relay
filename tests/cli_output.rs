@@ -66,8 +66,20 @@ fn getting_an_unknown_output() {
 #[test]
 fn installing_hooks() {
     let repo = Repo::new("snap-install");
-    check("install-claude", &repo.run(&["install", "claude"]));
-    check("install-claude-again", &repo.run(&["install", "claude"]));
+    // The next step depends on whether `claude` is installed; a stub on
+    // PATH makes it the same everywhere (`.cmd` for Windows' PATHEXT).
+    let bin = repo.root.join("fakebin");
+    std::fs::create_dir_all(&bin).unwrap();
+    for name in ["claude", "claude.cmd"] {
+        std::fs::write(bin.join(name), "").unwrap();
+    }
+    let path = std::env::join_paths(
+        std::iter::once(bin).chain(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())),
+    )
+    .unwrap();
+    let install = || repo.isolated(common::relay()).args(["install", "claude"]).env("PATH", &path).output().unwrap();
+    check("install-claude", &install());
+    check("install-claude-again", &install());
     check("uninstall-claude", &repo.run(&["uninstall", "claude"]));
     check("uninstall-claude-again", &repo.run(&["uninstall", "claude"]));
 }
