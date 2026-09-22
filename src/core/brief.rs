@@ -19,16 +19,21 @@ struct Inputs {
     /// Repo-relative path and body of the latest handoff.
     handoff: Option<(String, String)>,
     items: Vec<memory::Item>,
+    /// Per item, the paths it is about that changed since it was saved.
+    stale: Vec<Vec<String>>,
     shared_dir: String,
 }
 
 fn gather(paths: &Paths) -> Inputs {
     let branch = gitstate::branch(&paths.root);
+    let items = memory::list(paths);
+    let stale = memory::staleness(&paths.root, &items, limits::brief::STALE_COMMITS);
     Inputs {
         project: std::fs::read_to_string(paths.project_file()).unwrap_or_default(),
         handoff: handoff::latest(paths, &branch).map(|(p, body)| (paths.rel(&p), body)),
         branch,
-        items: memory::list(paths),
+        items,
+        stale,
         shared_dir: paths.rel(&paths.shared),
     }
 }
@@ -42,7 +47,7 @@ fn compose(i: &Inputs) -> String {
         out.push_str("\n\n");
     }
     if !i.items.is_empty() {
-        out.push_str(&memory_section(&i.items, &i.shared_dir));
+        out.push_str(&memory_section(&i.items, &i.stale, &i.shared_dir));
     }
     match &i.handoff {
         Some((path, body)) => out.push_str(&last_session(body, path, &i.branch, out.len())),
@@ -115,11 +120,18 @@ fn handoff_for_brief(body: &str) -> String {
 }
 
 /// One line per item, grouped by kind, until the budget runs out.
-fn memory_section(items: &[memory::Item], shared_dir: &str) -> String {
+/// An item whose paths changed since it was saved is marked, so the agent
+/// checks it before relying on it.
+fn memory_section(items: &[memory::Item], stale: &[Vec<String>], shared_dir: &str) -> String {
     let mut s = String::from("## Remembered\n");
     let mut shown = 0;
-    for it in items {
-        let line = format!("- {}: {}\n", it.kind, it.title);
+    for (it, changed) in items.iter().zip(stale.iter().chain(std::iter::repeat(&Vec::new()))) {
+        let mark = if changed.is_empty() {
+            String::new()
+        } else {
+            format!(" _(may be stale: {} changed since)_", changed.join(", "))
+        };
+        let line = format!("- {}: {}{mark}\n", it.kind, it.title);
         if s.len() + line.len() > limits::brief::MEMORY_CHARS {
             break;
         }
@@ -150,8 +162,28 @@ mod tests {
             branch: "main".into(),
             handoff: None,
             items: vec![],
+            stale: vec![],
             shared_dir: ".relay".into(),
         }
+    }
+
+    #[test]
+    fn an_item_whose_paths_changed_is_marked() {
+        let item = |title: &str| memory::Item {
+            kind: memory::Kind::Gotcha,
+            path: "g.md".into(),
+            title: title.into(),
+            created: String::new(),
+            sha: Some("abc".into()),
+            about: vec!["src/pay.rs".into()],
+        };
+        let out = compose(&Inputs {
+            items: vec![item("Retries need jitter"), item("Amounts are cents")],
+            stale: vec![vec!["src/pay.rs".into()], vec![]],
+            ..inputs()
+        });
+        assert!(out.contains("- gotcha: Retries need jitter _(may be stale: src/pay.rs changed since)_\n"), "{out}");
+        assert!(out.contains("- gotcha: Amounts are cents\n"), "{out}");
     }
 
     #[test]

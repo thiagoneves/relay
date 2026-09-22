@@ -50,6 +50,42 @@ pub struct Item {
     pub path: PathBuf,
     pub title: String,
     pub created: String,
+    /// The commit the item was saved on.
+    pub sha: Option<String>,
+    /// Repo paths the item is about, as given to `--path`.
+    pub about: Vec<String>,
+}
+
+impl Item {
+    /// The paths this item is about that appear in `changed`: files that
+    /// moved on since the item was saved, so it may no longer hold. A
+    /// directory counts when anything under it changed.
+    pub fn changed<'a>(&'a self, changed: &[String]) -> Vec<&'a str> {
+        self.about
+            .iter()
+            .map(|p| p.trim_start_matches("./").trim_end_matches('/'))
+            .filter(|p| !p.is_empty())
+            .filter(|p| changed.iter().any(|c| c == p || c.starts_with(&format!("{p}/"))))
+            .collect()
+    }
+}
+
+/// For each item, the paths it is about that changed since it was saved.
+/// One git call per distinct commit, newest items first, up to
+/// `max_commits`; items past that, or without paths, report nothing.
+pub fn staleness(root: &std::path::Path, items: &[Item], max_commits: usize) -> Vec<Vec<String>> {
+    let mut by_sha: std::collections::HashMap<&str, Option<Vec<String>>> = std::collections::HashMap::new();
+    items
+        .iter()
+        .map(|it| {
+            let Some(sha) = it.sha.as_deref().filter(|_| !it.about.is_empty()) else { return Vec::new() };
+            if !by_sha.contains_key(sha) && by_sha.len() >= max_commits {
+                return Vec::new();
+            }
+            let changed = by_sha.entry(sha).or_insert_with(|| crate::helpers::git::changed_since(root, sha));
+            changed.as_deref().map(|c| it.changed(c).into_iter().map(str::to_string).collect()).unwrap_or_default()
+        })
+        .collect()
 }
 
 pub fn dir_for(paths: &Paths, kind: Kind) -> PathBuf {
@@ -130,7 +166,11 @@ pub fn list(paths: &Paths) -> Vec<Item> {
             if title.is_empty() {
                 continue;
             }
-            items.push(Item { kind, path: p, title, created });
+            let sha = frontmatter::get(&body, "sha").filter(|s| !s.is_empty());
+            let about = frontmatter::get(&body, "paths")
+                .map(|v| v.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect())
+                .unwrap_or_default();
+            items.push(Item { kind, path: p, title, created, sha, about });
         }
         items.sort_by(|a, b| b.created.cmp(&a.created).then(a.path.cmp(&b.path)));
         out.extend(items);
@@ -213,5 +253,20 @@ mod tests {
     #[test]
     fn title_is_first_line_without_heading() {
         assert_eq!(title_of("\n## Hooks fail open\nbecause…"), "Hooks fail open");
+    }
+
+    #[test]
+    fn an_item_is_stale_when_a_path_it_is_about_changed() {
+        let item = Item {
+            kind: Kind::Gotcha,
+            path: PathBuf::from("x.md"),
+            title: "t".into(),
+            created: String::new(),
+            sha: Some("abc".into()),
+            about: vec!["./src/pay.rs".into(), "src/compress/".into(), "docs".into()],
+        };
+        let changed = ["src/pay.rs".to_string(), "src/compress/git.rs".to_string(), "docsite/a.md".to_string()];
+        assert_eq!(item.changed(&changed), ["src/pay.rs", "src/compress"]);
+        assert!(item.changed(&["README.md".to_string()]).is_empty());
     }
 }

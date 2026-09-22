@@ -31,6 +31,12 @@ pub fn state(root: &Path) -> GitState {
     GitState { branch, sha, dirty }
 }
 
+/// Files that differ from commit `sha`, committed or not. `None` when git
+/// does not know the commit (it was rebased away, or the clone is shallow).
+pub fn changed_since(root: &Path, sha: &str) -> Option<Vec<String>> {
+    git(root, &["diff", "--name-only", sha, "--"]).map(|s| s.lines().map(str::to_string).collect())
+}
+
 /// Files with the most commits in recent history, for the project brief.
 pub fn hot_files(root: &Path, commits: usize, top: usize) -> Vec<(String, usize)> {
     let n = commits.to_string();

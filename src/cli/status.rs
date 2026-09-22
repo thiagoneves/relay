@@ -19,18 +19,7 @@ pub fn run() -> anyhow::Result<i32> {
     print_hook_latency(ui, &paths);
     let sessions = spool::sessions(&paths).len();
     ui.field("Sessions", &format!("{} recorded · {}", sessions, count(handoff::count(&paths), "handoff")));
-    let items = memory::list(&paths);
-    let of_kind = |k: Kind| items.iter().filter(|i| i.kind == k).count();
-    let remembered = [Kind::Rule, Kind::Gotcha, Kind::Decision].map(of_kind);
-    ui.field(
-        "Remembered",
-        &format!(
-            "{} · {} · {}",
-            count(remembered[0], "rule"),
-            count(remembered[1], "gotcha"),
-            count(remembered[2], "decision")
-        ),
-    );
+    let remembered = print_remembered(ui, &paths);
     ui.blank();
     ui.field(
         "Shared",
@@ -45,8 +34,30 @@ pub fn run() -> anyhow::Result<i32> {
         ),
     );
     ui.blank();
-    ui.next(next_step(failures, sessions, remembered.iter().sum()));
+    ui.next(next_step(failures, sessions, remembered));
     Ok(0)
+}
+
+/// Items per kind, and how many may be stale. Returns how many there are.
+fn print_remembered(ui: Ui, paths: &Paths) -> usize {
+    let items = memory::list(paths);
+    let of_kind = |k: Kind| items.iter().filter(|i| i.kind == k).count();
+    let remembered = [Kind::Rule, Kind::Gotcha, Kind::Decision].map(of_kind);
+    let stale = memory::staleness(&paths.root, &items, crate::limits::brief::STALE_COMMITS)
+        .iter()
+        .filter(|changed| !changed.is_empty())
+        .count();
+    let stale_note = if stale > 0 { format!(" · {stale} may be stale (see `relay brief`)") } else { String::new() };
+    ui.field(
+        "Remembered",
+        &format!(
+            "{} · {} · {}{stale_note}",
+            count(remembered[0], "rule"),
+            count(remembered[1], "gotcha"),
+            count(remembered[2], "decision")
+        ),
+    );
+    remembered.iter().sum()
 }
 
 fn next_step(failures: usize, sessions: usize, remembered: usize) -> &'static str {

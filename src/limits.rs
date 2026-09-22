@@ -45,6 +45,8 @@ pub mod brief {
     pub const MAX_CHARS: usize = 2400;
     pub const PROJECT_CHARS: usize = 1000;
     pub const MEMORY_CHARS: usize = 700;
+    /// Distinct commits checked for stale items: one git call each.
+    pub const STALE_COMMITS: usize = 8;
 }
 
 /// The handoff a session leaves for the next one.
