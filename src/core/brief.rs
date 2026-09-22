@@ -28,13 +28,16 @@ pub fn build(paths: &Paths) -> String {
         Some((p, body)) => {
             let hb = handoff::frontmatter(&body, "branch").unwrap_or_default();
             let when = handoff::frontmatter(&body, "ended").unwrap_or_default();
-            out.push_str(&format!(
-                "## Last session ({}{})\n",
-                &when[..10.min(when.len())],
-                if hb != branch && !hb.is_empty() { format!(", branch {hb}") } else { String::new() }
-            ));
+            let mut label = when[..10.min(when.len())].to_string();
+            if let Some(h) = handoff::frontmatter(&body, "harness").filter(|h| h != "unknown") {
+                label.push_str(&format!(", {h}"));
+            }
+            if hb != branch && !hb.is_empty() {
+                label.push_str(&format!(", branch {hb}"));
+            }
+            out.push_str(&format!("## Last session ({label})\n"));
             let room = BRIEF_MAX_CHARS.saturating_sub(out.len() + 200);
-            out.push_str(&cut(handoff::strip_frontmatter(&body), room));
+            out.push_str(&cut(&handoff_for_brief(&body), room));
             out.push_str(&format!("\n\n_Full handoff: {}_\n", paths.rel(&p)));
         }
         None => {
@@ -46,6 +49,26 @@ pub fn build(paths: &Paths) -> String {
     out.push_str("_Outputs shown by relay are compressed; `relay get <id>` prints the original._\n");
     out.push_str("_When you settle a decision, hit a gotcha or learn a project rule, save it: `relay remember decision|gotcha|rule \"<one line>\"`._\n");
     out
+}
+
+/// The handoff minus what the brief already says: its title (the section
+/// header has date and harness) and its Remembered list. Its sections
+/// nest under "Last session".
+fn handoff_for_brief(body: &str) -> String {
+    let mut out = Vec::new();
+    let mut skipping = false;
+    for l in handoff::strip_frontmatter(body).lines() {
+        if l.starts_with("# ") {
+            continue;
+        }
+        if l.starts_with("## ") {
+            skipping = l == "## Remembered";
+        }
+        if !skipping {
+            out.push(if l.starts_with("## ") { format!("#{l}") } else { l.to_string() });
+        }
+    }
+    out.join("\n").trim().to_string()
 }
 
 /// One line per item, grouped by kind, until the budget runs out.

@@ -70,6 +70,27 @@ impl Paths {
         Ok(())
     }
 
+    /// Repo-relative form of a path reported by a harness, which may go
+    /// through a symlink the git toplevel does not (`/var` vs
+    /// `/private/var` on macOS). Unchanged when outside the repo.
+    pub fn rel_file(&self, f: &str) -> String {
+        let p = Path::new(f);
+        if let Ok(r) = p.strip_prefix(&self.root) {
+            return r.display().to_string();
+        }
+        // The file may be gone; canonicalize the deepest ancestor that exists.
+        for anc in p.ancestors().skip(1) {
+            if let Ok(canon) = anc.canonicalize() {
+                let rest = p.strip_prefix(anc).unwrap_or(p);
+                return canon
+                    .join(rest)
+                    .strip_prefix(&self.root)
+                    .map_or_else(|_| f.to_string(), |r| r.display().to_string());
+            }
+        }
+        f.to_string()
+    }
+
     pub fn rel(&self, p: &Path) -> String {
         p.strip_prefix(&self.root).map_or_else(|_| p.display().to_string(), |r| r.display().to_string())
     }

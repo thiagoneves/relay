@@ -90,13 +90,12 @@ impl Summary {
 }
 
 fn files_touched(paths: &Paths, events: &[Event]) -> Vec<(String, usize)> {
-    let prefix = format!("{}/", paths.root.display());
     let mut files: Vec<(String, usize)> = Vec::new();
     for f in events.iter().filter(|e| e.event == "tool").filter_map(|e| e.data["file"].as_str()) {
-        let rel = f.strip_prefix(&prefix).unwrap_or(f);
-        match files.iter_mut().find(|(p, _)| p == rel) {
+        let rel = paths.rel_file(f);
+        match files.iter_mut().find(|(p, _)| *p == rel) {
             Some(x) => x.1 += 1,
-            None => files.push((rel.to_string(), 1)),
+            None => files.push((rel, 1)),
         }
     }
     files.sort_by(|a, b| b.1.cmp(&a.1));
@@ -116,12 +115,13 @@ fn commands_from_outputs(outs: &[outputs::OutputMeta]) -> (Vec<String>, Vec<Stri
         }
         seen.push(key);
         let cmd = truncate_chars(&m.cmd, 80);
-        let status = if m.exit == 0 { "ok".to_string() } else { format!("exit {}", m.exit) };
-        commands.push(format!("`{cmd}` → {status} · relay get {}", m.id));
         if m.exit != 0 && failing.len() < MAX_FAILING {
             failing.push(format!("`{cmd}` (exit {}) · relay get {}", m.exit, m.id));
+        } else {
+            let status = if m.exit == 0 { "ok".to_string() } else { format!("exit {}", m.exit) };
+            commands.push(format!("`{cmd}` → {status} · relay get {}", m.id));
         }
-        if commands.len() >= MAX_COMMANDS {
+        if commands.len() + failing.len() >= MAX_COMMANDS {
             break;
         }
     }
