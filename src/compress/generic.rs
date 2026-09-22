@@ -17,7 +17,12 @@ pub const MAX_RESCUED: usize = 40;
 
 fn ansi_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07").unwrap())
+    // CSI (colours, cursor), OSC ended by BEL or ESC \ (titles, hyperlinks;
+    // never past the next ESC, so an unterminated one cannot swallow
+    // text), charset selection and keypad modes.
+    RE.get_or_init(|| {
+        Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][0-9A-Za-z]|\x1b[=>]").unwrap()
+    })
 }
 
 /// Remove colour codes and replay carriage returns: a progress bar that
@@ -165,14 +170,14 @@ pub fn group_by_file(text: &str) -> Option<String> {
     let mut current: Option<String> = None;
     for l in lines {
         if let Some(c) = re.captures(l) {
-            let file = c.get(1).unwrap().as_str().to_string();
-            if current.as_deref() != Some(&file) {
+            let file = c.get(1).unwrap().as_str();
+            if current.as_deref() != Some(file) {
                 out.push(format!("{file}:"));
-                current = Some(file);
+                current = Some(file.to_string());
             }
-            let line = c.get(2).unwrap().as_str();
-            let body = c.get(4).unwrap().as_str().trim();
-            out.push(format!("  {line}: {body}"));
+            // Everything after `path:` exactly as printed: the agent copies
+            // matched lines into edits, indentation included.
+            out.push(format!("  {}", &l[file.len() + 1..]));
         } else if !l.trim().is_empty() {
             current = None;
             out.push(l.to_string());
@@ -213,8 +218,33 @@ mod tests {
     fn groups_grep_output() {
         let s = "src/a.rs:10:fn a() {}\nsrc/a.rs:20:fn b() {}\nsrc/b.rs:1:use x;\nsrc/b.rs:2:use y;";
         let g = group_by_file(s).unwrap();
-        assert!(g.starts_with("src/a.rs:\n  10: fn a() {}"));
-        assert!(g.contains("src/b.rs:\n  1: use x;"));
+        assert!(g.starts_with("src/a.rs:\n  10:fn a() {}"));
+        assert!(g.contains("src/b.rs:\n  1:use x;"));
+    }
+
+    #[test]
+    fn cap_rescues_js_failure_marks() {
+        let mut v: Vec<String> = (0..350).map(|i| format!("  console.log step {i}")).collect();
+        for i in 0..10 {
+            v[120 + i * 10] = format!("  ✕ breaks case {i} (3 ms)");
+        }
+        let out = cap_lines(&v);
+        assert_eq!(out.iter().filter(|l| l.contains('✕')).count(), 10);
+    }
+
+    #[test]
+    fn grouped_matches_keep_their_indentation() {
+        let s = "a.py:11:        return compute(x)\na.py:12:\treturn y\nb.py:3:5:  z = 1\nb.py:4:x";
+        let g = group_by_file(s).unwrap();
+        assert_eq!(g, "a.py:\n  11:        return compute(x)\n  12:\treturn y\nb.py:\n  3:5:  z = 1\n  4:x");
+    }
+
+    #[test]
+    fn hyperlinks_and_modes_are_stripped_without_eating_text() {
+        let link =
+            "\x1b]8;;file:///src/a.rs\x1b\\src/a.rs:3:5: warning\x1b]8;;\x1b\\\nerror: one\nerror: two\n\x07bell";
+        assert_eq!(strip_ansi(link), "src/a.rs:3:5: warning\nerror: one\nerror: two\n\x07bell");
+        assert_eq!(strip_ansi("\x1b]0;title\x07\x1b(B\x1b=ok"), "ok");
     }
 
     #[test]

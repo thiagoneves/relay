@@ -6,6 +6,7 @@
 //! compressed text contains it, or its first `PREFIX_CHARS` characters
 //! when a long line was truncated on purpose.
 
+use std::collections::HashSet;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -18,9 +19,12 @@ static SIGNAL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?ix)
         \b(error|errors|failed|failure|fail|failing|panic(ked)?|exception|traceback|fatal|assert(ion)?|
-           warning|denied|refused|not\ found|cannot|undefined|segmentation)\b
+           warning|denied|refused|not\ found|cannot|undefined|segmentation|
+           time[ds]?\ ?out|killed|abort(ed)?)\b
         | \S+\.[A-Za-z]{1,5}:\d+        # path/file.ext:line
         | \bexit\ (code|status)\b
+        | (^|\s)[✕✖×●](\s|$)           # jest, vitest, mocha failure marks
+        | ^\s*\d+\)\s                   # mocha: `  1) suite name`
         ",
     )
     .expect("valid regex")
@@ -62,9 +66,10 @@ pub fn measure(raw: &str, compressed: &str) -> Fidelity {
 
 /// Explicit expectations (a corpus `.keep` file): every line must survive.
 pub fn check(expected: &[String], compressed: &str) -> Fidelity {
+    let view = View::new(compressed);
     let mut f = Fidelity { total: expected.len(), ..Fidelity::default() };
     for line in expected {
-        if contains_line(compressed, line) {
+        if view.contains(line) {
             f.kept += 1;
         } else {
             f.missing.push(line.clone());
@@ -73,22 +78,36 @@ pub fn check(expected: &[String], compressed: &str) -> Fidelity {
     f
 }
 
-static LOCATED: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^([^:\s][^:]*?):(\d+)(?::\d+)?:(.*)$").expect("valid regex"));
+static LOCATED: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([^:\s][^:]*?):\d+(?::\d+)?:").expect("valid regex"));
 
-fn contains_line(haystack: &str, line: &str) -> bool {
-    if haystack.contains(line) {
-        return true;
+/// A compressed text indexed by line, so checking thousands of signal
+/// lines does not rescan it for each one.
+struct View<'a> {
+    text: &'a str,
+    lines: HashSet<&'a str>,
+}
+
+impl<'a> View<'a> {
+    fn new(text: &'a str) -> Self {
+        Self { text, lines: text.lines().map(str::trim).collect() }
     }
-    let prefix: String = line.chars().take(PREFIX_CHARS).collect();
-    if line.chars().count() > PREFIX_CHARS && haystack.contains(&prefix) {
-        return true;
+
+    fn contains(&self, line: &str) -> bool {
+        if self.lines.contains(line) {
+            return true;
+        }
+        // `generic::group_by_file` turns `a.rs:10:body` into `a.rs:` + `  10:body`.
+        if let Some(file) = LOCATED.captures(line).and_then(|c| c.get(1)) {
+            let rest = line[file.end() + 1..].trim();
+            if self.lines.contains(&line[..=file.end()]) && self.lines.contains(rest) {
+                return true;
+            }
+        }
+        if self.text.contains(line) {
+            return true;
+        }
+        line.chars().count() > PREFIX_CHARS && self.text.contains(&line.chars().take(PREFIX_CHARS).collect::<String>())
     }
-    // `generic::group_by_file` turns `a.rs:10:body` into `a.rs:` + `  10: body`.
-    LOCATED.captures(line).is_some_and(|c| {
-        haystack.lines().any(|l| l == format!("{}:", &c[1]))
-            && haystack.contains(&format!("  {}: {}", &c[2], c[3].trim()))
-    })
 }
 
 #[cfg(test)]
@@ -119,7 +138,32 @@ mod tests {
     #[test]
     fn grouped_grep_lines_count_as_kept() {
         let raw = "src/a.rs:10:panic!(\"boom\")\n";
-        assert_eq!(measure(raw, "src/a.rs:\n  10: panic!(\"boom\")").kept, 1);
+        assert_eq!(measure(raw, "src/a.rs:\n  10:panic!(\"boom\")").kept, 1);
+    }
+
+    #[test]
+    fn test_runner_failure_marks_are_signal() {
+        for line in [
+            "  ✕ breaks case 3 (4 ms)",
+            " × rejects expired token",
+            "  ● Suite › case",
+            "  1) Cart adds items:",
+            "Error: timed out after 5000ms",
+            "worker killed",
+            "Aborted",
+        ] {
+            assert!(is_signal(line), "{line}");
+        }
+        assert!(!is_signal("compiled module (×3)"));
+    }
+
+    #[test]
+    fn long_grouped_outputs_are_checked_without_rescanning() {
+        let raw = (0..20_000).map(|i| format!("src/m{}.rs:{i}:error here", i / 50)).collect::<Vec<_>>().join("\n");
+        let grouped = super::super::generic::group_by_file(&raw).unwrap();
+        let started = std::time::Instant::now();
+        assert_eq!(measure(&raw, &grouped).kept, 20_000);
+        assert!(started.elapsed().as_secs() < 2, "{:?}", started.elapsed());
     }
 
     #[test]
