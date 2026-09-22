@@ -2,25 +2,30 @@
 //! `apply_read` is for commands that print files the agent asked to
 //! see, where every line must stay as it is in the file.
 
+use std::sync::LazyLock;
+
 use regex::Regex;
-use std::sync::OnceLock;
 
 use crate::limits;
 
-fn ansi_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    // CSI (colours, cursor), OSC ended by BEL or ESC \ (titles, hyperlinks;
-    // never past the next ESC, so an unterminated one cannot swallow
-    // text), charset selection and keypad modes.
-    RE.get_or_init(|| {
-        Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][0-9A-Za-z]|\x1b[=>]").unwrap()
-    })
-}
+// CSI (colours, cursor), OSC ended by BEL or ESC \ (titles, hyperlinks;
+// never past the next ESC, so an unterminated one cannot swallow text),
+// charset selection and keypad modes.
+static ANSI: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][0-9A-Za-z]|\x1b[=>]")
+        .expect("valid regex")
+});
+
+static GUTTER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^ +(\d+)(\t| ?│)").expect("valid regex"));
+
+/// `path:line:text` or `path:line:col:text`; group 1 is the path.
+pub(super) static LOCATED: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^([^:\s][^:]*?):(\d+)(?::(\d+))?:(.*)$").expect("valid regex"));
 
 /// Remove colour codes and replay carriage returns: a progress bar that
 /// redrew itself fifty times shows only its final state.
 pub fn strip_ansi(s: &str) -> String {
-    let s = ansi_re().replace_all(s, "");
+    let s = ANSI.replace_all(s, "");
     if !s.contains('\r') {
         return s.into_owned();
     }
@@ -31,14 +36,12 @@ pub fn strip_ansi(s: &str) -> String {
 /// tokens and carries nothing. Applied only when most lines have a gutter,
 /// so indented content that merely starts with a number is left alone.
 pub fn trim_number_gutter(lines: &[String]) -> Vec<String> {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"^ +(\d+)(\t| ?│)").unwrap());
     let filled: Vec<&String> = lines.iter().filter(|l| !l.trim().is_empty()).collect();
-    let with_gutter = filled.iter().filter(|l| re.is_match(l)).count();
+    let with_gutter = filled.iter().filter(|l| GUTTER.is_match(l)).count();
     if filled.len() < 5 || with_gutter * 10 < filled.len() * 8 {
         return lines.to_vec();
     }
-    lines.iter().map(|l| re.replace(l, "$1$2").into_owned()).collect()
+    lines.iter().map(|l| GUTTER.replace(l, "$1$2").into_owned()).collect()
 }
 
 /// Normalise whitespace: trailing spaces, tabs kept, blank runs -> one blank.
@@ -153,18 +156,15 @@ pub fn apply(text: &str) -> String {
 
 /// `path:line:text` style output (grep, rg, eslint compact) grouped by file.
 pub fn group_by_file(text: &str) -> Option<String> {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"^([^:\s][^:]*?):(\d+)(?::(\d+))?:(.*)$").unwrap());
     let lines: Vec<&str> = text.lines().collect();
-    let matched = lines.iter().filter(|l| re.is_match(l)).count();
+    let matched = lines.iter().filter(|l| LOCATED.is_match(l)).count();
     if lines.len() < 4 || matched * 10 < lines.len() * 7 {
         return None;
     }
     let mut out: Vec<String> = Vec::new();
     let mut current: Option<String> = None;
     for l in lines {
-        if let Some(c) = re.captures(l) {
-            let file = c.get(1).unwrap().as_str();
+        if let Some(file) = LOCATED.captures(l).and_then(|c| c.get(1)).map(|m| m.as_str()) {
             if current.as_deref() != Some(file) {
                 out.push(format!("{file}:"));
                 current = Some(file.to_string());

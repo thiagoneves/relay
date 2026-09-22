@@ -11,7 +11,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::generic::strip_ansi;
+use super::generic::{LOCATED, strip_ansi};
 
 const PREFIX_CHARS: usize = 60;
 
@@ -77,8 +77,6 @@ pub fn check(expected: &[String], compressed: &str) -> Fidelity {
     }
     f
 }
-
-static LOCATED: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([^:\s][^:]*?):\d+(?::\d+)?:").expect("valid regex"));
 
 /// A compressed text indexed by line, so checking thousands of signal
 /// lines does not rescan it for each one.
