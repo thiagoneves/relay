@@ -57,6 +57,7 @@ fn prompts(events: &[Event]) -> Vec<String> {
         .filter_map(|e| e.data["text"].as_str())
         .filter(|s| !s.trim().is_empty() && !s.starts_with('/') && !is_harness_turn(s) && !is_continuer(s))
         .map(|s| without_pasted(s).replace('\n', " "))
+        .filter(|s| s != PASTED)
         .collect()
 }
 
@@ -68,13 +69,15 @@ fn is_continuer(text: &str) -> bool {
 
 /// A pasted block is the user's material, not their ask; the words
 /// around it are.
+const PASTED: &str = "[pasted content]";
+
 fn without_pasted(text: &str) -> String {
     let Some(start) = text.find("<pasted_content") else { return text.to_string() };
     let end = text[start..]
         .find("</pasted_content")
         .and_then(|close| text[start + close..].find('>').map(|gt| start + close + gt + 1))
         .unwrap_or(text.len());
-    format!("{} [pasted content] {}", text[..start].trim(), text[end..].trim()).trim().to_string()
+    format!("{} {PASTED} {}", text[..start].trim(), text[end..].trim()).trim().to_string()
 }
 
 fn is_harness_turn(text: &str) -> bool {
@@ -201,6 +204,7 @@ mod tests {
                 "prompt",
                 json!({ "text": "review this: <pasted_content id=\"7\">\n# big\n</pasted_content id=\"7\"> please" }),
             ),
+            ev("prompt", json!({ "text": "<pasted_content id=\"8\">\nonly a paste\n</pasted_content id=\"8\">" })),
         ];
         assert_eq!(prompts(&events), ["review this: [pasted content] please"]);
     }
