@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use crate::core::paths::Paths;
 use crate::core::spool::{self, Event};
 use crate::core::{brief, handoff};
-use crate::helpers::truncate_chars;
+use crate::helpers::{shell, slash, truncate_chars};
 
 /// Events relay wants, with the matcher used in settings.json.
 pub const EVENTS: &[(&str, Option<&str>, u32)] = &[
@@ -34,7 +34,7 @@ pub fn run(harness_id: &str) -> Result<()> {
 
     match event.as_str() {
         "PreToolUse" => {
-            pre_tool_use(&paths, &session, &input);
+            pre_tool_use(&paths, &session, &input, harness_id);
             Ok(())
         }
         "PostToolUse" => post_tool_use(&paths, &session, &input),
@@ -118,7 +118,13 @@ fn post_tool_use(paths: &Paths, session: &str, input: &Value) -> Result<()> {
     record(paths, session, "tool", key, data)
 }
 
-fn pre_tool_use(paths: &Paths, session: &str, input: &Value) {
+/// Codex on Windows runs tool commands in `PowerShell`; `relay x` speaks
+/// POSIX sh, so there the command is left alone (no compression).
+fn rewrites_commands(harness_id: &str) -> bool {
+    !(cfg!(windows) && harness_id == "codex")
+}
+
+fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness_id: &str) {
     if input["tool_name"].as_str() != Some("Bash") {
         return;
     }
@@ -130,10 +136,10 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value) {
     if spool::current_session(paths).as_deref() != Some(session) {
         spool::set_current_session(paths, session);
     }
-    if !should_wrap(cmd) {
+    if !rewrites_commands(harness_id) || !should_wrap(cmd) {
         return;
     }
-    let rewritten = format!("{} x -- {}", relay_invocation(), shell_quote(cmd));
+    let rewritten = format!("{} x -- {}", relay_invocation(), shell::quote(cmd));
     let out = json!({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -226,22 +232,19 @@ pub fn should_wrap(cmd: &str) -> bool {
 }
 
 /// Use the bare name when `relay` on PATH is this very binary; otherwise
-/// the absolute path, so the rewrite works in any shell.
+/// the quoted absolute path. The rewrite runs in a POSIX shell (Git Bash
+/// on Windows), where backslashes and spaces need quoting.
 fn relay_invocation() -> String {
     let exe = std::env::current_exe().ok();
     if let (Some(exe), Some(path)) = (&exe, std::env::var_os("PATH")) {
         for dir in std::env::split_paths(&path) {
-            let cand = dir.join("relay");
+            let cand = dir.join(format!("relay{}", std::env::consts::EXE_SUFFIX));
             if cand.exists() && std::fs::canonicalize(&cand).ok() == std::fs::canonicalize(exe).ok() {
                 return "relay".into();
             }
         }
     }
-    exe.map_or_else(|| "relay".into(), |p| p.display().to_string())
-}
-
-pub fn shell_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
+    exe.map_or_else(|| "relay".into(), |p| shell::quote(&slash(&p)))
 }
 
 #[cfg(test)]
@@ -259,10 +262,5 @@ mod tests {
         assert!(!should_wrap("cat <<EOF > f\nx\nEOF"));
         assert!(!should_wrap("npm run dev &"));
         assert!(!should_wrap("vim file"));
-    }
-
-    #[test]
-    fn quotes_single_quotes() {
-        assert_eq!(shell_quote("echo 'a'"), "'echo '\\''a'\\'''");
     }
 }

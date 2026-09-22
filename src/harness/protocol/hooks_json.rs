@@ -76,7 +76,7 @@ pub fn install(target: &Target, exe: &Path) -> Result<InstallReport> {
     let mut hooks = root.remove("hooks").and_then(|v| v.as_object().cloned()).unwrap_or_default();
     strip_relay(&mut hooks, target.marker);
 
-    let command = format!("{}{}", exe.display(), target.marker);
+    let command = format!("{}{}", crate::helpers::shell::command_word(exe), target.marker);
     let mut events = Vec::new();
     for (event, matcher, timeout) in EVENTS {
         let mut group = Map::new();

@@ -9,7 +9,7 @@ use crate::compress;
 use crate::core::outputs::{self, OutputMeta};
 use crate::core::paths::Paths;
 use crate::core::spool;
-use crate::helpers::{est_tokens, human_tokens, new_id, now_iso};
+use crate::helpers::{est_tokens, human_tokens, new_id, now_iso, shell};
 
 /// Outputs shorter than this are printed as is, no footer, not stored.
 const MIN_STORE_BYTES: usize = 200;
@@ -23,10 +23,17 @@ pub fn run(cmd: &str, raw_only: bool) -> Result<Outcome> {
     // Merge stderr into stdout in order, inside the user's shell, so
     // compilers and test runners keep their natural interleaving.
     let wrapped = format!("{{\n{cmd}\n}} 2>&1");
-    let shell = if std::path::Path::new("/bin/bash").exists() { "/bin/bash" } else { "/bin/sh" };
-    let out = Command::new(shell)
-        .arg("-c")
-        .arg(&wrapped)
+    let mut command = if let Some(sh) = shell::posix_shell() {
+        let mut c = Command::new(sh);
+        c.arg("-c").arg(&wrapped);
+        c
+    } else {
+        // Windows without Git Bash: the harness ran it in cmd, so do we.
+        let mut c = Command::new("cmd");
+        c.arg("/C").arg(cmd);
+        c
+    };
+    let out = command
         .env("RELAY_ACTIVE", "1")
         .stdin(Stdio::inherit())
         .stdout(Stdio::piped())

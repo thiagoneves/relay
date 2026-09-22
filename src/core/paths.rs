@@ -7,6 +7,9 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 
+use crate::helpers::fs::simplify;
+use crate::helpers::slash;
+
 #[derive(Debug, Clone)]
 pub struct Paths {
     /// Repo root (or cwd when not inside a git repo).
@@ -72,27 +75,26 @@ impl Paths {
 
     /// Repo-relative form of a path reported by a harness, which may go
     /// through a symlink the git toplevel does not (`/var` vs
-    /// `/private/var` on macOS). Unchanged when outside the repo.
+    /// `/private/var` on macOS) or differ in drive-letter case and
+    /// separators (Windows). Unchanged when outside the repo.
     pub fn rel_file(&self, f: &str) -> String {
         let p = Path::new(f);
         if let Ok(r) = p.strip_prefix(&self.root) {
-            return r.display().to_string();
+            return slash(r);
         }
+        let Ok(root) = self.root.canonicalize().map(simplify) else { return f.to_string() };
         // The file may be gone; canonicalize the deepest ancestor that exists.
         for anc in p.ancestors().skip(1) {
-            if let Ok(canon) = anc.canonicalize() {
+            if let Ok(canon) = anc.canonicalize().map(simplify) {
                 let rest = p.strip_prefix(anc).unwrap_or(p);
-                return canon
-                    .join(rest)
-                    .strip_prefix(&self.root)
-                    .map_or_else(|_| f.to_string(), |r| r.display().to_string());
+                return canon.join(rest).strip_prefix(&root).map_or_else(|_| f.to_string(), slash);
             }
         }
         f.to_string()
     }
 
     pub fn rel(&self, p: &Path) -> String {
-        p.strip_prefix(&self.root).map_or_else(|_| p.display().to_string(), |r| r.display().to_string())
+        p.strip_prefix(&self.root).map_or_else(|_| slash(p), slash)
     }
 }
 
@@ -116,12 +118,21 @@ fn git_paths(start: &Path) -> Option<(PathBuf, PathBuf)> {
 }
 
 pub fn home() -> PathBuf {
-    std::env::var_os("HOME").map_or_else(|| PathBuf::from("/tmp"), PathBuf::from)
+    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map_or_else(std::env::temp_dir, PathBuf::from)
 }
 
-/// `$XDG_DATA_HOME/relay` or `~/.local/share/relay`.
+/// `$XDG_DATA_HOME/relay`, else `%LOCALAPPDATA%\\relay` on Windows, else
+/// `~/.local/share/relay`.
 pub fn data_home() -> PathBuf {
-    std::env::var_os("XDG_DATA_HOME").map_or_else(|| home().join(".local/share"), PathBuf::from).join("relay")
+    if let Some(x) = std::env::var_os("XDG_DATA_HOME") {
+        return PathBuf::from(x).join("relay");
+    }
+    if cfg!(windows)
+        && let Some(local) = std::env::var_os("LOCALAPPDATA")
+    {
+        return PathBuf::from(local).join("relay");
+    }
+    home().join(".local").join("share").join("relay")
 }
 
 fn slugify(p: &Path) -> String {

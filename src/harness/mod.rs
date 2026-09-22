@@ -30,7 +30,7 @@ pub trait Harness {
     fn id(&self) -> &'static str;
     fn command(&self) -> &'static str;
     fn detect(&self) -> bool {
-        which(self.command()).is_some()
+        crate::helpers::shell::which(self.command()).is_some()
     }
     /// Write hooks pointing at `exe`. Idempotent.
     fn install(&self, exe: &Path) -> Result<InstallReport>;
@@ -47,11 +47,6 @@ pub fn by_name(name: &str) -> Result<Box<dyn Harness>> {
         "codex" => Ok(Box::new(codex::Codex)),
         other => bail!("unknown harness `{other}` (available: claude, codex)"),
     }
-}
-
-pub fn which(cmd: &str) -> Option<std::path::PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path).map(|d| d.join(cmd)).find(|p| p.is_file())
 }
 
 /// Read the whole stdin as JSON. Empty stdin is not an error.

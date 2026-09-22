@@ -10,13 +10,13 @@ use anyhow::{Context, bail};
 use crate::core::paths::Paths;
 use crate::core::{bootstrap, handoff, outputs, spool};
 use crate::harness;
-use crate::helpers::human_tokens;
+use crate::helpers::{human_tokens, shell};
 
 pub fn run(name: &str, last: bool, args: &[String]) -> anyhow::Result<i32> {
     let h = harness::by_name(name)?;
-    if !h.detect() {
+    let Some(program) = shell::which(h.command()) else {
         bail!("`{}` not found on PATH", h.command());
-    }
+    };
     let paths = Paths::from_cwd()?;
     paths.ensure_local()?;
     let created = bootstrap::ensure_shared(&paths)?;
@@ -45,7 +45,7 @@ pub fn run(name: &str, last: bool, args: &[String]) -> anyhow::Result<i32> {
     launch.extend(args.iter().cloned());
 
     let started = SystemTime::now();
-    let status = Command::new(h.command())
+    let status = Command::new(&program)
         .args(&launch)
         .current_dir(&paths.root)
         .status()

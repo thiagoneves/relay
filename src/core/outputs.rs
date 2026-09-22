@@ -74,7 +74,7 @@ fn find_meta(paths: &Paths, id: &str) -> Option<PathBuf> {
 
 pub fn get(paths: &Paths, id: &str) -> Result<(OutputMeta, String)> {
     let id = id.trim();
-    if id.is_empty() || id.contains('/') || id.contains("..") {
+    if id.is_empty() || id.contains(['/', '\\']) || id.contains("..") {
         bail!("invalid output id");
     }
     let meta_path = find_meta(paths, id).with_context(|| format!("no output with id {id}"))?;
