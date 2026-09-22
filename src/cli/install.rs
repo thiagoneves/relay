@@ -2,8 +2,9 @@ use crate::harness;
 
 pub fn install(name: &str) -> anyhow::Result<i32> {
     let h = harness::by_name(name)?;
-    let exe = std::env::current_exe()?;
-    let r = h.install(&exe)?;
+    let inst = crate::core::machine::install_self()?;
+    super::setup::report(&inst);
+    let r = h.install(&inst.exe)?;
     if r.changed {
         println!("relay: hooks for {} written to {}", h.id(), r.settings_path.display());
         println!("relay: events {}", r.events.join(", "));

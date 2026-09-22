@@ -12,6 +12,7 @@ mod install;
 mod pipe;
 mod purge;
 mod remember;
+mod setup;
 mod status;
 mod wrap;
 mod x;
@@ -31,6 +32,8 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    /// One-time machine setup: put `relay` on PATH, register hooks in every harness found
+    Setup,
     /// Set up this repo: `.relay/` (shared) and the local store
     Init,
     /// Register hooks for a harness (claude, codex)
@@ -148,6 +151,7 @@ pub enum Commands {
 pub fn run() -> anyhow::Result<i32> {
     let cli = Cli::parse();
     match cli.command {
+        Commands::Setup => setup::run(),
         Commands::Init => init::run(),
         Commands::Install { harness } => install::install(&harness),
         Commands::Uninstall { harness } => install::uninstall(&harness),

@@ -1,5 +1,5 @@
 //! `relay claude [args]`: session supervisor. Lives exactly as long as
-//! the harness process. Before: init + hooks. After: make sure a
+//! the harness process. Before: install, init, hooks. After: make sure a
 //! handoff exists for the session that just ran. No daemon.
 
 use std::process::Command;
@@ -8,7 +8,7 @@ use std::time::SystemTime;
 use anyhow::{Context, bail};
 
 use crate::core::paths::Paths;
-use crate::core::{bootstrap, handoff, outputs, spool};
+use crate::core::{bootstrap, handoff, machine, outputs, spool};
 use crate::harness;
 use crate::helpers::{human_tokens, shell};
 
@@ -21,8 +21,9 @@ pub fn run(name: &str, last: bool, args: &[String]) -> anyhow::Result<i32> {
     paths.ensure_local()?;
     let created = bootstrap::ensure_shared(&paths)?;
 
-    let exe = std::env::current_exe()?;
-    let report = h.install(&exe)?;
+    let inst = machine::install_self()?;
+    super::setup::report(&inst);
+    let report = h.install(&inst.exe)?;
     let mut notes = Vec::new();
     if created {
         notes.push(format!("{} created", paths.rel(&paths.project_file())));

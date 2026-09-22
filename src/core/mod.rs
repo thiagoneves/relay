@@ -6,6 +6,7 @@ pub mod bootstrap;
 pub mod brief;
 pub mod exec;
 pub mod handoff;
+pub mod machine;
 pub mod memory;
 pub mod outputs;
 pub mod paths;
