@@ -6,7 +6,8 @@
 mod render;
 mod summary;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, Result};
 
@@ -78,6 +79,48 @@ pub fn latest(paths: &Paths, branch: &str) -> Option<(PathBuf, String)> {
     pick(&bodies, branch).map(|i| (all[i].1.clone(), all[i].2.clone()))
 }
 
+/// One line about a session: when it ended, where it ran, and where it
+/// stopped.
+pub struct Glance {
+    pub ended: String,
+    pub harness: String,
+    pub branch: String,
+    pub stopped: String,
+}
+
+/// Sessions other than `shown` that ended in the last `days`, newest
+/// first, at most `max`. Headless runs are skipped: they are scripts.
+pub fn others(paths: &Paths, shown: &Path, days: u64, max: usize) -> Vec<Glance> {
+    let since = crate::helpers::iso(std::time::SystemTime::now() - std::time::Duration::from_secs(days * 86_400));
+    let mut all = stored(paths);
+    all.sort_by(|a, b| b.0.cmp(&a.0));
+    all.iter()
+        .filter(|(ended, p, body)| p != shown && *ended >= since && frontmatter::get(body, "headless").is_none())
+        .take(max)
+        .map(|(ended, _, body)| Glance {
+            ended: ended[..10.min(ended.len())].to_string(),
+            harness: frontmatter::get(body, "harness").unwrap_or_default(),
+            branch: frontmatter::get(body, "branch").unwrap_or_default(),
+            stopped: stopped_line(body),
+        })
+        .collect()
+}
+
+/// The first line under "Where it stopped" (or "Last reply").
+fn stopped_line(body: &str) -> String {
+    let mut in_section = false;
+    for l in body.lines() {
+        if l.starts_with("## ") {
+            in_section = matches!(l, "## Where it stopped" | "## Last reply");
+            continue;
+        }
+        if in_section && !l.trim().is_empty() {
+            return l.trim_start_matches(['*', '#', ' ']).trim().to_string();
+        }
+    }
+    String::new()
+}
+
 /// Index of the handoff to show among `bodies`, newest first.
 fn pick(bodies: &[&str], branch: &str) -> Option<usize> {
     let interactive = |b: &&str| frontmatter::get(b, "headless").as_deref() != Some("true");
@@ -93,9 +136,10 @@ pub fn count(paths: &Paths) -> usize {
     std::fs::read_dir(paths.handoffs()).map_or(0, Iterator::count)
 }
 
-/// Local handoffs plus the shared ones, ordered by when each session
-/// ended (the frontmatter, not the file: a clone rewrites mtimes). A
-/// session present in both tiers counts once, from the local copy.
+/// Local handoffs plus the shared ones, keyed by when each session ended
+/// (the frontmatter, not the file: a clone rewrites mtimes) with the
+/// file's mtime breaking ties within a second. A session present in both
+/// tiers counts once, from the local copy.
 fn stored(paths: &Paths) -> Vec<(String, PathBuf, String)> {
     let mut seen = std::collections::HashSet::new();
     let mut all = Vec::new();
@@ -110,7 +154,10 @@ fn stored(paths: &Paths) -> Vec<(String, PathBuf, String)> {
                 continue;
             }
             if let Ok(body) = std::fs::read_to_string(&p) {
-                let ended = frontmatter::get(&body, "ended").unwrap_or_default();
+                let mut ended = frontmatter::get(&body, "ended").unwrap_or_default();
+                let nanos =
+                    p.metadata().and_then(|m| m.modified()).ok().and_then(|m| m.duration_since(UNIX_EPOCH).ok());
+                ended.push_str(&format!(" {:020}", nanos.map_or(0, |d| d.as_nanos())));
                 all.push((ended, p, body));
             }
         }
@@ -121,6 +168,16 @@ fn stored(paths: &Paths) -> Vec<(String, PathBuf, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_stopped_line_is_the_first_of_its_section() {
+        assert_eq!(
+            stopped_line("# H\n## Asked\n- x\n## Where it stopped\n\n**Done.** Tests pass.\nmore\n"),
+            "Done.** Tests pass."
+        );
+        assert_eq!(stopped_line("## Last reply\nAlmost there\n"), "Almost there");
+        assert_eq!(stopped_line("## Asked\n- x\n"), "");
+    }
 
     #[test]
     fn a_headless_run_does_not_hide_the_last_real_session() {

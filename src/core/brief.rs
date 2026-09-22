@@ -18,6 +18,8 @@ struct Inputs {
     branch: String,
     /// Repo-relative path and body of the latest handoff.
     handoff: Option<(String, String)>,
+    /// Other sessions of the last days, one line each.
+    others: Vec<String>,
     items: Vec<memory::Item>,
     /// Per item, the paths it is about that changed since it was saved.
     stale: Vec<Vec<String>>,
@@ -29,9 +31,18 @@ fn gather(paths: &Paths) -> Inputs {
     let now = crate::helpers::now_iso();
     let items: Vec<memory::Item> = memory::list(paths).into_iter().filter(|i| !i.expired(&now)).collect();
     let stale = memory::staleness(&paths.root, &items, limits::brief::STALE_COMMITS);
+    let latest = handoff::latest(paths, &branch);
+    let others = latest
+        .as_ref()
+        .map(|(p, _)| handoff::others(paths, p, limits::brief::OTHER_SESSIONS_DAYS, limits::brief::OTHER_SESSIONS))
+        .unwrap_or_default()
+        .into_iter()
+        .map(|g| glance_line(&g, &branch))
+        .collect();
     Inputs {
         project: std::fs::read_to_string(paths.project_file()).unwrap_or_default(),
-        handoff: handoff::latest(paths, &branch).map(|(p, body)| (paths.rel(&p), body)),
+        handoff: latest.map(|(p, body)| (paths.rel(&p), body)),
+        others,
         branch,
         items,
         stale,
@@ -55,9 +66,31 @@ fn compose(i: &Inputs) -> String {
         None if i.project.trim().is_empty() && i.items.is_empty() => return String::new(),
         None => {}
     }
+    if !i.others.is_empty() {
+        out.push_str("\n## Other recent sessions\n");
+        for line in &i.others {
+            out.push_str(&format!("- {line}\n"));
+        }
+    }
     out.push_str("_Outputs shown by relay are compressed; `relay get <id>` prints the original._\n");
     out.push_str("_When you settle a decision, hit a gotcha or learn a project rule, save it: `relay remember decision|gotcha|rule \"<one line>\"`._\n");
     out
+}
+
+/// `2026-09-22, codex, branch feat: where it stopped`; the branch only
+/// when it is not the current one.
+fn glance_line(g: &handoff::Glance, branch: &str) -> String {
+    let mut s = g.ended.clone();
+    if !g.harness.is_empty() && g.harness != "unknown" {
+        s.push_str(&format!(", {}", g.harness));
+    }
+    if !g.branch.is_empty() && g.branch != branch {
+        s.push_str(&format!(", branch {}", g.branch));
+    }
+    if !g.stopped.is_empty() {
+        s.push_str(&format!(": {}", crate::helpers::truncate_chars(&g.stopped, 100)));
+    }
+    s
 }
 
 /// The latest handoff under a heading that says when, where and on which
@@ -162,10 +195,32 @@ mod tests {
             project: "---\ngenerated: x\n---\n# app\n".into(),
             branch: "main".into(),
             handoff: None,
+            others: vec![],
             items: vec![],
             stale: vec![],
             shared_dir: ".relay".into(),
         }
+    }
+
+    #[test]
+    fn other_sessions_follow_the_last_one() {
+        let g = handoff::Glance {
+            ended: "2026-09-21".into(),
+            harness: "codex".into(),
+            branch: "feat".into(),
+            stopped: "Tests green.".into(),
+        };
+        assert_eq!(glance_line(&g, "main"), "2026-09-21, codex, branch feat: Tests green.");
+        let body = "---\nbranch: main\nended: 2026-09-22T10:00:00Z\n---\n## Asked\n- ship\n";
+        let out = compose(&Inputs {
+            handoff: Some(("h.md".into(), body.into())),
+            others: vec!["2026-09-21, codex: Tests green.".into()],
+            ..inputs()
+        });
+        assert!(
+            out.contains("_Full handoff: h.md_\n\n## Other recent sessions\n- 2026-09-21, codex: Tests green.\n"),
+            "{out}"
+        );
     }
 
     #[test]

@@ -45,6 +45,9 @@ pub mod brief {
     pub const MAX_CHARS: usize = 2400;
     pub const PROJECT_CHARS: usize = 1000;
     pub const MEMORY_CHARS: usize = 700;
+    /// Sessions listed besides the last one, and how far back.
+    pub const OTHER_SESSIONS: usize = 3;
+    pub const OTHER_SESSIONS_DAYS: u64 = 7;
     /// Distinct commits checked for stale items: one git call each.
     pub const STALE_COMMITS: usize = 8;
 }

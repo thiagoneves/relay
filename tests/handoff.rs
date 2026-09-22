@@ -128,3 +128,20 @@ fn a_shared_handoff_is_masked_and_read_from_the_repo() {
     let brief = String::from_utf8(repo.run(&["brief"]).stdout).unwrap();
     assert!(brief.contains("## Last session") && brief.contains("Ship it"), "{brief}");
 }
+
+/// A session in another harness shows up under the last one, so the
+/// agent knows what else happened here.
+#[test]
+fn other_recent_sessions_are_listed_in_the_brief() {
+    let repo = Repo::new("handoff-others");
+    for (harness, s, reply) in [("codex", "o-1", "Codex fixed the lint."), ("claude", "o-2", "Claude shipped it.")] {
+        repo.hook(harness, json!({ "hook_event_name": "SessionStart", "session_id": s, "source": "startup" }));
+        repo.hook(harness, json!({ "hook_event_name": "UserPromptSubmit", "session_id": s, "prompt": "go" }));
+        repo.hook(harness, json!({ "hook_event_name": "Stop", "session_id": s, "last_assistant_message": reply }));
+        repo.hook(harness, json!({ "hook_event_name": "SessionEnd", "session_id": s, "reason": "exit" }));
+    }
+    let brief = String::from_utf8(repo.run(&["brief"]).stdout).unwrap();
+    assert!(brief.contains("## Last session") && brief.contains("Claude shipped it."), "{brief}");
+    assert!(brief.contains("## Other recent sessions\n- "), "{brief}");
+    assert!(brief.contains(", codex: Codex fixed the lint."), "{brief}");
+}
