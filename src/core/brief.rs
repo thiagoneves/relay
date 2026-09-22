@@ -51,22 +51,43 @@ pub fn build(paths: &Paths) -> String {
     out
 }
 
+/// Sections of agent prose get their own cap so they leave room for the
+/// sections after them.
+const SECTION_CAPS: &[(&str, usize)] = &[("## Where it stopped", 700), ("## Plan", 300)];
+
 /// The handoff minus what the brief already says: its title (the section
 /// header has date and harness) and its Remembered list. Its sections
 /// nest under "Last session".
 fn handoff_for_brief(body: &str) -> String {
     let mut out = Vec::new();
     let mut skipping = false;
+    let mut cap: Option<usize> = None;
+    let mut used = 0;
     for l in handoff::strip_frontmatter(body).lines() {
         if l.starts_with("# ") {
             continue;
         }
         if l.starts_with("## ") {
             skipping = l == "## Remembered";
+            cap = SECTION_CAPS.iter().find(|(h, _)| *h == l).map(|(_, n)| *n);
+            used = 0;
+            out.push(format!("#{l}"));
+            continue;
         }
-        if !skipping {
-            out.push(if l.starts_with("## ") { format!("#{l}") } else { l.to_string() });
+        if skipping {
+            continue;
         }
+        if let Some(max) = cap {
+            if used >= max {
+                continue;
+            }
+            used += l.len() + 1;
+            if used >= max && !l.is_empty() {
+                out.push(format!("{l}\n…"));
+                continue;
+            }
+        }
+        out.push(l.to_string());
     }
     out.join("\n").trim().to_string()
 }
@@ -101,4 +122,18 @@ fn cut(s: &str, max: usize) -> String {
     let head = &s[..end];
     let head = head.rfind('\n').map_or(head, |i| &head[..i]);
     format!("{head}\n…")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn long_replies_leave_room_for_later_sections() {
+        let reply = "word ".repeat(40).trim().to_string();
+        let body = format!("## Where it stopped\n{}\n\n## Asked\n- ship it\n", [reply.as_str(); 10].join("\n"));
+        let out = handoff_for_brief(&body);
+        assert!(out.len() < 1000, "{}", out.len());
+        assert!(out.contains("…") && out.ends_with("- ship it"), "{out}");
+    }
 }

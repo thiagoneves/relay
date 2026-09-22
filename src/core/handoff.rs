@@ -1,5 +1,6 @@
 //! Rule-based session handoff. No LLM. Built from the spool, the output
-//! store and git. One immutable file per session under the local tier;
+//! store, git and, when the harness can read it, the tail of its own
+//! transcript. One immutable file per session under the local tier;
 //! rebuilt in place while the same session is still running.
 
 use std::path::PathBuf;
@@ -22,12 +23,23 @@ pub fn path_for(paths: &Paths, session: &str) -> PathBuf {
     paths.handoffs().join(format!("{session}.md"))
 }
 
-pub fn build(paths: &Paths, session: &str, reason: &str) -> Result<Handoff> {
+/// What only the harness transcript knows: how each turn ended, what the
+/// user answered when the agent asked, the plan they approved.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Tail {
+    /// The agent's closing message of each turn, oldest first.
+    pub replies: Vec<String>,
+    /// `topic: answer`, one per question the user answered.
+    pub decisions: Vec<String>,
+    pub plan: Option<String>,
+}
+
+pub fn build(paths: &Paths, session: &str, reason: &str, tail: Option<&Tail>) -> Result<Handoff> {
     outputs::absorb_spill(paths);
     let events = spool::read(paths, session);
     let summary = Summary::collect(paths, &events, &outputs::for_session(paths, session));
     let git = gitstate::state(&paths.root);
-    let body = render(session, reason, &summary, &git);
+    let body = render(session, reason, &summary, tail.unwrap_or(&Tail::default()), &git);
 
     let path = path_for(paths, session);
     write_atomic(&path, body.as_bytes())?;
@@ -168,7 +180,10 @@ fn commands_from_events(events: &[Event]) -> Vec<String> {
         .collect()
 }
 
-fn render(session: &str, reason: &str, s: &Summary, git: &gitstate::GitState) -> String {
+const STOPPED_MAX: usize = 1200;
+const EARLIER_REPLIES: usize = 3;
+
+fn render(session: &str, reason: &str, s: &Summary, t: &Tail, git: &gitstate::GitState) -> String {
     let ended = now_iso();
     let mut b = String::new();
     b.push_str("---\n");
@@ -184,10 +199,25 @@ fn render(session: &str, reason: &str, s: &Summary, git: &gitstate::GitState) ->
     let title_branch = if git.branch.is_empty() { String::new() } else { format!("{} · ", git.branch) };
     b.push_str(&format!("# Handoff · {title_branch}{}\n\n", &ended[..10.min(ended.len())]));
 
+    match t.replies.last() {
+        Some(last) => b.push_str(&format!("## Where it stopped\n{}\n\n", excerpt(last, STOPPED_MAX))),
+        None => {
+            if let Some(last) = &s.last_reply {
+                b.push_str(&format!("## Last reply\n{}\n\n", truncate_chars(last, 400)));
+            }
+        }
+    }
+    section(&mut b, "Decisions", t.decisions.iter().map(|d| truncate_chars(d, 200)));
     let skip = s.prompts.len().saturating_sub(6);
     section(&mut b, "Asked", s.prompts.iter().skip(skip).map(|p| truncate_chars(p, 220)));
-    if let Some(last) = &s.last_reply {
-        b.push_str(&format!("## Last reply\n{}\n\n", truncate_chars(last, 400)));
+    let earlier = t.replies.len().saturating_sub(1);
+    section(
+        &mut b,
+        "Earlier replies",
+        t.replies[earlier.saturating_sub(EARLIER_REPLIES)..earlier].iter().map(|r| first_paragraph(r, 240)),
+    );
+    if let Some(plan) = &t.plan {
+        b.push_str(&format!("## Plan\n{}\n\n", excerpt(plan, 800)));
     }
     section(
         &mut b,
@@ -200,6 +230,42 @@ fn render(session: &str, reason: &str, s: &Summary, git: &gitstate::GitState) ->
     section(&mut b, "Commands", s.commands.iter().cloned());
     render_git(&mut b, git);
     b
+}
+
+/// Agent text inside the handoff: its headings become bold lines, so they
+/// never read as handoff sections, and a cut never leaves a fence open.
+fn excerpt(text: &str, max: usize) -> String {
+    let flat: Vec<String> = text
+        .trim()
+        .lines()
+        .map(|l| match l.trim_start_matches('#') {
+            rest if rest.len() < l.len() && rest.starts_with(' ') => format!("**{}**", rest.trim()),
+            _ => l.to_string(),
+        })
+        .collect();
+    let mut out = String::new();
+    let mut cut = false;
+    for l in &flat {
+        if out.len() + l.len() + 1 > max && !out.is_empty() {
+            cut = true;
+            break;
+        }
+        out.push_str(&truncate_chars(l, max));
+        out.push('\n');
+    }
+    if out.matches("```").count() % 2 == 1 {
+        out.push_str("```\n");
+    }
+    if cut {
+        out.push_str("…\n");
+    }
+    out.trim_end().to_string()
+}
+
+/// The opening of a reply, on one line.
+fn first_paragraph(text: &str, max: usize) -> String {
+    let para = text.trim().split("\n\n").next().unwrap_or("");
+    truncate_chars(&para.split_whitespace().collect::<Vec<_>>().join(" "), max)
 }
 
 fn section(b: &mut String, title: &str, items: impl Iterator<Item = String>) {
@@ -271,5 +337,29 @@ pub fn strip_frontmatter(body: &str) -> &str {
     match body[4..].find("\n---\n") {
         Some(i) => body[4 + i + 5..].trim_start(),
         None => body,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn agent_headings_never_read_as_sections() {
+        let out = excerpt("## Done\nAll green.\n# Next\nship", 200);
+        assert_eq!(out, "**Done**\nAll green.\n**Next**\nship");
+    }
+
+    #[test]
+    fn a_cut_closes_an_open_code_fence() {
+        let text = format!("Run:\n```\n{}\n```\nafter", "x".repeat(50));
+        let out = excerpt(&text, 30);
+        assert_eq!(out.matches("```").count(), 2, "{out}");
+        assert!(out.ends_with('…'));
+    }
+
+    #[test]
+    fn earlier_replies_are_their_opening_on_one_line() {
+        assert_eq!(first_paragraph("Fixed the\nbuild.\n\nDetails follow.", 100), "Fixed the build.");
     }
 }
