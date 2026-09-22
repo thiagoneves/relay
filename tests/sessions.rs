@@ -78,6 +78,7 @@ fn wrapper_closes_its_own_session_not_the_latest() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "{stderr}");
     assert!(stderr.contains("handoffs/mine.md"), "{stderr}");
+    assert!(stderr.contains("relay handoff --share"), "an unshared handoff gets the hint: {stderr}");
 
     let local = repo.root.join(".git/relay");
     assert!(local.join("handoffs/mine.md").exists(), "{stderr}");

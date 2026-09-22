@@ -88,6 +88,11 @@ fn close(command: &str, paths: &Paths, session: &str, ended: SystemTime) {
         paths.rel(&hp)
     ));
     ui.next(&format!("`relay {command}` picks up from here; `relay {command} --last` resumes this session."));
+    // The handoff lives in .git/relay only: a wiped machine or a
+    // teammate's clone never sees it unless it is shared.
+    if !paths.shared.join("handoffs").join(format!("{session}.md")).exists() {
+        ui.next("To carry it to another machine or a teammate: `relay handoff --share`, then commit.");
+    }
 }
 
 /// The session this wrapper launched: the latest one stamped with its id
