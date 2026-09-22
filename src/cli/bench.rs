@@ -23,7 +23,11 @@ pub fn run(source: Source, json: bool, min_recall: Option<f64>) -> anyhow::Resul
             let h = id.adapter();
             let calls = h.shell_history(dir.as_deref())?;
             let label = format!("{} transcripts, current filters and hook policy", h.id());
-            (label, bench::from_history(&calls, |c| harness::protocol::policy::approved_target(c).is_some()))
+            let shrinks_after = h.replaces_output();
+            let wraps = |cmd: &str, failed: bool| {
+                harness::protocol::policy::approved_target(cmd).is_some() || (shrinks_after && !failed)
+            };
+            (label, bench::from_history(&calls, wraps))
         }
         Source::Store => {
             let paths = Paths::from_cwd()?;

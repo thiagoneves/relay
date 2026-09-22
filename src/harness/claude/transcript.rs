@@ -115,7 +115,8 @@ fn read_file(path: &Path, calls: &mut Vec<ShellCall>) {
                 }
                 Some("tool_result") => {
                     if let Some(cmd) = b["tool_use_id"].as_str().and_then(|id| pending.remove(id)) {
-                        calls.push(ShellCall { cmd, output: jsonl::text_of(&b["content"]) });
+                        let failed = b["is_error"].as_bool() == Some(true);
+                        calls.push(ShellCall { cmd, output: jsonl::text_of(&b["content"]), failed });
                     }
                 }
                 _ => {}

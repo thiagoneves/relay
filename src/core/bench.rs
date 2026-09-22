@@ -21,6 +21,8 @@ use crate::helpers::est_tokens;
 pub struct ShellCall {
     pub cmd: String,
     pub output: String,
+    /// The harness reported the call as failed (non-zero exit).
+    pub failed: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -162,11 +164,13 @@ pub fn from_corpus(dir: &Path, wraps: impl Fn(&str) -> bool) -> Result<Vec<Sampl
         .collect()
 }
 
-pub fn from_history(calls: &[ShellCall], wraps: impl Fn(&str) -> bool) -> Vec<Sample> {
+/// `wraps` says whether the hook would compress a call, given its command
+/// and whether it failed.
+pub fn from_history(calls: &[ShellCall], wraps: impl Fn(&str, bool) -> bool) -> Vec<Sample> {
     calls
         .iter()
         .enumerate()
-        .map(|(i, c)| sample(format!("h{i}"), &c.cmd, &c.output, &[], false, wraps(&c.cmd)))
+        .map(|(i, c)| sample(format!("h{i}"), &c.cmd, &c.output, &[], false, wraps(&c.cmd, c.failed)))
         .collect()
 }
 
