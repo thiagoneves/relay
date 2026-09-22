@@ -111,7 +111,10 @@ fn a_shared_handoff_is_masked_and_read_from_the_repo() {
     let repo = Repo::new("handoff-share");
     let s = "share-1";
     repo.hook("claude", json!({ "hook_event_name": "SessionStart", "session_id": s, "source": "startup" }));
-    repo.hook("claude", json!({ "hook_event_name": "UserPromptSubmit", "session_id": s, "prompt": "Ship it" }));
+    repo.hook(
+        "claude",
+        json!({ "hook_event_name": "UserPromptSubmit", "session_id": s, "prompt": "Ship the release" }),
+    );
     repo.hook(
         "claude",
         json!({ "hook_event_name": "Stop", "session_id": s, "last_assistant_message": "Deployed with token ghp_0123456789abcdefghijABCD; done." }),
@@ -126,7 +129,7 @@ fn a_shared_handoff_is_masked_and_read_from_the_repo() {
 
     std::fs::remove_dir_all(repo.root.join(".git/relay/handoffs")).unwrap();
     let brief = String::from_utf8(repo.run(&["brief"]).stdout).unwrap();
-    assert!(brief.contains("## Last session") && brief.contains("Ship it"), "{brief}");
+    assert!(brief.contains("## Last session") && brief.contains("Ship the release"), "{brief}");
 }
 
 /// A session in another harness shows up under the last one, so the

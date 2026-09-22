@@ -60,24 +60,10 @@ fn prompts(events: &[Event]) -> Vec<String> {
         .collect()
 }
 
-/// A word that only says "go on" tells the next session nothing.
+/// One or two words ("continue", "ok", "sim", "go ahead") only say to go
+/// on; the ask they answer is in a reply, not here. Any language.
 fn is_continuer(text: &str) -> bool {
-    const CONTINUERS: &[&str] = &[
-        "continue",
-        "continua",
-        "continuar",
-        "segue",
-        "siga",
-        "prossiga",
-        "pode seguir",
-        "ok",
-        "sim",
-        "yes",
-        "go",
-        "y",
-    ];
-    let t = text.trim().trim_end_matches(['.', '!']).to_lowercase();
-    CONTINUERS.contains(&t.as_str())
+    text.split_whitespace().count() < 3
 }
 
 /// A pasted block is the user's material, not their ask; the words
@@ -209,6 +195,7 @@ mod tests {
         let events = [
             ev("prompt", json!({ "text": "continue" })),
             ev("prompt", json!({ "text": "Sim." })),
+            ev("prompt", json!({ "text": "go ahead" })),
             ev(
                 "prompt",
                 json!({ "text": "review this: <pasted_content id=\"7\">\n# big\n</pasted_content id=\"7\"> please" }),
@@ -251,10 +238,10 @@ mod tests {
     fn slash_commands_are_not_asks() {
         let events = [
             ev("prompt", json!({ "text": "/clear" })),
-            ev("prompt", json!({ "text": "fix\nit" })),
+            ev("prompt", json!({ "text": "fix\nthe build" })),
             ev("prompt", json!({ "text": "<task-notification>\n<task-id>a1</task-id>" })),
             ev("prompt", json!({ "text": "<agent-message from=\"a1\">report</agent-message>" })),
         ];
-        assert_eq!(Summary::collect(&events, &[], str::to_string, "now").prompts, ["fix it"]);
+        assert_eq!(Summary::collect(&events, &[], str::to_string, "now").prompts, ["fix the build"]);
     }
 }
