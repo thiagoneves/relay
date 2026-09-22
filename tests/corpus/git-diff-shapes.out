@@ -1,0 +1,181 @@
+diff --git a/db/schema.sql b/db/schema.sql
+index 3b6a501..a1be680 100644
+--- a/db/schema.sql
++++ b/db/schema.sql
+@@ -1,5 +1,4 @@
+ create table users (id int);
+--- drop users table
+ insert into users values (1);
+ insert into users values (2);
+ insert into users values (3);
+diff --git a/logo.png b/logo.png
+new file mode 100644
+index 0000000..45a21f1
+Binary files /dev/null and b/logo.png differ
+diff --git a/src/legacy.rs b/src/legacy.rs
+deleted file mode 100644
+index b95d8a9..0000000
+--- a/src/legacy.rs
++++ /dev/null
+@@ -1 +0,0 @@
+-fn old() {}
+diff --git a/src/mod_1.rs b/src/mod_1.rs
+index 2b53e8b..dbd472a 100644
+--- a/src/mod_1.rs
++++ b/src/mod_1.rs
+@@ -2,7 +2,7 @@ fn f1() {}
+ fn f2() {}
+ fn f3() {}
+ fn f4() {}
+-fn f5() {}
++fn f5() -> Result<(), Error> { Err(Error::Timeout) }
+ fn f6() {}
+ fn f7() {}
+ fn f8() {}
+diff --git a/src/mod_10.rs b/src/mod_10.rs
+index dbbed14..2a27f83 100644
+--- a/src/mod_10.rs
++++ b/src/mod_10.rs
+@@ -2,7 +2,7 @@ fn f1() {}
+ fn f2() {}
+ fn f3() {}
+ fn f4() {}
+-fn f5() {}
++fn f5() -> Result<(), Error> { Err(Error::Timeout) }
+ fn f6() {}
+ fn f7() {}
+ fn f8() {}
+diff --git a/src/mod_11.rs b/src/mod_11.rs
+index dbbed14..2a27f83 100644
+--- a/src/mod_11.rs
++++ b/src/mod_11.rs
+@@ -2,7 +2,7 @@ fn f1() {}
+ fn f2() {}
+ fn f3() {}
+ fn f4() {}
+-fn f5() {}
++fn f5() -> Result<(), Error> { Err(Error::Timeout) }
+ fn f6() {}
+ fn f7() {}
+ fn f8() {}
+diff --git a/src/mod_12.rs b/src/mod_12.rs
+index dbbed14..2a27f83 100644
+--- a/src/mod_12.rs
++++ b/src/mod_12.rs
+@@ -2,7 +2,7 @@ fn f1() {}
+ fn f2() {}
+ fn f3() {}
+ fn f4() {}
+-fn f5() {}
++fn f5() -> Result<(), Error> { Err(Error::Timeout) }
+ fn f6() {}
+ fn f7() {}
+ fn f8() {}
+diff --git a/src/mod_2.rs b/src/mod_2.rs
+index e87f73e..60b1c8e 100644
+--- a/src/mod_2.rs
++++ b/src/mod_2.rs
+@@ -2,7 +2,7 @@ fn f1() {}
+ fn f2() {}
+ fn f3() {}
+ fn f4() {}
+-fn f5() {}
++fn f5() -> Result<(), Error> { Err(Error::Timeout) }
+ fn f6() {}
+ fn f7() {}
+ fn f8() {}
+diff --git a/src/mod_3.rs b/src/mod_3.rs
+index ed54ba8..9ee6a0a 100644
+--- a/src/mod_3.rs
++++ b/src/mod_3.rs
+@@ -2,7 +2,7 @@ fn f1() {}
+ fn f2() {}
+ fn f3() {}
+ fn f4() {}
+-fn f5() {}
++fn f5() -> Result<(), Error> { Err(Error::Timeout) }
+ fn f6() {}
+ fn f7() {}
+ fn f8() {}
+diff --git a/src/mod_4.rs b/src/mod_4.rs
+index 6dcff13..e193de4 100644
+--- a/src/mod_4.rs
++++ b/src/mod_4.rs
+@@ -2,7 +2,7 @@ fn f1() {}
+ fn f2() {}
+ fn f3() {}
+ fn f4() {}
+-fn f5() {}
++fn f5() -> Result<(), Error> { Err(Error::Timeout) }
+ fn f6() {}
+ fn f7() {}
+ fn f8() {}
+diff --git a/src/mod_5.rs b/src/mod_5.rs
+index d7b39e8..b1f43c8 100644
+--- a/src/mod_5.rs
++++ b/src/mod_5.rs
+@@ -2,7 +2,7 @@ fn f1() {}
+ fn f2() {}
+ fn f3() {}
+ fn f4() {}
+-fn f5() {}
++fn f5() -> Result<(), Error> { Err(Error::Timeout) }
+ fn f6() {}
+ fn f7() {}
+ fn f8() {}
+diff --git a/src/mod_6.rs b/src/mod_6.rs
+index 4848307..134f340 100644
+--- a/src/mod_6.rs
++++ b/src/mod_6.rs
+@@ -2,7 +2,7 @@ fn f1() {}
+ fn f2() {}
+ fn f3() {}
+ fn f4() {}
+-fn f5() {}
++fn f5() -> Result<(), Error> { Err(Error::Timeout) }
+ fn f6() {}
+ fn f7() {}
+ fn f8() {}
+diff --git a/src/mod_7.rs b/src/mod_7.rs
+index dbbed14..2a27f83 100644
+--- a/src/mod_7.rs
++++ b/src/mod_7.rs
+@@ -2,7 +2,7 @@ fn f1() {}
+ fn f2() {}
+ fn f3() {}
+ fn f4() {}
+-fn f5() {}
++fn f5() -> Result<(), Error> { Err(Error::Timeout) }
+ fn f6() {}
+ fn f7() {}
+ fn f8() {}
+diff --git a/src/mod_8.rs b/src/mod_8.rs
+index dbbed14..2a27f83 100644
+--- a/src/mod_8.rs
++++ b/src/mod_8.rs
+@@ -2,7 +2,7 @@ fn f1() {}
+ fn f2() {}
+ fn f3() {}
+ fn f4() {}
+-fn f5() {}
++fn f5() -> Result<(), Error> { Err(Error::Timeout) }
+ fn f6() {}
+ fn f7() {}
+ fn f8() {}
+diff --git a/src/mod_9.rs b/src/mod_9.rs
+index dbbed14..2a27f83 100644
+--- a/src/mod_9.rs
++++ b/src/mod_9.rs
+@@ -2,7 +2,7 @@ fn f1() {}
+ fn f2() {}
+ fn f3() {}
+ fn f4() {}
+-fn f5() {}
++fn f5() -> Result<(), Error> { Err(Error::Timeout) }
+ fn f6() {}
+ fn f7() {}
+ fn f8() {}
+diff --git a/src/moved.rs b/src/renamed.rs
+similarity index 100%
+rename from src/moved.rs
+rename to src/renamed.rs

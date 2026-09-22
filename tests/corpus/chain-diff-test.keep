@@ -1,0 +1,4 @@
+# the diff filter must not run over the test output
+test tests::rounds_totals ... FAILED
+assertion `left == right` failed: rounding must go up
+test result: FAILED. 60 passed; 1 failed

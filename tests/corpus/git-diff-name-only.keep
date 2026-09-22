@@ -1,0 +1,5 @@
+# names, not a patch: every one must reach the agent
+src/legacy.rs
+src/renamed.rs
+logo.png
+db/schema.sql

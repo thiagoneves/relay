@@ -1,0 +1,95 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 6a516d0..c9bc48f 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,5 +1,5 @@
+ #[cfg(test)] mod tests {
+-  #[test] fn adds_1() { assert_eq!(1 + 1, 2); }
++  #[test] fn adds_one() { assert_eq!(1 + 1, 2); }
+   #[test] fn adds_2() { assert_eq!(2 + 1, 3); }
+   #[test] fn adds_3() { assert_eq!(3 + 1, 4); }
+   #[test] fn adds_4() { assert_eq!(4 + 1, 5); }
+   Compiling chain v0.1.0 (/work/chain)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running unittests src/lib.rs (target/debug/deps/chain-01b537db8ff9ab32)
+
+running 61 tests
+test tests::adds_11 ... ok
+test tests::adds_10 ... ok
+test tests::adds_12 ... ok
+test tests::adds_13 ... ok
+test tests::adds_14 ... ok
+test tests::adds_15 ... ok
+test tests::adds_16 ... ok
+test tests::adds_17 ... ok
+test tests::adds_18 ... ok
+test tests::adds_19 ... ok
+test tests::adds_2 ... ok
+test tests::adds_20 ... ok
+test tests::adds_21 ... ok
+test tests::adds_22 ... ok
+test tests::adds_23 ... ok
+test tests::adds_24 ... ok
+test tests::adds_25 ... ok
+test tests::adds_26 ... ok
+test tests::adds_27 ... ok
+test tests::adds_28 ... ok
+test tests::adds_29 ... ok
+test tests::adds_3 ... ok
+test tests::adds_30 ... ok
+test tests::adds_31 ... ok
+test tests::adds_32 ... ok
+test tests::adds_33 ... ok
+test tests::adds_34 ... ok
+test tests::adds_35 ... ok
+test tests::adds_36 ... ok
+test tests::adds_37 ... ok
+test tests::adds_38 ... ok
+test tests::adds_39 ... ok
+test tests::adds_4 ... ok
+test tests::adds_40 ... ok
+test tests::adds_41 ... ok
+test tests::adds_42 ... ok
+test tests::adds_43 ... ok
+test tests::adds_44 ... ok
+test tests::adds_45 ... ok
+test tests::adds_46 ... ok
+test tests::adds_47 ... ok
+test tests::adds_48 ... ok
+test tests::adds_49 ... ok
+test tests::adds_5 ... ok
+test tests::adds_50 ... ok
+test tests::adds_51 ... ok
+test tests::adds_52 ... ok
+test tests::adds_53 ... ok
+test tests::adds_54 ... ok
+test tests::adds_55 ... ok
+test tests::adds_56 ... ok
+test tests::adds_57 ... ok
+test tests::adds_58 ... ok
+test tests::adds_59 ... ok
+test tests::adds_6 ... ok
+test tests::adds_60 ... ok
+test tests::adds_7 ... ok
+test tests::adds_8 ... ok
+test tests::adds_9 ... ok
+test tests::adds_one ... ok
+test tests::rounds_totals ... FAILED
+
+failures:
+
+---- tests::rounds_totals stdout ----
+
+thread 'tests::rounds_totals' (3039604) panicked at src/lib.rs:62:32:
+assertion `left == right` failed: rounding must go up
+  left: 3
+ right: 4
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::rounds_totals
+
+test result: FAILED. 60 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`

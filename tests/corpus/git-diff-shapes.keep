@@ -1,0 +1,6 @@
+# a removed SQL comment is a changed line, not a header
+--- drop users table
+(deleted)
+(new file)
+(binary)
+(renamed from src/moved.rs)

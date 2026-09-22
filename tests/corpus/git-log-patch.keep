@@ -1,0 +1,4 @@
+# -p: the patches are what was asked for
++fn extra_6() {}
++fn extra_5() {}
+Add extra_4

@@ -90,4 +90,44 @@ capture rg-fn "$ROOT" "rg -n 'pub fn' src"
 # A long build log with one error in the middle (webpack/gradle shape).
 capture long-build-log "$WORK" "for i in \$(seq 1 1500); do echo \"[build] compiled module \$i/3000 in 12ms\"; if [ \$i = 700 ]; then echo 'ERROR in src/pages/checkout.tsx:42:7 TS2322: Type string is not assignable to type number'; fi; done"
 
+# git: file statuses, a SQL comment removed, a rename, a binary; and
+# shapes that are not a plain patch.
+mkdir -p "$WORK/shapes" && (
+  cd "$WORK/shapes" && git init -q && git config user.email a@b.c && git config user.name dev
+  mkdir -p db src
+  { echo 'create table users (id int);'; echo '-- drop users table'; for i in $(seq 1 30); do echo "insert into users values ($i);"; done; } > db/schema.sql
+  for i in $(seq 1 12); do printf 'fn f%s() {}\n' $(seq 1 20) > "src/mod_$i.rs"; done
+  printf 'fn old() {}\n' > src/legacy.rs
+  printf 'fn keep() {}\n%.0s' $(seq 1 30) > src/moved.rs
+  git add -A && git commit -q -m "Initial schema and modules"
+  for i in $(seq 1 6); do
+    echo "fn extra_$i() {}" >> "src/mod_$i.rs"
+    git add -A && git commit -q -m "Add extra_$i" -m "Body of change $i."
+  done
+  sed -i '' '/^-- drop users table$/d' db/schema.sql
+  for i in $(seq 1 12); do sed -i '' "s/^fn f5() {}$/fn f5() -> Result<(), Error> { Err(Error::Timeout) }/" "src/mod_$i.rs"; done
+  git rm -q src/legacy.rs
+  git mv src/moved.rs src/renamed.rs
+  printf '\x89PNG\r\n\x1a\n\x00\x00' > logo.png
+  git add -A
+)
+capture git-diff-shapes "$WORK/shapes" "git diff --cached"
+capture git-diff-name-only "$WORK/shapes" "git diff --cached --name-only"
+capture git-log-patch "$WORK/shapes" "git log -p -n 3"
+
+# A chain: a diff, then a failing cargo test.
+cargo new -q --lib "$WORK/chain" && (
+  cd "$WORK/chain" && git init -q && git config user.email a@b.c && git config user.name dev
+  {
+    echo '#[cfg(test)] mod tests {'
+    for i in $(seq 1 60); do echo "  #[test] fn adds_$i() { assert_eq!($i + 1, $((i + 1))); }"; done
+    echo '  #[test] fn rounds_totals() { assert_eq!(7 / 2, 4, "rounding must go up"); }'
+    echo '}'
+  } > src/lib.rs
+  git add -A && git commit -q -m init
+  sed -i '' 's/adds_1()/adds_one()/' src/lib.rs
+  cargo build -q --tests 2>/dev/null
+)
+capture chain-diff-test "$WORK/chain" "git diff && cargo test"
+
 echo "corpus written to $OUT"
