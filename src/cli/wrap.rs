@@ -10,7 +10,7 @@ use anyhow::{Context, bail};
 use crate::core::paths::Paths;
 use crate::core::{bootstrap, handoff, machine, outputs, spool};
 use crate::harness;
-use crate::helpers::{human_tokens, shell};
+use crate::helpers::{human_tokens, new_id, shell};
 
 pub fn run(name: &str, last: bool, args: &[String]) -> anyhow::Result<i32> {
     let h = harness::by_name(name)?;
@@ -45,9 +45,11 @@ pub fn run(name: &str, last: bool, args: &[String]) -> anyhow::Result<i32> {
     }
     launch.extend(args.iter().cloned());
 
+    let wrapper = new_id("w");
     let started = SystemTime::now();
     let status = Command::new(&program)
         .args(&launch)
+        .env(spool::WRAPPER_ENV, &wrapper)
         .current_dir(&paths.root)
         .status()
         .with_context(|| format!("failed to launch {}", h.command()))?;
@@ -55,7 +57,7 @@ pub fn run(name: &str, last: bool, args: &[String]) -> anyhow::Result<i32> {
 
     // Post-exit: the SessionEnd hook normally wrote the handoff. If the
     // harness died without firing it, do it here.
-    if let Some((session, mtime)) = spool::sessions(&paths).into_iter().find(|(_, m)| *m >= started) {
+    if let Some((session, mtime)) = own_session(&paths, &wrapper, started) {
         let hp = handoff::path_for(&paths, &session);
         let stale = std::fs::metadata(&hp).and_then(|m| m.modified()).map(|m| m < mtime).unwrap_or(true);
         if stale {
@@ -72,4 +74,16 @@ pub fn run(name: &str, last: bool, args: &[String]) -> anyhow::Result<i32> {
         );
     }
     Ok(code)
+}
+
+/// The session this wrapper launched: the latest one stamped with its id
+/// (a `/clear` inside it starts another). Sessions stamped by a different
+/// wrapper belong to a parallel `relay claude|codex`; an unstamped one is
+/// taken only as a fallback, for a harness that does not pass its
+/// environment on to hooks.
+fn own_session(paths: &Paths, wrapper: &str, started: SystemTime) -> Option<(String, SystemTime)> {
+    let recent: Vec<_> = spool::sessions(paths).into_iter().filter(|(_, m)| *m >= started).collect();
+    let stamps: Vec<_> = recent.iter().map(|(s, _)| spool::wrappers(paths, s)).collect();
+    let pick = |f: &dyn Fn(&[String]) -> bool| recent.iter().zip(&stamps).find(|(_, w)| f(w)).map(|(s, _)| s.clone());
+    pick(&|w| w.iter().any(|x| x == wrapper)).or_else(|| pick(&|w| w.is_empty()))
 }

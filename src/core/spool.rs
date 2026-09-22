@@ -33,6 +33,11 @@ impl Event {
     }
 }
 
+/// Set by `relay claude|codex` on the harness it launches. Hooks inherit
+/// it and stamp it on `session_start`, which is how the wrapper finds its
+/// own session when others run in the same worktree.
+pub const WRAPPER_ENV: &str = "RELAY_WRAPPER";
+
 fn file_for(paths: &Paths, session: &str) -> PathBuf {
     paths.spool().join(format!("{}.jsonl", safe(session)))
 }
@@ -86,4 +91,14 @@ pub fn current_session(paths: &Paths) -> Option<String> {
 
 pub fn set_current_session(paths: &Paths, session: &str) {
     let _ = write_atomic(&paths.current_session_file(), session.as_bytes());
+}
+
+/// The wrapper that launched this session, from its `session_start`
+/// events (a resumed session has several; any of them counts).
+pub fn wrappers(paths: &Paths, session: &str) -> Vec<String> {
+    read(paths, session)
+        .into_iter()
+        .filter(|e| e.event == "session_start")
+        .filter_map(|e| e.data["wrapper"].as_str().map(str::to_string))
+        .collect()
 }

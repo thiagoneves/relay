@@ -52,7 +52,7 @@ impl Repo {
     }
 
     /// Run inside the repo with every home-like variable pointing at it.
-    fn isolated(&self, mut c: Command) -> Command {
+    pub fn isolated(&self, mut c: Command) -> Command {
         c.current_dir(&self.root);
         for var in ["HOME", "USERPROFILE", "LOCALAPPDATA", "XDG_DATA_HOME", "CODEX_HOME", "CLAUDE_CONFIG_DIR"] {
             c.env(var, &self.root);

@@ -90,6 +90,7 @@ fn session_start(paths: &Paths, session: &str, input: &Value, harness_id: &str) 
             "cwd": input["cwd"],
             "harness": harness_id,
             "brief_tokens": est_tokens(&text),
+            "wrapper": std::env::var(spool::WRAPPER_ENV).ok(),
         }),
     )?;
     if !text.trim().is_empty() {
