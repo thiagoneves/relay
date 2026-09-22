@@ -71,7 +71,7 @@ mod tests {
         std::fs::create_dir_all(root.join("packages/web")).unwrap();
         std::fs::create_dir_all(dir.join("sessions/2026/09/22")).unwrap();
         let meta = |id: &str, cwd: &Path| {
-            format!(r#"{{"type":"session_meta","payload":{{"id":"{id}","cwd":"{}"}}}}"#, cwd.display())
+            serde_json::json!({ "type": "session_meta", "payload": { "id": id, "cwd": cwd } }).to_string()
         };
         std::fs::write(dir.join("sessions/2026/09/22/a.jsonl"), meta("sub", &root.join("packages/web"))).unwrap();
         std::fs::write(dir.join("sessions/2026/09/22/b.jsonl"), meta("top", &root)).unwrap();

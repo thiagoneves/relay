@@ -172,7 +172,7 @@ mod tests {
         let session = |cwd: &Path| {
             let d = projects.join(project_slug(cwd));
             std::fs::create_dir_all(&d).unwrap();
-            let line = format!(r#"{{"type":"user","cwd":"{}","message":{{"content":"hi"}}}}"#, cwd.display());
+            let line = serde_json::json!({ "type": "user", "cwd": cwd, "message": { "content": "hi" } });
             std::fs::write(d.join("s.jsonl"), format!("{{\"type\":\"summary\"}}\n{line}\n")).unwrap();
             d
         };
