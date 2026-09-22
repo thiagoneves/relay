@@ -199,7 +199,7 @@ fn title_of(text: &str) -> String {
 
 fn slug(title: &str) -> String {
     let mut s = String::new();
-    for c in title.chars().flat_map(char::to_lowercase) {
+    for c in title.chars().flat_map(char::to_lowercase).map(unaccent) {
         if c.is_ascii_alphanumeric() {
             s.push(c);
         } else if !s.ends_with('-') && !s.is_empty() {
@@ -211,6 +211,23 @@ fn slug(title: &str) -> String {
     }
     let s = s.trim_end_matches('-').to_string();
     if s.is_empty() { "item".into() } else { s }
+}
+
+/// Latin letters with a mark, folded to the bare letter so file names
+/// keep the word: `configurações` → `configuracoes`.
+fn unaccent(c: char) -> char {
+    match c {
+        'à'..='å' => 'a',
+        'è'..='ë' => 'e',
+        'ì'..='ï' => 'i',
+        'ò'..='ö' | 'ø' => 'o',
+        'ù'..='ü' => 'u',
+        'ç' => 'c',
+        'ñ' => 'n',
+        'ý' | 'ÿ' => 'y',
+        'ß' => 's',
+        _ => c,
+    }
 }
 
 fn unique_path(dir: &std::path::Path, stem: &str) -> PathBuf {
@@ -235,7 +252,8 @@ mod tests {
     #[test]
     fn slugs_are_short_and_ascii() {
         assert_eq!(slug("Use `cargo nextest`, not cargo test!"), "use-cargo-nextest-not-cargo-test");
-        assert_eq!(slug("Não usar ç"), "n-o-usar");
+        assert_eq!(slug("Não usar ç"), "nao-usar-c");
+        assert_eq!(slug("Centralizar configurações, módulo único"), "centralizar-configuracoes-modulo-unico");
         assert_eq!(slug("!!!"), "item");
         assert!(slug(&"a ".repeat(100)).len() <= 60);
     }
