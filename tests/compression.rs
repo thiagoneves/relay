@@ -27,6 +27,10 @@ fn corpus_keeps_every_required_line_and_saves_tokens() {
 
     for s in report["samples"].as_array().unwrap() {
         assert!(s["tokens_out"].as_u64() <= s["tokens_in"].as_u64(), "{} grew", s["name"]);
+        // The hook never wraps `$(...)`; the bench must not pretend it does.
+        if s["name"] == "long-build-log" {
+            assert_eq!(s["wrapped"], false, "corpus ignores the hook policy");
+        }
     }
     let tin = total["tokens_in"].as_f64().unwrap();
     let saved = (tin - total["tokens_out"].as_f64().unwrap()) * 100.0 / tin;

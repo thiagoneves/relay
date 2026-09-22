@@ -128,7 +128,9 @@ pub fn from_store(paths: &Paths) -> Vec<Sample> {
         .collect()
 }
 
-pub fn from_corpus(dir: &Path) -> Result<Vec<Sample>> {
+/// `wraps` is the hook policy: a fixture it would not wrap reaches the
+/// agent uncompressed, whatever the filters could do with it.
+pub fn from_corpus(dir: &Path, wraps: impl Fn(&str) -> bool) -> Result<Vec<Sample>> {
     let mut names: Vec<String> = std::fs::read_dir(dir)
         .with_context(|| format!("cannot read corpus {}", dir.display()))?
         .flatten()
@@ -154,7 +156,8 @@ pub fn from_corpus(dir: &Path) -> Result<Vec<Sample>> {
                 .filter(|l| !l.is_empty() && !l.starts_with('#'))
                 .map(str::to_string)
                 .collect();
-            Ok(sample(name, &cmd, &raw, &expect, false, true))
+            let wrapped = wraps(&cmd);
+            Ok(sample(name, &cmd, &raw, &expect, false, wrapped))
         })
         .collect()
 }

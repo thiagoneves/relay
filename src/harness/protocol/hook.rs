@@ -203,10 +203,20 @@ fn rewrite_output(command: &str, approve: bool) -> Value {
 }
 
 /// Commands worth routing through `relay x`. Conservative on purpose:
-/// anything interactive, backgrounded, or already wrapped is left alone.
+/// `relay x` runs the command in a child shell and prints only when it
+/// exits, so anything interactive, long-running, backgrounded, or that
+/// changes the calling shell (`cd`, `export`) is left alone, as is
+/// anything already wrapped.
 pub fn should_wrap(cmd: &str) -> bool {
+    use crate::compress::command::{Joint, head_tokens, program, segments};
+
     const INTERACTIVE: &[&str] =
         &["vim", "vi", "nano", "less", "more", "top", "htop", "ssh", "tmux", "screen", "watch", "man"];
+    // Their effect must outlive the command: the harness's shell keeps it.
+    const SHELL_STATE: &[&str] = &["cd", "pushd", "popd", "export", "unset", "source", "."];
+    // Subcommands and scripts that serve or watch until killed.
+    const LONG_RUNNING: &[&str] =
+        &["dev", "serve", "server", "start", "watch", "preview", "runserver", "http.server", "--watch"];
     const WRAP: &[&str] = &[
         "git",
         "ls",
@@ -261,23 +271,37 @@ pub fn should_wrap(cmd: &str) -> bool {
         "clang",
         "cmake",
         "ninja",
+        "node",
+        "bundle",
+        "rspec",
+        "gradlew",
+        "mvnw",
+        "jq",
+        "sed",
     ];
-    let t = cmd.trim();
-    if t.starts_with("relay ") || t.contains("relay x ") || t.starts_with("rtk ") {
+    if cmd.contains("<<") || cmd.contains("$(") || cmd.contains('`') {
         return false;
     }
-    if t.contains("<<") || t.ends_with('&') || t.contains("$(") || t.contains('`') {
-        return false;
-    }
-    // Look at every segment of a chain: `cd src && cargo test` is worth
-    // wrapping because of the second command, `vim x` never is.
+    // Every segment of a chain counts: `git diff && cargo test` is worth
+    // wrapping, and one `vim x` or `cd src` anywhere rules it out.
     let mut any_wrap = false;
-    for seg in t.split(['&', ';', '|']).map(str::trim).filter(|s| !s.is_empty()) {
-        let Some(t0) = crate::compress::head_tokens(seg).into_iter().next() else { continue };
-        if INTERACTIVE.contains(&t0.as_str()) {
+    for seg in segments(cmd) {
+        if seg.then == Joint::Background {
             return false;
         }
-        any_wrap |= WRAP.contains(&t0.as_str());
+        let toks = head_tokens(seg.text);
+        let Some(t0) = toks.first().map(|t| program(t)) else { continue };
+        let words: Vec<&str> = seg.text.split_whitespace().collect();
+        let follows = || words.iter().any(|w| matches!(*w, "-f" | "-F" | "--follow"));
+        let long_running = (t0 != "git" && toks[1..].iter().any(|t| LONG_RUNNING.contains(&t.as_str())))
+            || words.contains(&"--watch")
+            || (matches!(t0, "tail" | "journalctl") || words.contains(&"logs")) && follows()
+            || t0 == "vite" && toks.get(1).is_none_or(|t| t != "build");
+        let already_wrapped = words.first().is_some_and(|w| matches!(program(w.trim_matches('\'')), "relay" | "rtk"));
+        if already_wrapped || INTERACTIVE.contains(&t0) || SHELL_STATE.contains(&t0) || long_running {
+            return false;
+        }
+        any_wrap |= WRAP.contains(&t0);
     }
     any_wrap
 }
@@ -306,12 +330,65 @@ mod tests {
     fn wraps_known_and_skips_risky() {
         assert!(should_wrap("git status"));
         assert!(should_wrap("RUST_LOG=debug cargo test"));
-        assert!(should_wrap("cd src && ls -la"));
+        assert!(should_wrap("git diff && cargo test 2>&1"));
         assert!(!should_wrap("echo hi"));
         assert!(!should_wrap("rtk git status"));
         assert!(!should_wrap("relay x -- git status"));
         assert!(!should_wrap("cat <<EOF > f\nx\nEOF"));
         assert!(!should_wrap("npm run dev &"));
         assert!(!should_wrap("vim file"));
+        assert!(!should_wrap("git status\nvim f"));
+    }
+
+    #[test]
+    fn a_background_job_anywhere_is_not_wrapped() {
+        assert!(!should_wrap("sleep 4 & git --version"));
+        assert!(!should_wrap("npm run dev & sleep 3; curl localhost:3000"));
+        assert!(should_wrap("cargo build &> build.log && tail -5 build.log"));
+    }
+
+    #[test]
+    fn commands_that_change_the_shell_are_not_wrapped() {
+        for cmd in
+            ["cd src && ls -la", "export A=1; cargo test", "source .env && npm test", ". venv/bin/activate; pytest"]
+        {
+            assert!(!should_wrap(cmd), "{cmd}");
+        }
+    }
+
+    #[test]
+    fn long_running_commands_are_not_wrapped() {
+        for cmd in [
+            "tail -f log/dev.log",
+            "docker logs -f api",
+            "kubectl logs --follow pod/x",
+            "npm run dev",
+            "pnpm dev",
+            "npm start",
+            "python3 -m http.server 8000",
+            "cargo watch -x test",
+            "tsc --watch",
+            "vite",
+            "next dev",
+        ] {
+            assert!(!should_wrap(cmd), "{cmd}");
+        }
+        assert!(should_wrap("vite build"));
+        assert!(should_wrap("git checkout dev"));
+        assert!(should_wrap("tail -n 50 log/dev.log"));
+    }
+
+    #[test]
+    fn programs_match_by_name_wherever_they_live() {
+        for cmd in [
+            "./gradlew test",
+            "./mvnw verify",
+            "/usr/bin/git status",
+            "node --test",
+            "bundle exec rspec",
+            "jq . a.json",
+        ] {
+            assert!(should_wrap(cmd), "{cmd}");
+        }
     }
 }

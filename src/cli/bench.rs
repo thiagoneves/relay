@@ -17,7 +17,10 @@ pub enum Source {
 
 pub fn run(source: Source, json: bool, min_recall: Option<f64>) -> anyhow::Result<i32> {
     let (label, samples) = match source {
-        Source::Corpus(dir) => (format!("corpus {}", dir.display()), bench::from_corpus(&dir)?),
+        Source::Corpus(dir) => (
+            format!("corpus {}, current hook policy", dir.display()),
+            bench::from_corpus(&dir, harness::protocol::hook::should_wrap)?,
+        ),
         Source::History(name, dir) => {
             let h = harness::by_name(&name)?;
             let calls = h.shell_history(dir.as_deref())?;
