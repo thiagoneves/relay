@@ -38,8 +38,14 @@ pub fn sessions_in(dir: &Path) -> Vec<Transcript> {
 }
 
 fn transcript(path: PathBuf, id: String, parent: Option<String>) -> Transcript {
-    let modified = std::fs::metadata(&path).and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH);
-    Transcript { path, id, parent, modified }
+    let now = std::time::SystemTime::now();
+    Transcript::from_file(path.clone(), id.clone(), parent.clone()).unwrap_or(Transcript {
+        path,
+        id,
+        parent,
+        started: now,
+        modified: now,
+    })
 }
 
 pub fn shell_calls(dir: &Path) -> Vec<ShellCall> {

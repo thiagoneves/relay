@@ -49,6 +49,12 @@ pub trait Harness {
         let _ = root;
         Vec::new()
     }
+    /// Hook commands configured today for the project at `root`, plugins
+    /// included. `None` when the adapter cannot tell.
+    fn configured_hooks(&self, root: Option<&Path>) -> Option<Vec<String>> {
+        let _ = root;
+        None
+    }
     /// Where one session's context went; see `core::audit`.
     fn audit_session(&self, transcript: &Path) -> Option<SessionAudit> {
         let _ = transcript;

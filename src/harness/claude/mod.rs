@@ -64,6 +64,21 @@ impl Harness for Claude {
         audit::session(path)
     }
 
+    /// Project settings live in each project, so only a single project can
+    /// be checked; across all projects the answer is unknown.
+    fn configured_hooks(&self, root: Option<&Path>) -> Option<Vec<String>> {
+        let root = root?;
+        let dir = config_dir();
+        let mut files = vec![
+            dir.join("settings.json"),
+            dir.join("settings.local.json"),
+            root.join(".claude/settings.json"),
+            root.join(".claude/settings.local.json"),
+        ];
+        files.extend(audit::plugin_hook_files(&dir.join("plugins/installed_plugins.json")));
+        Some(files.iter().flat_map(|f| audit::hook_commands(f)).collect())
+    }
+
     fn shell_history(&self, dir: Option<&Path>) -> Result<Vec<ShellCall>> {
         let dir = dir.map_or_else(|| config_dir().join("projects"), Path::to_path_buf);
         anyhow::ensure!(dir.is_dir(), "no Claude Code transcripts at {}", dir.display());

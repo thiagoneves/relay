@@ -144,6 +144,36 @@ fn attachment(a: &Value, col: &mut Collector) {
     }
 }
 
+/// Every `command` of every hook in a settings or plugin hooks file.
+pub fn hook_commands(file: &Path) -> Vec<String> {
+    let Ok(text) = std::fs::read_to_string(file) else { return Vec::new() };
+    let Ok(v) = serde_json::from_str::<Value>(&text) else { return Vec::new() };
+    let mut out = Vec::new();
+    for groups in v["hooks"].as_object().into_iter().flat_map(|o| o.values()) {
+        for group in groups.as_array().into_iter().flatten() {
+            for h in group["hooks"].as_array().into_iter().flatten() {
+                if let Some(c) = h["command"].as_str() {
+                    out.push(c.to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// `hooks/hooks.json` of every installed plugin.
+pub fn plugin_hook_files(installed: &Path) -> Vec<std::path::PathBuf> {
+    let Ok(text) = std::fs::read_to_string(installed) else { return Vec::new() };
+    let Ok(v) = serde_json::from_str::<Value>(&text) else { return Vec::new() };
+    v["plugins"]
+        .as_object()
+        .into_iter()
+        .flat_map(|o| o.values())
+        .flat_map(|installs| installs.as_array().cloned().unwrap_or_default())
+        .filter_map(|i| i["installPath"].as_str().map(|p| Path::new(p).join("hooks/hooks.json")))
+        .collect()
+}
+
 /// `Bash`, `Read`, or `MCP <server>` for MCP tools, which differ only in suffix.
 fn tool_label(name: &str) -> String {
     match name.strip_prefix("mcp__") {
@@ -176,6 +206,18 @@ fn home_short(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_hook_commands_from_settings() {
+        let dir = std::env::temp_dir().join(format!("relay-hookcmds-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let settings = r#"{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"a"}]}],"Stop":[{"hooks":[{"type":"command","command":"b"}]}]}}"#;
+        std::fs::write(dir.join("s.json"), settings).unwrap();
+        let mut cmds = hook_commands(&dir.join("s.json"));
+        cmds.sort();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(cmds, ["a", "b"]);
+    }
 
     #[test]
     fn blocks_cost_their_size_times_the_calls_after_them() {

@@ -24,10 +24,9 @@ pub fn rollouts(dir: &Path, root: Option<&Path>) -> Vec<Transcript> {
             {
                 return None;
             }
-            let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok()?;
             let id = p["id"].as_str().unwrap_or_default().to_string();
             let parent = p["parent_thread_id"].as_str().filter(|s| !s.is_empty()).map(str::to_string);
-            Some(Transcript { path, id, parent, modified })
+            Transcript::from_file(path, id, parent)
         })
         .collect()
 }
