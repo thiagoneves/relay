@@ -4,6 +4,7 @@
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
 
 use anyhow::Result;
@@ -11,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::core::paths::Paths;
-use crate::helpers::{now_iso, write_atomic};
+use crate::helpers::{new_id, now_iso, write_atomic};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[expect(clippy::struct_field_names, reason = "field names are the on-disk JSONL format")]
@@ -19,7 +20,9 @@ pub struct Event {
     pub ts: String,
     pub session: String,
     pub event: String,
-    /// Idempotency key: `tool_use_id` when available, else event + ts.
+    /// Idempotency key: `tool_use_id` when available, so a replayed tool
+    /// call converges; otherwise unique, since two prompts can share a
+    /// second.
     pub key: String,
     #[serde(default)]
     pub data: Value,
@@ -27,8 +30,12 @@ pub struct Event {
 
 impl Event {
     pub fn new(session: &str, event: &str, key: Option<&str>, data: Value) -> Self {
+        // `new_id` is unique across processes; the counter covers two
+        // events from one process within the same millisecond.
+        static SEQ: AtomicUsize = AtomicUsize::new(0);
         let ts = now_iso();
-        let key = key.map_or_else(|| format!("{event}:{ts}"), str::to_string);
+        let key =
+            key.map_or_else(|| format!("{}_{}", new_id(event), SEQ.fetch_add(1, Ordering::Relaxed)), str::to_string);
         Self { ts, session: session.to_string(), event: event.to_string(), key, data }
     }
 }
@@ -101,4 +108,36 @@ pub fn wrappers(paths: &Paths, session: &str) -> Vec<String> {
         .filter(|e| e.event == "session_start")
         .filter_map(|e| e.data["wrapper"].as_str().map(str::to_string))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn paths(name: &str) -> Paths {
+        let root = std::env::temp_dir().join(format!("relay-ut-spool-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        Paths { shared: root.join(".relay"), local: root.join("local"), root, in_git: false }
+    }
+
+    #[test]
+    fn keyless_events_in_the_same_second_are_all_kept() {
+        let p = paths("keyless");
+        for text in ["first ask", "second ask"] {
+            append(&p, &Event::new("s", "prompt", None, json!({ "text": text }))).unwrap();
+        }
+        assert_eq!(read(&p, "s").len(), 2);
+        let _ = fs::remove_dir_all(&p.root);
+    }
+
+    #[test]
+    fn a_replayed_tool_call_converges() {
+        let p = paths("replay");
+        for _ in 0..2 {
+            append(&p, &Event::new("s", "tool", Some("toolu_1"), json!({}))).unwrap();
+        }
+        assert_eq!(read(&p, "s").len(), 1);
+        let _ = fs::remove_dir_all(&p.root);
+    }
 }
