@@ -79,6 +79,12 @@ pub enum Commands {
         /// (default: this worktree's stored originals)
         #[arg(long)]
         corpus: Option<std::path::PathBuf>,
+        /// Replay the shell calls in a harness's own transcripts (claude)
+        #[arg(long, value_name = "HARNESS", conflicts_with = "corpus")]
+        history: Option<String>,
+        /// Transcript directory for --history (default: the harness's own)
+        #[arg(long, value_name = "DIR", requires = "history")]
+        history_dir: Option<std::path::PathBuf>,
         /// Machine-readable output
         #[arg(long)]
         json: bool,
@@ -124,7 +130,14 @@ pub fn run() -> anyhow::Result<i32> {
         Commands::Get { id, meta } => get::run(&id, meta),
         Commands::Handoff { session, show } => handoff::run(session.as_deref(), show),
         Commands::Remember { kind, text, paths } => remember::run(kind, &text.join(" "), &paths),
-        Commands::Bench { corpus, json, min_recall } => bench::run(corpus.as_deref(), json, min_recall),
+        Commands::Bench { corpus, history, history_dir, json, min_recall } => {
+            let source = match (corpus, history) {
+                (Some(dir), _) => bench::Source::Corpus(dir),
+                (None, Some(h)) => bench::Source::History(h, history_dir),
+                (None, None) => bench::Source::Store,
+            };
+            bench::run(source, json, min_recall)
+        }
         Commands::Brief => brief::run(),
         Commands::Status => status::run(),
         Commands::Purge { yes } => purge::run(yes),
