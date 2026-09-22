@@ -102,6 +102,27 @@ pub fn segments<'a>(cmd: &'a str) -> Vec<Segment<'a>> {
     out
 }
 
+/// Split off leading `cd`, `pushd`, `popd` and `export` steps joined by
+/// `&&` or `;`. Their effect has to land in the caller's shell, so only
+/// the rest may run under `relay x`. Returns `("", cmd)` when there is no
+/// such prefix or nothing follows it.
+pub fn split_shell_state(cmd: &str) -> (&str, &str) {
+    const STATE: &[&str] = &["cd", "pushd", "popd", "export"];
+    for seg in segments(cmd) {
+        let first = seg.text.split_whitespace().next().unwrap_or("");
+        if STATE.contains(&first) && matches!(seg.then, Joint::And | Joint::Seq) {
+            continue;
+        }
+        if STATE.contains(&first) {
+            break;
+        }
+        // `segments` hands out subslices of `cmd`, so the offset is exact.
+        let at = seg.text.as_ptr() as usize - cmd.as_ptr() as usize;
+        return if at == 0 { ("", cmd) } else { cmd.split_at(at) };
+    }
+    ("", cmd)
+}
+
 /// Leading tokens of one simple command, skipping env assignments,
 /// wrappers (`sudo`, `time`, `timeout 30`, `env`, `nohup`) and
 /// `pnpm|yarn|npm exec`, so the first
@@ -202,6 +223,19 @@ mod tests {
         assert_eq!(head_tokens("pnpm exec vitest run"), ["vitest", "run"]);
         assert_eq!(head_tokens("yarn exec jest"), ["jest"]);
         assert_eq!(head_tokens("pnpm run test"), ["pnpm", "run", "test"]);
+    }
+
+    #[test]
+    fn shell_state_prefix_stays_outside() {
+        assert_eq!(split_shell_state("cd /repo && cargo test"), ("cd /repo && ", "cargo test"));
+        assert_eq!(
+            split_shell_state("cd a; export X=1 && git status | head"),
+            ("cd a; export X=1 && ", "git status | head")
+        );
+        assert_eq!(split_shell_state("cargo test && cd x"), ("", "cargo test && cd x"));
+        assert_eq!(split_shell_state("cd /repo"), ("", "cd /repo"));
+        assert_eq!(split_shell_state("cd a || git status"), ("", "cd a || git status"));
+        assert_eq!(split_shell_state("cd 'my dir' && ls"), ("cd 'my dir' && ", "ls"));
     }
 
     #[test]

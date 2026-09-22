@@ -53,3 +53,17 @@ fn remember_carries_the_session() {
     let item = std::fs::read_dir(repo.root.join(".relay/rules")).unwrap().flatten().next().unwrap().path();
     assert!(std::fs::read_to_string(item).unwrap().contains("s1"));
 }
+
+#[test]
+fn leading_cd_stays_in_the_harness_shell() {
+    let repo = Repo::new("rewrite-cd");
+    let out = pre(&repo, "claude", &json!({ "command": "cd /repo && git status" })).unwrap();
+    let cmd = out["updatedInput"]["command"].as_str().unwrap();
+    assert!(cmd.starts_with("cd /repo && ") && cmd.ends_with("-- 'git status'"), "{cmd}");
+    assert_eq!(out["permissionDecision"], "allow");
+
+    let out = pre(&repo, "claude", &json!({ "command": "export CI=1 && git status" })).unwrap();
+    assert!(out.get("permissionDecision").is_none(), "an export prefix is not read-only: {out}");
+
+    assert!(pre(&repo, "claude", &json!({ "command": "cd /repo" })).is_none());
+}

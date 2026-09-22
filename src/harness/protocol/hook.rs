@@ -171,15 +171,21 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness_id: &str) {
         println!("{}", rewrite_output(&rewritten, false));
         return;
     }
-    if !rewrites_commands(harness_id) || !should_wrap(cmd) {
+    if !rewrites_commands(harness_id) {
         return;
     }
-    let approve = match permission::rewrite_for(cmd, bare) {
+    let Some((prefix, body)) = wrap_target(cmd) else { return };
+    let prefix_read_only = prefix.is_empty() || permission::is_read_only(prefix);
+    let approve = match permission::rewrite_for(body, bare) {
         Rewrite::Skip => return,
-        Rewrite::Approve => true,
+        Rewrite::Approve => prefix_read_only,
         Rewrite::Defer => false,
     };
-    let rewritten = format!("{} x --session {} -- {}", relay_invocation(), shell::quote(session), shell::quote(cmd));
+    if !approve && !bare {
+        return;
+    }
+    let rewritten =
+        format!("{prefix}{} x --session {} -- {}", relay_invocation(), shell::quote(session), shell::quote(body));
     println!("{}", rewrite_output(&rewritten, approve));
 }
 
@@ -200,6 +206,13 @@ fn rewrite_output(command: &str, approve: bool) -> Value {
         out["permissionDecisionReason"] = "relay: read-only command".into();
     }
     json!({ "hookSpecificOutput": out })
+}
+
+/// The part of `cmd` to route through `relay x`, after any leading
+/// `cd`/`export` steps that must stay in the harness's shell.
+pub fn wrap_target(cmd: &str) -> Option<(&str, &str)> {
+    let (prefix, body) = crate::compress::command::split_shell_state(cmd);
+    should_wrap(body).then_some((prefix, body))
 }
 
 /// Commands worth routing through `relay x`. Conservative on purpose:

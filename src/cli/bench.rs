@@ -19,13 +19,13 @@ pub fn run(source: Source, json: bool, min_recall: Option<f64>) -> anyhow::Resul
     let (label, samples) = match source {
         Source::Corpus(dir) => (
             format!("corpus {}, current hook policy", dir.display()),
-            bench::from_corpus(&dir, harness::protocol::hook::should_wrap)?,
+            bench::from_corpus(&dir, |c| harness::protocol::hook::wrap_target(c).is_some())?,
         ),
         Source::History(name, dir) => {
             let h = harness::by_name(&name)?;
             let calls = h.shell_history(dir.as_deref())?;
             let label = format!("{} transcripts, current filters and hook policy", h.id());
-            (label, bench::from_history(&calls, harness::protocol::hook::should_wrap))
+            (label, bench::from_history(&calls, |c| harness::protocol::hook::wrap_target(c).is_some()))
         }
         Source::Store => {
             let paths = Paths::from_cwd()?;
