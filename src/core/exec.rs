@@ -65,7 +65,7 @@ pub fn run(cmd: &str, raw_only: bool) -> Result<Outcome> {
             tokens_out,
         };
         match outputs::store(&paths, &meta, &raw) {
-            Ok(()) => {
+            Ok(_) => {
                 if tokens_out < tokens_in {
                     footer = format!(
                         "\n[relay {}→{} tokens · original: relay get {}]",

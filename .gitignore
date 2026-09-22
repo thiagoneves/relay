@@ -16,3 +16,4 @@ target/
 # Agent instruction files stay local
 CLAUDE.md
 .claude/
+.serena/

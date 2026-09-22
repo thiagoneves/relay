@@ -89,6 +89,11 @@ fn session_start(paths: &Paths, session: &str, input: &Value, harness_id: &str) 
 
 fn post_tool_use(paths: &Paths, session: &str, input: &Value) -> Result<()> {
     let tool = input["tool_name"].as_str().unwrap_or("");
+    if tool == "Bash" {
+        // Hooks run outside the tool sandbox: pull in anything relay x
+        // could not write to the local tier.
+        crate::core::outputs::absorb_spill(paths);
+    }
     let key = input["tool_use_id"].as_str();
     let data = match tool {
         "Bash" => {

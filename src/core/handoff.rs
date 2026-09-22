@@ -22,6 +22,7 @@ pub fn path_for(paths: &Paths, session: &str) -> PathBuf {
 }
 
 pub fn build(paths: &Paths, session: &str, reason: &str) -> Result<Handoff> {
+    outputs::absorb_spill(paths);
     let events = spool::read(paths, session);
     let outs = outputs::for_session(paths, session);
     let git = gitstate::state(&paths.root);
