@@ -7,9 +7,7 @@ use crate::core::paths::Paths;
 use crate::harness::{self, Harness, HarnessId};
 use crate::helpers::term::{self, Color, Paint};
 use crate::helpers::{human_tokens, parse_since, truncate_chars};
-
-const SOURCES_SHOWN: usize = 12;
-const BAR: usize = 40;
+use crate::limits;
 
 pub struct Options {
     pub only: Option<HarnessId>,
@@ -165,7 +163,7 @@ fn print_split(p: Paint, r: &Report) {
     ];
     #[allow(clippy::cast_precision_loss)]
     let shares: Vec<f64> = parts.iter().map(|(n, ..)| *n as f64 / r.context_sent.max(1) as f64).collect();
-    let cells = term::split(&shares, BAR);
+    let cells = term::split(&shares, limits::audit::BAR_WIDTH);
     let bar: String = parts.iter().zip(&cells).map(|((_, c, _), n)| p.color(*c, &"█".repeat(*n))).collect();
     println!("  {bar}");
     let legend: Vec<String> = parts
@@ -201,7 +199,7 @@ fn print_live(p: Paint, f: &Finding, r: &Report, shown: &mut Vec<String>) {
 fn print_sources(p: Paint, r: &Report) {
     println!("{}", p.bold("Where the context went"));
     let top = r.costs.first().map_or(1, |c| c.resent.max(1));
-    for c in r.costs.iter().take(SOURCES_SHOWN) {
+    for c in r.costs.iter().take(limits::audit::SOURCES_SHOWN) {
         let (color, who) = match c.origin {
             Origin::Config => (Color::Yellow, "you"),
             Origin::Harness => (Color::Magenta, "harness"),

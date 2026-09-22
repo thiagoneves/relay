@@ -8,12 +8,11 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::core::handoff::Tail;
-use crate::harness::jsonl::{self, MAX_REPLIES, TAIL_BYTES, last};
-
-const MAX_DECISIONS: usize = 8;
+use crate::harness::jsonl::{self, last};
+use crate::limits;
 
 pub fn read(path: &Path) -> Option<Tail> {
-    Some(read_lines(jsonl::tail_lines(path, TAIL_BYTES)?))
+    Some(read_lines(jsonl::tail_lines(path, limits::store::TRANSCRIPT_TAIL_BYTES)?))
 }
 
 fn read_lines(lines: impl Iterator<Item = String>) -> Tail {
@@ -50,8 +49,8 @@ fn read_lines(lines: impl Iterator<Item = String>) -> Tail {
         }
     }
     tail.replies.extend(turn_end);
-    tail.replies = last(tail.replies, MAX_REPLIES);
-    tail.decisions = last(tail.decisions, MAX_DECISIONS);
+    tail.replies = last(tail.replies, limits::handoff::REPLIES);
+    tail.decisions = last(tail.decisions, limits::handoff::DECISIONS);
     tail
 }
 

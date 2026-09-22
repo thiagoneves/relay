@@ -7,14 +7,6 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-/// Closing messages a handoff keeps, newest last.
-pub const MAX_REPLIES: usize = 8;
-
-/// How far from the end a tail read starts. `SessionEnd` has a 2 s
-/// budget and transcripts reach gigabytes; the handoff only needs the
-/// last turns.
-pub const TAIL_BYTES: u64 = 32 * 1024 * 1024;
-
 /// Every `.jsonl` file under `dir`, recursively.
 pub fn files_under(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();

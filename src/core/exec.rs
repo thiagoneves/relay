@@ -11,9 +11,7 @@ use crate::core::paths::Paths;
 use crate::core::spool;
 use crate::helpers::env::Var;
 use crate::helpers::{est_tokens, human_tokens, new_id, now_iso, shell};
-
-/// Outputs shorter than this are printed as is, no footer, not stored.
-const MIN_STORE_BYTES: usize = 200;
+use crate::limits;
 
 pub struct Outcome {
     pub exit: i32,
@@ -46,7 +44,7 @@ pub fn run(cmd: &str, raw_only: bool, session: Option<&str>) -> Result<Outcome> 
     let mut raw = String::from_utf8_lossy(&out.stdout).into_owned();
     raw.push_str(&String::from_utf8_lossy(&out.stderr));
 
-    if raw_only || raw.len() < MIN_STORE_BYTES {
+    if raw_only || raw.len() < limits::store::MIN_OUTPUT_BYTES {
         let text = compress::generic::strip_ansi(&raw);
         return Ok(Outcome { exit, printed: text });
     }

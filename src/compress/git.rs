@@ -1,6 +1,8 @@
 //! Structured filters for git output. They never parse anything they
 //! cannot recognise: unknown shapes fall through untouched.
 
+use crate::limits;
+
 /// `git status` (human format): drop hint lines and headers noise.
 pub fn status(text: &str) -> String {
     let mut out = Vec::new();
@@ -52,7 +54,6 @@ fn is_file_start(l: &str) -> bool {
 /// context lines and the `index`/`---`/`+++` header. Cap changed lines
 /// per file. Text that is not a patch comes back untouched.
 pub fn diff(text: &str) -> String {
-    const PER_FILE: usize = 80;
     if !text.lines().any(is_file_start) {
         return text.to_string();
     }
@@ -98,7 +99,7 @@ pub fn diff(text: &str) -> String {
                     // An empty context line whose leading space was stripped.
                 } else if head.len() == cols && head.iter().all(|c| matches!(c, ' ' | '+' | '-')) {
                     if head.iter().any(|c| *c != ' ') {
-                        if in_file >= PER_FILE {
+                        if in_file >= limits::compress::DIFF_LINES_PER_FILE {
                             skipped += 1;
                         } else {
                             in_file += 1;

@@ -8,7 +8,8 @@ use serde_json::Value;
 
 use crate::core::audit::Transcript;
 use crate::core::handoff::Tail;
-use crate::harness::jsonl::{self, MAX_REPLIES, TAIL_BYTES};
+use crate::harness::jsonl::{self};
+use crate::limits;
 
 /// Rollouts under `sessions/`, filtered by the `cwd` in their first line
 /// (`session_meta`): the project root or a directory below it. Subagent
@@ -34,13 +35,13 @@ pub fn rollouts(dir: &Path, root: Option<&Path>) -> Vec<Transcript> {
 /// Codex closes every turn with a `task_complete` event that carries the
 /// agent's last message.
 pub fn tail(path: &Path) -> Option<Tail> {
-    let replies = jsonl::tail_lines(path, TAIL_BYTES)?
+    let replies = jsonl::tail_lines(path, limits::store::TRANSCRIPT_TAIL_BYTES)?
         .filter(|l| l.contains("\"task_complete\""))
         .filter_map(|l| serde_json::from_str::<Value>(&l).ok())
         .filter_map(|v| v["payload"]["last_agent_message"].as_str().map(str::to_string))
         .filter(|m| !m.trim().is_empty())
         .collect();
-    Some(Tail { replies: jsonl::last(replies, MAX_REPLIES), ..Tail::default() })
+    Some(Tail { replies: jsonl::last(replies, limits::handoff::REPLIES), ..Tail::default() })
 }
 
 #[cfg(test)]

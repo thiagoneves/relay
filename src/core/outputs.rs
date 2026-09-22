@@ -179,9 +179,6 @@ pub fn purge_spill(paths: &Paths) -> Result<()> {
     Ok(())
 }
 
-/// Originals older than this are deleted; handoffs cite recent ones.
-pub const KEEP: Duration = Duration::from_secs(30 * 24 * 3600);
-
 /// Delete stored originals (and their sidecars) last written before
 /// `now - keep`. Metadata only, no parsing: cheap enough for `SessionEnd`.
 /// Returns files removed.
@@ -259,7 +256,7 @@ mod tests {
     fn prune_removes_only_old_files() {
         let p = paths("prune");
         write_pair(&p.outputs(), &meta("o_new"), "x").unwrap();
-        assert_eq!(prune(&p, KEEP), 0);
+        assert_eq!(prune(&p, crate::limits::store::KEEP_OUTPUTS), 0);
         std::thread::sleep(Duration::from_millis(20));
         assert_eq!(prune(&p, Duration::ZERO), 2);
         assert!(list(&p).is_empty());

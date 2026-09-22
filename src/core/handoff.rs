@@ -13,6 +13,7 @@ use crate::core::usage;
 use crate::core::{frontmatter, outputs};
 use crate::helpers::git as gitstate;
 use crate::helpers::{now_iso, truncate_chars, write_atomic};
+use crate::limits;
 
 pub struct Handoff {
     pub path: PathBuf,
@@ -58,9 +59,6 @@ struct Summary {
     commands: Vec<String>,
     failing: Vec<String>,
 }
-
-const MAX_COMMANDS: usize = 12;
-const MAX_FAILING: usize = 5;
 
 impl Summary {
     fn collect(paths: &Paths, events: &[Event], outs: &[outputs::OutputMeta]) -> Self {
@@ -122,7 +120,6 @@ fn files_touched(paths: &Paths, events: &[Event]) -> Vec<(String, usize)> {
 /// read first, minus the ones it then edited (those are already listed).
 /// The next session can open them directly instead of searching again.
 fn read_first(paths: &Paths, events: &[Event]) -> Vec<String> {
-    const MAX: usize = 8;
     let mut reads: Vec<(String, usize)> = Vec::new();
     for e in events.iter().filter(|e| e.event == "tool") {
         let tool = e.data["tool"].as_str().unwrap_or("");
@@ -139,7 +136,7 @@ fn read_first(paths: &Paths, events: &[Event]) -> Vec<String> {
     let edited: Vec<String> = files_touched(paths, events).into_iter().map(|(f, _)| f).collect();
     reads.retain(|(f, _)| !edited.contains(f));
     reads.sort_by(|a, b| b.1.cmp(&a.1));
-    reads.into_iter().take(MAX).map(|(f, _)| f).collect()
+    reads.into_iter().take(limits::handoff::READ_FIRST).map(|(f, _)| f).collect()
 }
 
 /// Latest run of each distinct command (first three words), with exit
@@ -154,14 +151,14 @@ fn commands_from_outputs(outs: &[outputs::OutputMeta]) -> (Vec<String>, Vec<Stri
             continue;
         }
         seen.push(key);
-        let cmd = truncate_chars(&m.cmd, 80);
-        if m.exit != 0 && failing.len() < MAX_FAILING {
+        let cmd = truncate_chars(&m.cmd, limits::handoff::COMMAND_CHARS);
+        if m.exit != 0 && failing.len() < limits::handoff::FAILING {
             failing.push(format!("`{cmd}` (exit {}) · relay get {}", m.exit, m.id));
         } else {
             let status = if m.exit == 0 { "ok".to_string() } else { format!("exit {}", m.exit) };
             commands.push(format!("`{cmd}` → {status} · relay get {}", m.id));
         }
-        if commands.len() + failing.len() >= MAX_COMMANDS {
+        if commands.len() + failing.len() >= limits::handoff::COMMANDS {
             break;
         }
     }
@@ -175,13 +172,10 @@ fn commands_from_events(events: &[Event]) -> Vec<String> {
         .rev()
         .filter(|e| e.event == "tool" && e.data["tool"] == "Bash")
         .filter_map(|e| e.data["command"].as_str())
-        .map(|c| format!("`{}`", truncate_chars(c, 80)))
-        .take(MAX_COMMANDS)
+        .map(|c| format!("`{}`", truncate_chars(c, limits::handoff::COMMAND_CHARS)))
+        .take(limits::handoff::COMMANDS)
         .collect()
 }
-
-const STOPPED_MAX: usize = 1200;
-const EARLIER_REPLIES: usize = 3;
 
 fn render(session: &str, reason: &str, s: &Summary, t: &Tail, git: &gitstate::GitState) -> String {
     let ended = now_iso();
@@ -200,29 +194,36 @@ fn render(session: &str, reason: &str, s: &Summary, t: &Tail, git: &gitstate::Gi
     b.push_str(&format!("# Handoff · {title_branch}{}\n\n", &ended[..10.min(ended.len())]));
 
     match t.replies.last() {
-        Some(last) => b.push_str(&format!("## Where it stopped\n{}\n\n", excerpt(last, STOPPED_MAX))),
+        Some(last) => {
+            b.push_str(&format!("## Where it stopped\n{}\n\n", excerpt(last, limits::handoff::STOPPED_CHARS)));
+        }
         None => {
             if let Some(last) = &s.last_reply {
-                b.push_str(&format!("## Last reply\n{}\n\n", truncate_chars(last, 400)));
+                b.push_str(&format!("## Last reply\n{}\n\n", truncate_chars(last, limits::handoff::LAST_REPLY_CHARS)));
             }
         }
     }
-    section(&mut b, "Decisions", t.decisions.iter().map(|d| truncate_chars(d, 200)));
+    section(&mut b, "Decisions", t.decisions.iter().map(|d| truncate_chars(d, limits::handoff::DECISION_CHARS)));
     let skip = s.prompts.len().saturating_sub(6);
-    section(&mut b, "Asked", s.prompts.iter().skip(skip).map(|p| truncate_chars(p, 220)));
+    section(&mut b, "Asked", s.prompts.iter().skip(skip).map(|p| truncate_chars(p, limits::handoff::PROMPT_CHARS)));
     let earlier = t.replies.len().saturating_sub(1);
     section(
         &mut b,
         "Earlier replies",
-        t.replies[earlier.saturating_sub(EARLIER_REPLIES)..earlier].iter().map(|r| first_paragraph(r, 240)),
+        t.replies[earlier.saturating_sub(limits::handoff::EARLIER_REPLIES)..earlier]
+            .iter()
+            .map(|r| first_paragraph(r, limits::handoff::EARLIER_REPLY_CHARS)),
     );
     if let Some(plan) = &t.plan {
-        b.push_str(&format!("## Plan\n{}\n\n", excerpt(plan, 800)));
+        b.push_str(&format!("## Plan\n{}\n\n", excerpt(plan, limits::handoff::PLAN_CHARS)));
     }
     section(
         &mut b,
         "Files touched",
-        s.files.iter().take(15).map(|(f, n)| if *n > 1 { format!("{f} (×{n})") } else { f.clone() }),
+        s.files
+            .iter()
+            .take(limits::handoff::FILES)
+            .map(|(f, n)| if *n > 1 { format!("{f} (×{n})") } else { f.clone() }),
     );
     section(&mut b, "Read first", s.read_first.iter().cloned());
     section(&mut b, "Remembered", s.remembered.iter().cloned());
@@ -289,7 +290,7 @@ fn render_git(b: &mut String, git: &gitstate::GitState) {
         return;
     }
     b.push_str(&format!(", {} dirty:\n", git.dirty.len()));
-    for d in git.dirty.iter().take(10) {
+    for d in git.dirty.iter().take(limits::handoff::DIRTY) {
         b.push_str(&format!("- {d}\n"));
     }
     if git.dirty.len() > 10 {

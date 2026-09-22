@@ -4,10 +4,7 @@
 use crate::core::paths::Paths;
 use crate::core::{frontmatter, handoff, memory};
 use crate::helpers::git as gitstate;
-
-pub const BRIEF_MAX_CHARS: usize = 2400;
-const PROJECT_MAX_CHARS: usize = 1000;
-const MEMORY_MAX_CHARS: usize = 700;
+use crate::limits;
 
 pub fn build(paths: &Paths) -> String {
     let project = std::fs::read_to_string(paths.project_file()).unwrap_or_default();
@@ -18,7 +15,7 @@ pub fn build(paths: &Paths) -> String {
     let mut out = String::new();
     out.push_str("# relay brief\n");
     if !project.trim().is_empty() {
-        out.push_str(&cut(frontmatter::strip(&project).trim(), PROJECT_MAX_CHARS));
+        out.push_str(&cut(frontmatter::strip(&project).trim(), limits::brief::PROJECT_CHARS));
         out.push_str("\n\n");
     }
     if !items.is_empty() {
@@ -36,7 +33,7 @@ pub fn build(paths: &Paths) -> String {
                 label.push_str(&format!(", branch {hb}"));
             }
             out.push_str(&format!("## Last session ({label})\n"));
-            let room = BRIEF_MAX_CHARS.saturating_sub(out.len() + 200);
+            let room = limits::brief::MAX_CHARS.saturating_sub(out.len() + 200);
             out.push_str(&cut(&handoff_for_brief(&body), room));
             out.push_str(&format!("\n\n_Full handoff: {}_\n", paths.rel(&p)));
         }
@@ -98,7 +95,7 @@ fn memory_section(paths: &Paths, items: &[memory::Item]) -> String {
     let mut shown = 0;
     for it in items {
         let line = format!("- {}: {}\n", it.kind, it.title);
-        if s.len() + line.len() > MEMORY_MAX_CHARS {
+        if s.len() + line.len() > limits::brief::MEMORY_CHARS {
             break;
         }
         s.push_str(&line);

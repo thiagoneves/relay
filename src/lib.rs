@@ -9,6 +9,7 @@ mod compress;
 mod core;
 mod harness;
 mod helpers;
+mod limits;
 
 pub use cli::run;
 pub use compress::{Compressed, Filter, compress};

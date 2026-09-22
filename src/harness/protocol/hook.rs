@@ -44,7 +44,13 @@ pub fn run(harness: &dyn Harness) -> Result<()> {
         "PostToolUse" => post_tool_use(&paths, &session, &input),
         "UserPromptSubmit" => {
             let prompt = input["prompt"].as_str().unwrap_or("");
-            record(&paths, &session, "prompt", None, json!({ "text": truncate_chars(prompt, 600) }))
+            record(
+                &paths,
+                &session,
+                "prompt",
+                None,
+                json!({ "text": truncate_chars(prompt, crate::limits::store::EVENT_PROMPT_CHARS) }),
+            )
         }
         "SessionStart" => session_start(&paths, &session, &input, harness.id()),
         "SessionEnd" => {
@@ -52,7 +58,7 @@ pub fn run(harness: &dyn Harness) -> Result<()> {
             let tail = transcript_tail(harness, &input);
             let _ = handoff::build(&paths, &session, input["reason"].as_str().unwrap_or("end"), tail.as_ref());
             // After the handoff, which lists this session's outputs.
-            outputs::prune(&paths, outputs::KEEP);
+            outputs::prune(&paths, crate::limits::store::KEEP_OUTPUTS);
             Ok(())
         }
         "PreCompact" => {
@@ -66,7 +72,7 @@ pub fn run(harness: &dyn Harness) -> Result<()> {
             &session,
             "stop",
             None,
-            json!({ "last": input["last_assistant_message"].as_str().map(|s| truncate_chars(s, 400)) }),
+            json!({ "last": input["last_assistant_message"].as_str().map(|s| truncate_chars(s, crate::limits::store::EVENT_REPLY_CHARS)) }),
         ),
         _ => Ok(()),
     }
@@ -123,7 +129,7 @@ fn post_tool_use(paths: &Paths, session: &str, input: &Value) -> Result<()> {
             let out = resp["stdout"].as_str().or_else(|| resp.as_str()).unwrap_or("");
             json!({
                 "tool": tool,
-                "command": truncate_chars(cmd, 300),
+                "command": truncate_chars(cmd, crate::limits::store::EVENT_COMMAND_CHARS),
                 "interrupted": resp["interrupted"],
                 "tail": truncate_chars(out.trim_end().rsplit('\n').next().unwrap_or(""), 200),
                 "tokens": tokens,

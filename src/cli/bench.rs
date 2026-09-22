@@ -4,9 +4,7 @@ use crate::core::bench::{self, Sample, Totals};
 use crate::core::paths::Paths;
 use crate::harness::{self, HarnessId};
 use crate::helpers::{human_tokens, truncate_chars};
-
-const WORST_SHOWN: usize = 5;
-const FAMILIES_SHOWN: usize = 20;
+use crate::limits;
 
 pub enum Source {
     Store,
@@ -95,7 +93,7 @@ fn print_families(rows: &[Totals], total: &Totals) {
         "{:<16} {:>6} {:>8}  {:>9}  {:>9}  {:>9}  {:>18}",
         "command", "n", "wrapped", "tokens in", "saved all", "saved now", "signal kept"
     );
-    for r in rows.iter().take(FAMILIES_SHOWN).chain(std::iter::once(total)) {
+    for r in rows.iter().take(limits::bench::FAMILIES_SHOWN).chain(std::iter::once(total)) {
         if r.key == "total" {
             println!("{}", "─".repeat(86));
         }
@@ -122,7 +120,7 @@ fn print_losses(samples: &[Sample], total: &Totals) {
         return;
     }
     println!("\nSignal lost ({} outputs), worst first:", worst.len());
-    for s in worst.iter().take(WORST_SHOWN) {
+    for s in worst.iter().take(limits::bench::WORST_SHOWN) {
         println!("  {} `{}` [{}] lost {}:", s.name, truncate_chars(&s.cmd, 60), s.filter, s.missing.len());
         for m in s.missing.iter().take(2) {
             println!("    - {}", truncate_chars(m, 100));

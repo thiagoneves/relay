@@ -9,6 +9,7 @@ use serde::Serialize;
 
 use super::{Cost, HookError, Now, Origin, Report};
 use crate::helpers::{human_tokens, short_utc};
+use crate::limits;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Severity {
@@ -65,13 +66,10 @@ impl Finding {
     }
 }
 
-/// Sources below this share of all context sent are not worth a finding.
-const MIN_SHARE: f64 = 0.005;
-
 pub fn findings(r: &Report, seen: &HashMap<String, SystemTime>, now: &Now) -> Vec<Finding> {
     let mut out = failing_hooks(&r.hook_errors, now);
     let share = |n: usize| if r.context_sent == 0 { 0.0 } else { n as f64 / r.context_sent as f64 };
-    for c in r.costs.iter().filter(|c| c.origin == Origin::Config && share(c.resent) >= MIN_SHARE) {
+    for c in r.costs.iter().filter(|c| c.origin == Origin::Config && share(c.resent) >= limits::audit::MIN_SHARE) {
         let kind = kind_of(&c.source);
         let (status, why) = status_of(c, kind, now);
         let fix = match why {

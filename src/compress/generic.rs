@@ -5,15 +5,7 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
-pub const MAX_LINE_CHARS: usize = 400;
-/// Tool output longer than this is cut to head + tail + signal lines; the
-/// original stays one `relay get` away. Sized on real agent history: 80 +
-/// 40 saves ~9% of all shell output tokens, the old 180 + 100 about 2%.
-pub const MAX_LINES: usize = 150;
-pub const HEAD_LINES: usize = 80;
-pub const TAIL_LINES: usize = 40;
-/// Signal lines rescued from the omitted middle of a capped output.
-pub const MAX_RESCUED: usize = 40;
+use crate::limits;
 
 fn ansi_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -96,9 +88,9 @@ pub fn truncate_long_lines(lines: &[String]) -> Vec<String> {
         .iter()
         .map(|l| {
             let n = l.chars().count();
-            if n > MAX_LINE_CHARS {
-                let head: String = l.chars().take(MAX_LINE_CHARS).collect();
-                format!("{head}… [+{} chars]", n - MAX_LINE_CHARS)
+            if n > limits::compress::MAX_LINE_CHARS {
+                let head: String = l.chars().take(limits::compress::MAX_LINE_CHARS).collect();
+                format!("{head}… [+{} chars]", n - limits::compress::MAX_LINE_CHARS)
             } else {
                 l.clone()
             }
@@ -110,16 +102,18 @@ pub fn truncate_long_lines(lines: &[String]) -> Vec<String> {
 /// the tail, so the tail window is never dropped; errors in the middle
 /// (a failing module in a long build log) are rescued by rule.
 pub fn cap_lines(lines: &[String]) -> Vec<String> {
-    if lines.len() <= MAX_LINES {
+    if lines.len() <= limits::compress::MAX_LINES {
         return lines.to_vec();
     }
-    let middle = &lines[HEAD_LINES..lines.len() - TAIL_LINES];
-    let mut out = Vec::with_capacity(HEAD_LINES + TAIL_LINES + MAX_RESCUED * 2 + 1);
-    out.extend_from_slice(&lines[..HEAD_LINES]);
+    let middle = &lines[limits::compress::HEAD_LINES..lines.len() - limits::compress::TAIL_LINES];
+    let mut out = Vec::with_capacity(
+        limits::compress::HEAD_LINES + limits::compress::TAIL_LINES + limits::compress::MAX_RESCUED * 2 + 1,
+    );
+    out.extend_from_slice(&lines[..limits::compress::HEAD_LINES]);
     let mut skipped = 0;
     let mut rescued = 0;
     for l in middle {
-        if rescued < MAX_RESCUED && super::fidelity::is_signal(l) {
+        if rescued < limits::compress::MAX_RESCUED && super::fidelity::is_signal(l) {
             if skipped > 0 {
                 out.push(omitted(skipped));
                 skipped = 0;
@@ -133,7 +127,7 @@ pub fn cap_lines(lines: &[String]) -> Vec<String> {
     if skipped > 0 {
         out.push(omitted(skipped));
     }
-    out.extend_from_slice(&lines[lines.len() - TAIL_LINES..]);
+    out.extend_from_slice(&lines[lines.len() - limits::compress::TAIL_LINES..]);
     out
 }
 
