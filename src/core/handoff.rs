@@ -41,6 +41,7 @@ struct Summary {
     prompts: Vec<String>,
     last_reply: Option<String>,
     files: Vec<(String, usize)>,
+    read_first: Vec<String>,
     remembered: Vec<String>,
     commands: Vec<String>,
     failing: Vec<String>,
@@ -83,6 +84,7 @@ impl Summary {
             prompts,
             last_reply,
             files: files_touched(paths, events),
+            read_first: read_first(paths, events),
             remembered,
             commands,
             failing,
@@ -102,6 +104,30 @@ fn files_touched(paths: &Paths, events: &[Event]) -> Vec<(String, usize)> {
     }
     files.sort_by(|a, b| b.1.cmp(&a.1));
     files
+}
+
+/// Files the agent read to orient itself before its first edit, most
+/// read first, minus the ones it then edited (those are already listed).
+/// The next session can open them directly instead of searching again.
+fn read_first(paths: &Paths, events: &[Event]) -> Vec<String> {
+    const MAX: usize = 8;
+    let mut reads: Vec<(String, usize)> = Vec::new();
+    for e in events.iter().filter(|e| e.event == "tool") {
+        let tool = e.data["tool"].as_str().unwrap_or("");
+        if usage::is_edit(tool) {
+            break;
+        }
+        let Some(f) = e.data["file"].as_str().filter(|_| tool == "Read") else { continue };
+        let rel = paths.rel_file(f);
+        match reads.iter_mut().find(|(p, _)| *p == rel) {
+            Some(x) => x.1 += 1,
+            None => reads.push((rel, 1)),
+        }
+    }
+    let edited: Vec<String> = files_touched(paths, events).into_iter().map(|(f, _)| f).collect();
+    reads.retain(|(f, _)| !edited.contains(f));
+    reads.sort_by(|a, b| b.1.cmp(&a.1));
+    reads.into_iter().take(MAX).map(|(f, _)| f).collect()
 }
 
 /// Latest run of each distinct command (first three words), with exit
@@ -168,6 +194,7 @@ fn render(session: &str, reason: &str, s: &Summary, git: &gitstate::GitState) ->
         "Files touched",
         s.files.iter().take(15).map(|(f, n)| if *n > 1 { format!("{f} (×{n})") } else { f.clone() }),
     );
+    section(&mut b, "Read first", s.read_first.iter().cloned());
     section(&mut b, "Remembered", s.remembered.iter().cloned());
     section(&mut b, "Failing at end", s.failing.iter().cloned());
     section(&mut b, "Commands", s.commands.iter().cloned());

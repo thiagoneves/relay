@@ -96,8 +96,10 @@ fn status_reports_orientation_and_reads_are_not_edits() {
     let line = status.lines().find(|l| l.starts_with("Orientation")).unwrap_or_else(|| panic!("{status}"));
     assert!(line.contains("without (n=1)"), "{line}");
     let handoff = String::from_utf8(repo.run(&["handoff", "--show"]).stdout).unwrap();
-    assert!(
-        handoff.contains("- src/pay.rs") && !handoff.contains("big.rs"),
-        "reads leaked into Files touched:\n{handoff}"
-    );
+    let section = |name: &str| {
+        let rest = handoff.split(&format!("## {name}\n")).nth(1).unwrap_or("");
+        rest.split("\n\n").next().unwrap_or("").to_string()
+    };
+    assert_eq!(section("Files touched"), "- src/pay.rs", "reads leaked into Files touched:\n{handoff}");
+    assert_eq!(section("Read first"), "- src/big.rs", "orientation reads missing:\n{handoff}");
 }
