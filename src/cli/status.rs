@@ -17,7 +17,7 @@ pub fn run() -> anyhow::Result<i32> {
     println!("relay status · {}", paths.root.display());
     println!();
     println!(
-        "Compression   {} → {} tokens, saved {} ({pct}%) over {} outputs  [estimate: bytes/4]",
+        "Compression   {} → {} tokens, saved {} ({pct}%) over {} outputs  [estimate]",
         human_tokens(tokens_in),
         human_tokens(tokens_out),
         human_tokens(saved),
