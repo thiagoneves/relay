@@ -98,7 +98,11 @@ cargo test
 `tests/snapshots/` pins what each command prints; after an intended change,
 `RELAY_UPDATE_SNAPSHOTS=1 cargo test --test cli_output` rewrites them.
 `relay bench --corpus tests/corpus` checks that compression keeps every line a
-fixture marks as required.
+fixture marks as required. After a Claude Code update,
+`cargo test --test e2e_claude -- --ignored` checks against the real harness
+that the model still gets relay's compressed view (it makes one small model
+call). In daily use relay checks the same thing at the end of each session and
+reports a miss in `relay status`.
 
 ## License
 
