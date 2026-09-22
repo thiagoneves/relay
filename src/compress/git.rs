@@ -110,69 +110,115 @@ pub fn diff(text: &str) -> String {
     if !text.lines().any(is_file_start) {
         return text.to_string();
     }
-    let mut out = Vec::new();
-    let mut part = Part::Outside;
-    let mut in_file = 0usize;
-    let mut skipped = 0usize;
-    let flush_skipped = |out: &mut Vec<String>, skipped: &mut usize| {
-        if *skipped > 0 {
-            out.push(format!("  … [{} more changed lines in this file]", *skipped));
-            *skipped = 0;
-        }
-    };
+    let mut view = DiffView::default();
     for l in text.lines() {
+        view.push(l);
+    }
+    view.finish()
+}
+
+/// A patch being condensed one line at a time.
+struct DiffView {
+    out: Vec<String>,
+    part: Part,
+    /// Changed lines kept for the current file.
+    changed: usize,
+    /// Changed lines past the per-file cap, not yet reported.
+    skipped: usize,
+}
+
+impl Default for DiffView {
+    fn default() -> Self {
+        Self { out: Vec::new(), part: Part::Outside, changed: 0, skipped: 0 }
+    }
+}
+
+impl DiffView {
+    fn push(&mut self, l: &str) {
         if is_file_start(l) {
-            flush_skipped(&mut out, &mut skipped);
-            in_file = 0;
-            part = Part::FileHeader;
-            let rest = l.split_once(' ').map_or(l, |(_, r)| r).split_once(' ').map_or(l, |(_, r)| r);
-            let name = rest.split(" b/").nth(1).unwrap_or(rest);
-            out.push(format!("── {name}"));
-            continue;
-        }
-        if l.starts_with("@@") && part != Part::Outside {
-            part = Part::Hunk(l.chars().take_while(|c| *c == '@').count().saturating_sub(1).max(1));
-            out.push(hunk_header(l));
-            continue;
-        }
-        match part {
-            Part::FileHeader => {
-                if let Some(marker) = header_marker(l) {
-                    out.push(format!("  ({marker})"));
-                } else if l.starts_with("GIT binary patch") {
-                    out.push("  (binary patch)".into());
-                    part = Part::Binary;
-                } else if !is_header_noise(l) {
-                    out.push(l.to_string());
-                }
+            self.file_start(l);
+        } else if l.starts_with("@@") && self.part != Part::Outside {
+            self.part = Part::Hunk(hunk_columns(l));
+            self.out.push(hunk_header(l));
+        } else {
+            match self.part {
+                Part::FileHeader => self.header_line(l),
+                Part::Hunk(cols) => self.hunk_line(l, cols),
+                Part::Binary => {}
+                Part::Outside => self.out.push(l.to_string()),
             }
-            Part::Hunk(cols) => {
-                let head: Vec<char> = l.chars().take(cols).collect();
-                if l.is_empty() {
-                    // An empty context line whose leading space was stripped.
-                } else if head.len() == cols && head.iter().all(|c| matches!(c, ' ' | '+' | '-')) {
-                    if head.iter().any(|c| *c != ' ') {
-                        if in_file >= limits::compress::DIFF_LINES_PER_FILE {
-                            skipped += 1;
-                        } else {
-                            in_file += 1;
-                            out.push(l.to_string());
-                        }
-                    }
-                    // Context lines are dropped: `relay get` has them.
-                } else if !l.starts_with('\\') {
-                    // Past the last hunk: the next commit of `git show a b`.
-                    flush_skipped(&mut out, &mut skipped);
-                    part = Part::Outside;
-                    out.push(l.to_string());
-                }
-            }
-            Part::Binary => {}
-            Part::Outside => out.push(l.to_string()),
         }
     }
-    flush_skipped(&mut out, &mut skipped);
-    out.join("\n")
+
+    fn file_start(&mut self, l: &str) {
+        self.flush_skipped();
+        self.changed = 0;
+        self.part = Part::FileHeader;
+        self.out.push(format!("── {}", file_name(l)));
+    }
+
+    fn header_line(&mut self, l: &str) {
+        if let Some(marker) = header_marker(l) {
+            self.out.push(format!("  ({marker})"));
+        } else if l.starts_with("GIT binary patch") {
+            self.out.push("  (binary patch)".into());
+            self.part = Part::Binary;
+        } else if !is_header_noise(l) {
+            self.out.push(l.to_string());
+        }
+    }
+
+    fn hunk_line(&mut self, l: &str, cols: usize) {
+        // An empty line is a context line whose leading space was stripped.
+        if l.is_empty() {
+            return;
+        }
+        let head: Vec<char> = l.chars().take(cols).collect();
+        if head.len() == cols && head.iter().all(|c| matches!(c, ' ' | '+' | '-')) {
+            // Context lines are dropped: `relay get` has them.
+            if head.iter().any(|c| *c != ' ') {
+                self.changed_line(l);
+            }
+        } else if !l.starts_with('\\') {
+            // Past the last hunk: the next commit of `git show a b`.
+            self.flush_skipped();
+            self.part = Part::Outside;
+            self.out.push(l.to_string());
+        }
+    }
+
+    fn changed_line(&mut self, l: &str) {
+        if self.changed >= limits::compress::DIFF_LINES_PER_FILE {
+            self.skipped += 1;
+        } else {
+            self.changed += 1;
+            self.out.push(l.to_string());
+        }
+    }
+
+    fn flush_skipped(&mut self) {
+        if self.skipped > 0 {
+            self.out.push(format!("  … [{} more changed lines in this file]", self.skipped));
+            self.skipped = 0;
+        }
+    }
+
+    fn finish(mut self) -> String {
+        self.flush_skipped();
+        self.out.join("\n")
+    }
+}
+
+/// `diff --git a/x b/y` -> `y`.
+fn file_name(l: &str) -> &str {
+    let rest = l.split_once(' ').map_or(l, |(_, r)| r).split_once(' ').map_or(l, |(_, r)| r);
+    rest.split(" b/").nth(1).unwrap_or(rest)
+}
+
+/// Columns that carry `+`/`-` in a hunk: one, or two under the `@@@`
+/// header of a merge's combined diff.
+fn hunk_columns(header: &str) -> usize {
+    header.chars().take_while(|c| *c == '@').count().saturating_sub(1).max(1)
 }
 
 /// "@@ -1,2 +1,3 @@ fn main" -> "@@ fn main"; the ranges stay when there
