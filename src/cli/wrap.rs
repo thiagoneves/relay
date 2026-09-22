@@ -5,45 +5,27 @@
 use std::process::Command;
 use std::time::SystemTime;
 
-use anyhow::{Context, bail};
+use anyhow::Context;
 
 use crate::core::paths::Paths;
 use crate::core::{bootstrap, handoff, machine, outputs, spool};
-use crate::harness::{self, HarnessId};
+use crate::harness::{self, Harness, HarnessId};
 use crate::helpers::env::Var;
 use crate::helpers::{human_tokens, new_id, shell};
 
+use super::ui::{Ui, problem};
+
 pub fn run(id: HarnessId, last: bool, args: &[String]) -> anyhow::Result<i32> {
     let h = id.adapter();
-    let Some(program) = shell::which(h.command()) else {
-        bail!("`{}` not found on PATH", h.command());
-    };
+    let program = shell::which(h.command()).ok_or_else(|| {
+        problem(
+            format!("`{}` is not installed, or not on your PATH.", h.command()),
+            format!("Install it, check that `{}` runs in this terminal, then try again.", h.command()),
+        )
+    })?;
     let paths = Paths::from_cwd()?;
-    paths.ensure_local()?;
-    let created = bootstrap::ensure_shared(&paths)?;
-
-    let inst = machine::install_self()?;
-    super::setup::report(&inst);
-    let report = h.install(&inst.exe)?;
-    let mut notes = Vec::new();
-    if created {
-        notes.push(format!("{} created", paths.rel(&paths.project_file())));
-    }
-    if report.changed {
-        notes.push("hooks installed".to_string());
-    }
-    if notes.is_empty() {
-        notes.push("ready".to_string());
-    }
-    eprintln!("relay: {}", notes.join(" · "));
-
-    let mut launch: Vec<String> = Vec::new();
-    if last {
-        match spool::last_session(&paths) {
-            Some(id) => launch.extend(h.resume_args(&id)),
-            None => eprintln!("relay: no previous session to resume, starting fresh"),
-        }
-    }
+    prepare(h.as_ref(), &paths)?;
+    let mut launch = if last { resume_args(h.as_ref(), &paths) } else { Vec::new() };
     launch.extend(args.iter().cloned());
 
     let wrapper = new_id("w");
@@ -54,28 +36,57 @@ pub fn run(id: HarnessId, last: bool, args: &[String]) -> anyhow::Result<i32> {
         .current_dir(&paths.root)
         .status()
         .with_context(|| format!("failed to launch {}", h.command()))?;
-    let code = status.code().unwrap_or(1);
-
-    // Post-exit: the SessionEnd hook normally wrote the handoff. If the
-    // harness died without firing it, do it here.
     if let Some((session, mtime)) = own_session(&paths, &wrapper, started) {
-        let hp = handoff::path_for(&paths, &session);
-        let stale = std::fs::metadata(&hp).and_then(|m| m.modified()).map(|m| m < mtime).unwrap_or(true);
-        if stale {
-            let _ = handoff::build(&paths, &session, "wrapper-exit", harness::tail_for(&paths, &session).as_ref());
-        }
-        outputs::prune(&paths, crate::limits::store::KEEP_OUTPUTS);
-        let outs = outputs::for_session(&paths, &session);
-        let saved: usize = outs.iter().map(super::super::core::outputs::OutputMeta::saved).sum();
-        eprintln!(
-            "relay: session {} · saved ~{} tokens over {} outputs · handoff {}",
-            &session[..8.min(session.len())],
-            human_tokens(saved),
-            outs.len(),
-            paths.rel(&hp)
-        );
+        close(h.command(), &paths, &session, mtime);
     }
-    Ok(code)
+    Ok(status.code().unwrap_or(1))
+}
+
+/// Local store, project rules, relay on PATH and hooks, before launch.
+fn prepare(h: &dyn Harness, paths: &Paths) -> anyhow::Result<()> {
+    paths.ensure_local()?;
+    let created = bootstrap::ensure_shared(paths)?;
+    let inst = machine::install_self()?;
+    super::setup::report(&inst);
+    let report = h.install(&inst.exe)?;
+    let ui = Ui::stderr();
+    if created {
+        ui.ok(&format!("Created {}: the rules every session reads first.", paths.rel(&paths.project_file())));
+    }
+    if report.changed {
+        ui.ok(&format!("{} hooks installed.", h.command()));
+    }
+    Ok(())
+}
+
+fn resume_args(h: &dyn Harness, paths: &Paths) -> Vec<String> {
+    if let Some(id) = spool::last_session(paths) {
+        h.resume_args(&id)
+    } else {
+        Ui::stderr().warn("No previous session to resume; starting a new one.");
+        Vec::new()
+    }
+}
+
+/// After the harness exits: the `SessionEnd` hook normally wrote the
+/// handoff; if the harness died without firing it, write it here.
+fn close(command: &str, paths: &Paths, session: &str, ended: SystemTime) {
+    let hp = handoff::path_for(paths, session);
+    let stale = std::fs::metadata(&hp).and_then(|m| m.modified()).map_or(true, |m| m < ended);
+    if stale {
+        let _ = handoff::build(paths, session, "wrapper-exit", harness::tail_for(paths, session).as_ref());
+    }
+    outputs::prune(paths, crate::limits::store::KEEP_OUTPUTS);
+    let outs = outputs::for_session(paths, session);
+    let saved: usize = outs.iter().map(outputs::OutputMeta::saved).sum();
+    let ui = Ui::stderr();
+    ui.ok(&format!(
+        "Session saved for the next one · ~{} tokens saved over {} outputs · {}",
+        human_tokens(saved),
+        outs.len(),
+        paths.rel(&hp)
+    ));
+    ui.next(&format!("`relay {command}` picks up from here; `relay {command} --last` resumes this session."));
 }
 
 /// The session this wrapper launched: the latest one stamped with its id

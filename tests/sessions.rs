@@ -77,7 +77,7 @@ fn wrapper_closes_its_own_session_not_the_latest() {
     let out = repo.isolated(common::relay()).arg("claude").env("PATH", path).output().unwrap();
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "{stderr}");
-    assert!(stderr.contains("session mine"), "{stderr}");
+    assert!(stderr.contains("handoffs/mine.md"), "{stderr}");
 
     let local = repo.root.join(".git/relay");
     assert!(local.join("handoffs/mine.md").exists(), "{stderr}");
