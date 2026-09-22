@@ -7,10 +7,10 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 
-use crate::core::outputs;
 use crate::core::paths::Paths;
 use crate::core::spool::{self, Event};
 use crate::core::usage;
+use crate::core::{frontmatter, outputs};
 use crate::helpers::git as gitstate;
 use crate::helpers::{now_iso, truncate_chars, write_atomic};
 
@@ -310,34 +310,8 @@ pub fn latest(paths: &Paths, branch: &str) -> Option<(PathBuf, String)> {
         all.push((m, p, body));
     }
     all.sort_by(|a, b| b.0.cmp(&a.0));
-    let same_branch = all.iter().find(|(_, _, body)| frontmatter(body, "branch").as_deref() == Some(branch));
+    let same_branch = all.iter().find(|(_, _, body)| frontmatter::get(body, "branch").as_deref() == Some(branch));
     same_branch.or(all.first()).map(|(_, p, b)| (p.clone(), b.clone()))
-}
-
-pub fn frontmatter(body: &str, key: &str) -> Option<String> {
-    let mut lines = body.lines();
-    if lines.next()? != "---" {
-        return None;
-    }
-    for l in lines {
-        if l == "---" {
-            break;
-        }
-        if let Some(v) = l.strip_prefix(&format!("{key}: ")) {
-            return Some(v.trim().to_string());
-        }
-    }
-    None
-}
-
-pub fn strip_frontmatter(body: &str) -> &str {
-    if !body.starts_with("---\n") {
-        return body;
-    }
-    match body[4..].find("\n---\n") {
-        Some(i) => body[4 + i + 5..].trim_start(),
-        None => body,
-    }
 }
 
 #[cfg(test)]

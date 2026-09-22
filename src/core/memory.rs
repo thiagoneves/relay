@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use anyhow::{Result, bail};
 use clap::ValueEnum;
 
+use crate::core::frontmatter;
 use crate::core::paths::Paths;
 use crate::helpers::git as gitstate;
 use crate::helpers::{now_iso, truncate_chars, write_atomic};
@@ -108,8 +109,8 @@ pub fn list(paths: &Paths) -> Vec<Item> {
                 continue;
             }
             let Ok(body) = std::fs::read_to_string(&p) else { continue };
-            let created = crate::core::handoff::frontmatter(&body, "created").unwrap_or_default();
-            let title = title_of(crate::core::handoff::strip_frontmatter(&body));
+            let created = frontmatter::get(&body, "created").unwrap_or_default();
+            let title = title_of(frontmatter::strip(&body));
             if title.is_empty() {
                 continue;
             }
@@ -168,6 +169,19 @@ mod tests {
         assert_eq!(slug("Não usar ç"), "n-o-usar");
         assert_eq!(slug("!!!"), "item");
         assert!(slug(&"a ".repeat(100)).len() <= 60);
+    }
+
+    #[test]
+    fn crlf_item_lists_by_its_title() {
+        let root = std::env::temp_dir().join(format!("relay-ut-memory-crlf-{}", std::process::id()));
+        let paths = Paths { shared: root.join(".relay"), local: root.join("local"), root: root.clone(), in_git: false };
+        let dir = dir_for(&paths, Kind::ALL[0]);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("hooks.md"), "---\r\ncreated: 2026-09-22\r\n---\r\n\r\n# Hooks fail open\r\n").unwrap();
+        let items = list(&paths);
+        assert_eq!(items[0].title, "Hooks fail open");
+        assert_eq!(items[0].created, "2026-09-22");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

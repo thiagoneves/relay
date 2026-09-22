@@ -2,7 +2,7 @@
 //! handoff, capped at roughly 600 tokens. File reads and one git call; no LLM.
 
 use crate::core::paths::Paths;
-use crate::core::{handoff, memory};
+use crate::core::{frontmatter, handoff, memory};
 use crate::helpers::git as gitstate;
 
 pub const BRIEF_MAX_CHARS: usize = 2400;
@@ -18,7 +18,7 @@ pub fn build(paths: &Paths) -> String {
     let mut out = String::new();
     out.push_str("# relay brief\n");
     if !project.trim().is_empty() {
-        out.push_str(&cut(handoff::strip_frontmatter(&project).trim(), PROJECT_MAX_CHARS));
+        out.push_str(&cut(frontmatter::strip(&project).trim(), PROJECT_MAX_CHARS));
         out.push_str("\n\n");
     }
     if !items.is_empty() {
@@ -26,10 +26,10 @@ pub fn build(paths: &Paths) -> String {
     }
     match handoff {
         Some((p, body)) => {
-            let hb = handoff::frontmatter(&body, "branch").unwrap_or_default();
-            let when = handoff::frontmatter(&body, "ended").unwrap_or_default();
+            let hb = frontmatter::get(&body, "branch").unwrap_or_default();
+            let when = frontmatter::get(&body, "ended").unwrap_or_default();
             let mut label = when[..10.min(when.len())].to_string();
-            if let Some(h) = handoff::frontmatter(&body, "harness").filter(|h| h != "unknown") {
+            if let Some(h) = frontmatter::get(&body, "harness").filter(|h| h != "unknown") {
                 label.push_str(&format!(", {h}"));
             }
             if hb != branch && !hb.is_empty() {
@@ -63,7 +63,7 @@ fn handoff_for_brief(body: &str) -> String {
     let mut skipping = false;
     let mut cap: Option<usize> = None;
     let mut used = 0;
-    for l in handoff::strip_frontmatter(body).lines() {
+    for l in frontmatter::strip(body).lines() {
         if l.starts_with("# ") {
             continue;
         }

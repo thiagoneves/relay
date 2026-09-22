@@ -56,12 +56,29 @@ pub fn project_md(paths: &Paths) -> String {
 /// Create `.relay/` with a project.md. Never overwrites an existing one.
 pub fn ensure_shared(paths: &Paths) -> Result<bool> {
     std::fs::create_dir_all(&paths.shared)?;
+    if paths.in_git {
+        ensure_lf(&paths.root)?;
+    }
     let pf = paths.project_file();
     if pf.exists() {
         return Ok(false);
     }
     write_atomic(&pf, project_md(paths).as_bytes())?;
     Ok(true)
+}
+
+const LF_RULE: &str = ".relay/** text eol=lf";
+
+/// Keep `.relay/` LF on every checkout. Git for Windows converts to CRLF
+/// by default, and the same item then reads differently per machine.
+fn ensure_lf(root: &Path) -> Result<()> {
+    let path = root.join(".gitattributes");
+    let existing = std::fs::read_to_string(&path).unwrap_or_default();
+    if existing.lines().any(|l| l.trim_start().starts_with(".relay/")) {
+        return Ok(());
+    }
+    let sep = if existing.is_empty() || existing.ends_with('\n') { "" } else { "\n" };
+    write_atomic(&path, format!("{existing}{sep}{LF_RULE}\n").as_bytes())
 }
 
 fn detect_name(root: &Path) -> String {
@@ -128,4 +145,21 @@ fn languages(files: &[String]) -> Vec<String> {
     let mut v: Vec<(&str, usize)> = counts.into_iter().collect();
     v.sort_by(|a, b| b.1.cmp(&a.1));
     v.into_iter().take(4).map(|(l, _)| l.to_string()).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lf_rule_is_added_once_after_existing_lines() {
+        let root = std::env::temp_dir().join(format!("relay-ut-gitattributes-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join(".gitattributes"), "*.png binary").unwrap();
+        ensure_lf(&root).unwrap();
+        ensure_lf(&root).unwrap();
+        let text = std::fs::read_to_string(root.join(".gitattributes")).unwrap();
+        assert_eq!(text, format!("*.png binary\n{LF_RULE}\n"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }
