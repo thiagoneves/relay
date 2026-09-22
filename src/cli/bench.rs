@@ -47,7 +47,9 @@ pub fn run(source: Source, json: bool, min_recall: Option<f64>) -> anyhow::Resul
             print_families(&families, &total);
         }
         print_losses(&samples, &total);
-        println!("\nTokens are estimates (bytes/4). Signal = lines with errors, failures or file:line references.");
+        println!(
+            "\nTokens are estimates (calibrated against a BPE tokenizer, ~7% median error). Signal = lines with errors, failures or file:line references."
+        );
     }
 
     let failed = min_recall.is_some_and(|min| total.expect_kept < total.expect_total || total.signal_recall() < min);

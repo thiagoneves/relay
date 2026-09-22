@@ -107,7 +107,7 @@ fn sample(name: String, cmd: &str, raw: &str, expect: &[String], refetched: bool
         filter: c.filter.to_string(),
         wrapped,
         tokens_in: est_tokens(raw),
-        tokens_out: est_tokens(&c.text),
+        tokens_out: est_tokens(&c.text) + if c.shortened { compress::FOOTER_TOKENS } else { 0 },
         signal_kept: signal.kept,
         signal_total: signal.total,
         expect_kept: expected.kept,

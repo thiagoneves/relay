@@ -52,14 +52,11 @@ pub fn run(cmd: &str, raw_only: bool) -> Result<Outcome> {
     let tokens_in = est_tokens(&raw);
     let tokens_out = est_tokens(&c.text);
 
-    // Store the original whenever we changed anything or it was big
-    // enough to be worth revisiting in a handoff.
-    let paths = Paths::from_cwd();
-    let mut footer = String::new();
-    if let Ok(paths) = paths {
-        let id = new_id("o");
+    // The original is stored even when the view is unchanged: handoffs
+    // cite it. A cut view is shown only if its original is retrievable.
+    let stored = Paths::from_cwd().ok().and_then(|paths| {
         let meta = OutputMeta {
-            id: id.clone(),
+            id: new_id("o"),
             ts: now_iso(),
             session: spool::current_session(&paths),
             cwd: std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default(),
@@ -72,19 +69,22 @@ pub fn run(cmd: &str, raw_only: bool) -> Result<Outcome> {
             tokens_out,
         };
         match outputs::store(&paths, &meta, &raw) {
-            Ok(_) => {
-                if tokens_out < tokens_in {
-                    footer = format!(
-                        "\n[relay {}→{} tokens · original: relay get {}]",
-                        human_tokens(tokens_in),
-                        human_tokens(tokens_out),
-                        id
-                    );
-                }
+            Ok(_) => Some(meta.id),
+            Err(e) => {
+                crate::core::paths::log(&paths, &format!("store failed: {e}"));
+                None
             }
-            Err(e) => crate::core::paths::log(&paths, &format!("store failed: {e}")),
         }
-    }
-    let printed = if tokens_out < tokens_in { format!("{}{}", c.text, footer) } else { c.text };
+    });
+    let printed = match stored {
+        Some(id) if c.shortened => format!(
+            "{}\n[relay {}→{} tokens · original: relay get {id}]",
+            c.text,
+            human_tokens(tokens_in),
+            human_tokens(tokens_out)
+        ),
+        _ if c.shortened => compress::generic::strip_ansi(&raw),
+        _ => c.text,
+    };
     Ok(Outcome { exit, printed })
 }
