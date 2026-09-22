@@ -2,10 +2,11 @@
 //! or rewriting, and write the reply the harness expects on stdout.
 
 use anyhow::Result;
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use super::policy::{self, Rewritten};
+use super::policy;
 use super::record::Recorder;
+use super::reply::Reply;
 use super::verify;
 use crate::core::paths::Paths;
 use crate::core::spool;
@@ -30,7 +31,9 @@ pub const EVENTS: &[(&str, Option<&str>, u32)] = &[
 /// harness never sees a failure.
 pub fn run(harness: &dyn Harness) -> Result<()> {
     let started = std::time::Instant::now();
-    let Some(input) = crate::harness::read_stdin_json()? else { return Ok(()) };
+    let Some(raw) = crate::harness::read_stdin_json()? else { return Ok(()) };
+    // Another dialect, or an event this adapter leaves to another one.
+    let Some(input) = harness.normalize(raw) else { return Ok(()) };
     let session = input["session_id"].as_str().unwrap_or("unknown");
     let paths = match input["cwd"].as_str() {
         Some(c) => Paths::discover(std::path::Path::new(c))?,
@@ -40,39 +43,36 @@ pub fn run(harness: &dyn Harness) -> Result<()> {
     let rec = Recorder { paths: &paths, session };
     let event = input["hook_event_name"].as_str().unwrap_or("");
     let result = dispatch(event, &rec, &input, harness);
+    if let Some(out) = harness.render(event, result.as_ref().unwrap_or(&Reply::Nothing)) {
+        println!("{out}");
+    }
     timings::record(&paths, event, started.elapsed());
-    result
+    result.map(|_| ())
 }
 
-fn dispatch(event: &str, rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result<()> {
+fn dispatch(event: &str, rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result<Reply> {
     let (paths, session) = (rec.paths, rec.session);
+    let nothing = |r: Result<()>| r.map(|()| Reply::Nothing);
     match event {
-        "PreToolUse" => {
-            pre_tool_use(paths, session, input, harness);
-            Ok(())
-        }
+        "PreToolUse" => Ok(pre_tool_use(paths, session, input, harness)),
         "PostToolUse" => post_tool_use(rec, input, harness.replaces_output()),
-        "UserPromptSubmit" => rec.prompt(input),
+        "UserPromptSubmit" => nothing(rec.prompt(input)),
         "SessionStart" => session_start(rec, input, harness),
-        "SessionEnd" => session_end(rec, input, harness),
+        "SessionEnd" => nothing(session_end(rec, input, harness)),
         "PreCompact" => {
             rec.compact(input)?;
-            build_handoff(rec, input, harness, "compact")
+            nothing(build_handoff(rec, input, harness, "compact"))
         }
-        "Stop" => rec.stop(input),
-        _ => Ok(()),
+        "Stop" => nothing(rec.stop(input)),
+        _ => Ok(Reply::Nothing),
     }
 }
 
-fn session_start(rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result<()> {
+fn session_start(rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result<Reply> {
     spool::set_current_session(rec.paths, rec.session);
     let text = brief::build(rec.paths);
     rec.session_start(input, harness.id(), est_tokens(&text))?;
-    if !text.trim().is_empty() {
-        // Plain stdout on SessionStart becomes context for the model.
-        println!("{text}");
-    }
-    Ok(())
+    Ok(if text.trim().is_empty() { Reply::Nothing } else { Reply::Context(text) })
 }
 
 fn session_end(rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result<()> {
@@ -120,32 +120,29 @@ fn build_handoff(rec: &Recorder, input: &Value, harness: &dyn Harness, reason: &
     handoff::build(rec.paths, rec.session, reason, tail.as_ref()).map(|_| ())
 }
 
-fn post_tool_use(rec: &Recorder, input: &Value, replaces_output: bool) -> Result<()> {
+fn post_tool_use(rec: &Recorder, input: &Value, replaces_output: bool) -> Result<Reply> {
     if input["tool_name"].as_str() != Some("Bash") {
-        return rec.tool_use(input);
+        return rec.tool_use(input).map(|()| Reply::Nothing);
     }
     // Hooks run outside the tool sandbox: pull in anything relay x could
     // not write to the local tier.
     outputs::absorb_spill(rec.paths);
     rec.tool_use(input)?;
-    if replaces_output {
-        shrink_output(rec, input);
-    }
-    Ok(())
+    Ok(if replaces_output { shrink_output(rec, input) } else { Reply::Nothing })
 }
 
 /// Replace what the model sees of a command the harness ran itself with
 /// relay's compressed view. Only reached on success: the harness reports
 /// a failed command through another event that cannot be rewritten.
-fn shrink_output(rec: &Recorder, input: &Value) {
+fn shrink_output(rec: &Recorder, input: &Value) -> Reply {
     let cmd = input["tool_input"]["command"].as_str().unwrap_or("");
     let response = &input["tool_response"];
-    let Some(raw) = policy::output_to_shrink(cmd, response) else { return };
+    let Some(raw) = policy::output_to_shrink(cmd, response) else { return Reply::Nothing };
     let cwd = input["cwd"].as_str().unwrap_or("");
     let run = condense::Run { cmd, cwd, exit: 0, session: Some(rec.session.to_string()) };
     let view = condense::view_of(Some(rec.paths), run, &raw);
     if view == raw {
-        return;
+        return Reply::Nothing;
     }
     if let (Some(tool_use_id), Some(output_id)) = (input["tool_use_id"].as_str(), condense::stored_id(&view)) {
         let _ = rec.replaced(tool_use_id, output_id);
@@ -153,16 +150,13 @@ fn shrink_output(rec: &Recorder, input: &Value) {
     let mut updated = response.clone();
     updated["stdout"] = view.into();
     updated["stderr"] = "".into();
-    println!("{}", json!({ "hookSpecificOutput": { "hookEventName": "PostToolUse", "updatedToolOutput": updated } }));
+    Reply::ReplaceOutput(updated)
 }
 
-fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness: &dyn Harness) {
-    if input["tool_name"].as_str() != Some("Bash") {
-        return;
-    }
+fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness: &dyn Harness) -> Reply {
     let cmd = input["tool_input"]["command"].as_str().unwrap_or("").trim();
-    if cmd.is_empty() {
-        return;
+    if input["tool_name"].as_str() != Some("Bash") || cmd.is_empty() {
+        return Reply::Nothing;
     }
     // Hand-typed `relay x` has no session of its own; it falls back to
     // this pointer.
@@ -177,18 +171,7 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness: &dyn Harne
         support: harness.rewrites(),
         timeout: harness.command_timeout(&input["tool_input"]),
     };
-    if let Some(r) = policy::rewrite(&call, relay_invocation) {
-        println!("{}", reply(&r));
-    }
-}
-
-fn reply(r: &Rewritten) -> Value {
-    let mut out = json!({ "hookEventName": "PreToolUse", "updatedInput": { "command": r.command } });
-    if r.approve {
-        out["permissionDecision"] = "allow".into();
-        out["permissionDecisionReason"] = "relay: a read or routine dev task".into();
-    }
-    json!({ "hookSpecificOutput": out })
+    policy::rewrite(&call, relay_invocation).map_or(Reply::Nothing, Reply::Rewrite)
 }
 
 /// Use the bare name when `relay` on PATH is this very binary; otherwise

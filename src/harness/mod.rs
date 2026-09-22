@@ -94,6 +94,17 @@ pub trait Harness {
     fn rewrites(&self) -> RewriteSupport {
         RewriteSupport::Any
     }
+    /// The event in relay's internal shape (the Claude Code hook dialect),
+    /// or `None` for one this adapter leaves alone.
+    fn normalize(&self, raw: Value) -> Option<Value> {
+        Some(raw)
+    }
+    /// A hook's reply to `event` (named as in the internal shape) in this
+    /// harness's dialect; `None` prints nothing.
+    fn render(&self, event: &str, reply: &protocol::reply::Reply) -> Option<String> {
+        let _ = event;
+        protocol::reply::claude(reply)
+    }
     /// Whether a `PostToolUse` hook may replace the shell output the model
     /// sees, so relay can shrink it without rewriting the command.
     fn replaces_output(&self) -> bool {

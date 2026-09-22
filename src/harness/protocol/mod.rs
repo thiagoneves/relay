@@ -8,4 +8,5 @@ pub mod hooks_json;
 mod permission;
 pub mod policy;
 mod record;
+pub mod reply;
 pub mod verify;
