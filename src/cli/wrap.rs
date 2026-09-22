@@ -59,7 +59,7 @@ pub fn run(name: &str, last: bool, args: &[String]) -> anyhow::Result<i32> {
         let hp = handoff::path_for(&paths, &session);
         let stale = std::fs::metadata(&hp).and_then(|m| m.modified()).map(|m| m < mtime).unwrap_or(true);
         if stale {
-            let _ = handoff::build(&paths, &session, "wrapper-exit");
+            let _ = handoff::build(&paths, &session, "wrapper-exit", harness::tail_for(&paths, &session).as_ref());
         }
         let outs = outputs::for_session(&paths, &session);
         let saved: usize = outs.iter().map(super::super::core::outputs::OutputMeta::saved).sum();

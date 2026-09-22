@@ -23,7 +23,8 @@ pub fn run(session: Option<&str>, show: bool) -> anyhow::Result<i32> {
             None => bail!("no sessions recorded yet; run a harness with relay hooks installed"),
         },
     };
-    let h = handoff::build(&paths, &session, "manual")?;
+    let tail = crate::harness::tail_for(&paths, &session);
+    let h = handoff::build(&paths, &session, "manual", tail.as_ref())?;
     eprintln!("# {}", paths.rel(&h.path));
     print!("{}", h.body);
     Ok(0)
