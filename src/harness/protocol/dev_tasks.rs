@@ -9,8 +9,22 @@ const SCRIPTS: &[&str] =
     &["test", "tests", "lint", "build", "check", "typecheck", "type-check", "tsc", "format:check", "fmt:check"];
 
 /// Tools run through npx, pnpm exec and the like.
-const TOOLS: &[&str] =
-    &["tsc", "eslint", "vitest", "jest", "prettier", "mypy", "pytest", "ruff", "playwright", "phpunit", "credo"];
+const TOOLS: &[&str] = &[
+    "tsc",
+    "eslint",
+    "vitest",
+    "jest",
+    "prettier",
+    "mypy",
+    "pytest",
+    "ruff",
+    "playwright",
+    "phpunit",
+    "credo",
+    "rspec",
+    "rubocop",
+    "javac",
+];
 
 pub fn is_dev_task(program: &str, args: &[&str]) -> bool {
     let sub = args.first().copied().unwrap_or("");
@@ -22,9 +36,9 @@ pub fn is_dev_task(program: &str, args: &[&str]) -> bool {
         "python" | "python3" => {
             sub == "-m" && args.get(1).is_some_and(|m| matches!(*m, "pytest" | "mypy" | "unittest"))
         }
-        "gradle" | "gradlew" | "mvn" | "mvnw" => {
-            !args.is_empty() && args.iter().all(|a| a.starts_with('-') || JVM_GOALS.contains(a))
-        }
+        "gradle" | "gradlew" | "mvn" | "mvnw" => jvm(args),
+        "bundle" => sub == "exec" && args.get(1).is_some_and(|t| is_dev_task(t, &args[2..])),
+        "rake" => matches!(sub, "test" | "spec"),
         "dotnet" | "swift" | "sbt" | "zig" => matches!(sub, "test" | "build" | "compile"),
         "mix" => {
             matches!(sub, "test" | "compile" | "credo" | "dialyzer") || (sub == "format" && args.contains(&"--check"))
@@ -36,7 +50,25 @@ pub fn is_dev_task(program: &str, args: &[&str]) -> bool {
     }
 }
 
-const JVM_GOALS: &[&str] = &["test", "build", "check", "compile", "verify", "assemble", "clean"];
+const JVM_GOALS: &[&str] = &["test", "build", "check", "compile", "verify", "assemble", "clean", "package"];
+
+/// Every argument is a flag or a build goal; `-pl`, `-f` and `-s` take a
+/// value that is not a goal.
+fn jvm(args: &[&str]) -> bool {
+    const TAKES_VALUE: &[&str] = &["-pl", "-f", "-s", "-t", "-l"];
+    let mut rest = args.iter().copied();
+    let mut any_goal = false;
+    while let Some(a) = rest.next() {
+        if TAKES_VALUE.contains(&a) {
+            rest.next();
+        } else if JVM_GOALS.contains(&a) {
+            any_goal = true;
+        } else if !a.starts_with('-') {
+            return false;
+        }
+    }
+    any_goal
+}
 
 fn cargo(sub: &str, args: &[&str]) -> bool {
     match sub {
@@ -60,7 +92,21 @@ fn package_manager(sub: &str, args: &[&str]) -> bool {
 /// A checker run directly. Flags that rewrite files or keep running
 /// disqualify it.
 fn tool(program: &str, args: &[&str]) -> bool {
-    let fixes = args.iter().any(|a| matches!(*a, "--fix" | "--write" | "-w" | "--watch" | "-u" | "--update"));
+    let fixes = args.iter().any(|a| {
+        matches!(
+            *a,
+            "--fix"
+                | "--write"
+                | "-w"
+                | "--watch"
+                | "-u"
+                | "--update"
+                | "-a"
+                | "-A"
+                | "--auto-correct"
+                | "--autocorrect"
+        )
+    });
     match program {
         "prettier" => args.contains(&"--check") && !fixes,
         "ruff" => matches!(args.first(), Some(&"check")) && !fixes,
@@ -106,6 +152,12 @@ mod tests {
             "phpunit tests",
             "sbt compile",
             "zig build",
+            "bundle exec rspec spec/",
+            "rspec",
+            "bundle exec rubocop",
+            "rake test",
+            "mvn -pl api package",
+            "javac -d out Main.java",
         ] {
             assert!(dev(cmd), "{cmd}");
         }
@@ -133,6 +185,11 @@ mod tests {
             "deno fmt",
             "deno run app.ts",
             "composer install",
+            "bundle install",
+            "bundle exec rubocop -A",
+            "bundle exec rails server",
+            "mvn deploy -pl api",
+            "java -jar app.jar",
             "python3 script.py",
         ] {
             assert!(!dev(cmd), "{cmd}");
