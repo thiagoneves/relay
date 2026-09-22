@@ -34,7 +34,8 @@ All notable changes to relay. Dates are UTC.
   is where a broken relay shows up.
 - `relay x` stops a command just before the harness's timeout and shows what it
   printed so far (Unix, Claude Code).
-- Release archives with checksums, built on a `v*` tag.
+- Release archives with checksums, built on a `v*` tag, and an npm launcher
+  for `npx -y @thiagoneves/relay` that downloads and verifies them.
 - README and the MIT license text.
 
 ### Fixed

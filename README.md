@@ -21,7 +21,17 @@ harness's hooks.
 
 ## Install
 
-relay is built from source for now (Rust 1.88 or newer):
+Once a release is published, one command sets everything up and starts a
+session:
+
+```sh
+npx -y @thiagoneves/relay claude      # or codex, gemini
+```
+
+The npm package is only a launcher: it downloads the binary for your platform
+from the GitHub release and checks it against the release's `SHA256SUMS`.
+
+Until then, build from source (Rust 1.88 or newer):
 
 ```sh
 git clone <this repo> relay && cd relay
