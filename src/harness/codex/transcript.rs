@@ -11,7 +11,8 @@ use crate::core::handoff::Tail;
 use crate::harness::jsonl::{self, MAX_REPLIES, TAIL_BYTES};
 
 /// Rollouts under `sessions/`, filtered by the `cwd` in their first line
-/// (`session_meta`). Subagent rollouts name their parent thread.
+/// (`session_meta`): the project root or a directory below it. Subagent
+/// rollouts name their parent thread.
 pub fn rollouts(dir: &Path, root: Option<&Path>) -> Vec<Transcript> {
     jsonl::files_under(dir)
         .into_iter()
@@ -19,7 +20,7 @@ pub fn rollouts(dir: &Path, root: Option<&Path>) -> Vec<Transcript> {
             let meta: Value = serde_json::from_str(&jsonl::first_line(&path)?).ok()?;
             let p = &meta["payload"];
             if let Some(r) = root
-                && p["cwd"].as_str().map(Path::new) != Some(r)
+                && !p["cwd"].as_str().is_some_and(|cwd| jsonl::in_project(Path::new(cwd), r))
             {
                 return None;
             }
@@ -59,5 +60,24 @@ mod tests {
         let t = tail(&dir.join("r.jsonl")).unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(t.replies, ["Done: tests pass."]);
+    }
+
+    #[test]
+    fn rollouts_started_below_the_root_belong_to_the_project() {
+        let dir = std::env::temp_dir().join(format!("relay-codex-roll-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let root = dir.join("repo");
+        std::fs::create_dir_all(root.join("packages/web")).unwrap();
+        std::fs::create_dir_all(dir.join("sessions/2026/09/22")).unwrap();
+        let meta = |id: &str, cwd: &Path| {
+            format!(r#"{{"type":"session_meta","payload":{{"id":"{id}","cwd":"{}"}}}}"#, cwd.display())
+        };
+        std::fs::write(dir.join("sessions/2026/09/22/a.jsonl"), meta("sub", &root.join("packages/web"))).unwrap();
+        std::fs::write(dir.join("sessions/2026/09/22/b.jsonl"), meta("top", &root)).unwrap();
+        std::fs::write(dir.join("sessions/2026/09/22/c.jsonl"), meta("other", &dir.join("elsewhere"))).unwrap();
+        let mut ids: Vec<_> = rollouts(&dir.join("sessions"), Some(&root)).into_iter().map(|t| t.id).collect();
+        ids.sort();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(ids, ["sub", "top"]);
     }
 }

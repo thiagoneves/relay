@@ -57,7 +57,7 @@ impl Harness for Claude {
     fn transcripts(&self, root: Option<&Path>) -> Vec<Transcript> {
         let projects = config_dir().join("projects");
         let dirs: Vec<PathBuf> = match root {
-            Some(r) => vec![projects.join(transcript::project_slug(r))],
+            Some(r) => transcript::project_dirs(&projects, r),
             None => std::fs::read_dir(&projects).map(|rd| rd.flatten().map(|e| e.path()).collect()).unwrap_or_default(),
         };
         dirs.iter().flat_map(|d| transcript::sessions_in(d)).collect()

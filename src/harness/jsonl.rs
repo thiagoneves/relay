@@ -75,6 +75,15 @@ pub fn last<T>(mut v: Vec<T>, n: usize) -> Vec<T> {
     v.split_off(v.len().saturating_sub(n))
 }
 
+/// Whether a session that started in `cwd` belongs to the project at
+/// `root`: the root itself or any directory below it. Both sides are
+/// resolved, since git reports `/private/tmp/x` for a repo opened as
+/// `/tmp/x`.
+pub fn in_project(cwd: &Path, root: &Path) -> bool {
+    let resolve = |p: &Path| std::fs::canonicalize(p).map_or_else(|_| p.to_path_buf(), crate::helpers::fs::simplify);
+    cwd.starts_with(root) || resolve(cwd).starts_with(resolve(root))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,6 +116,24 @@ mod tests {
         assert_eq!(text_of(&serde_json::json!([{ "text": "a" }, { "text": "b" }])), "ab");
         assert_eq!(text_of(&serde_json::json!({ "content": "c" })), "c");
         assert_eq!(text_of(&serde_json::json!(3)), "");
+    }
+
+    #[test]
+    fn subdirectories_and_resolved_paths_belong_to_the_project() {
+        let d = scratch("proj");
+        std::fs::create_dir_all(d.join("packages/web")).unwrap();
+        assert!(in_project(&d.join("packages/web"), &d));
+        assert!(in_project(&d, &d));
+        assert!(!in_project(&std::env::temp_dir(), &d));
+        #[cfg(unix)]
+        {
+            let link = d.with_extension("link");
+            let _ = std::fs::remove_file(&link);
+            std::os::unix::fs::symlink(&d, &link).unwrap();
+            assert!(in_project(&link.join("packages"), &d));
+            let _ = std::fs::remove_file(&link);
+        }
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

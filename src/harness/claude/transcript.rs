@@ -18,6 +18,43 @@ pub fn project_slug(root: &Path) -> String {
     root.display().to_string().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
 }
 
+/// Transcript dirs under `projects` for the project at `root`: its own,
+/// and those of sessions started in a directory below it. A dir's name
+/// is lossy (every separator became `-`), so membership is decided by
+/// the `cwd` recorded inside one of its transcripts.
+pub fn project_dirs(projects: &Path, root: &Path) -> Vec<PathBuf> {
+    let own = projects.join(project_slug(root));
+    let Ok(rd) = std::fs::read_dir(projects) else { return vec![own] };
+    let mut dirs: Vec<PathBuf> = rd
+        .flatten()
+        .map(|e| e.path())
+        .filter(|d| *d != own && d.is_dir())
+        .filter(|d| recorded_cwd(d).is_some_and(|cwd| jsonl::in_project(&cwd, root)))
+        .collect();
+    dirs.insert(0, own);
+    dirs
+}
+
+/// The `cwd` of the sessions in a transcript dir, from the first lines
+/// of any one of them that records it.
+fn recorded_cwd(dir: &Path) -> Option<PathBuf> {
+    std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
+        .find_map(|p| cwd_in(jsonl::head_lines(&p, 40)?))
+}
+
+fn cwd_in(mut lines: impl Iterator<Item = String>) -> Option<PathBuf> {
+    lines.find_map(|l| {
+        if !l.contains("\"cwd\"") {
+            return None;
+        }
+        serde_json::from_str::<Value>(&l).ok()?["cwd"].as_str().map(PathBuf::from)
+    })
+}
+
 /// `<dir>/<session>.jsonl`, and `<dir>/<session>/subagents/*.jsonl` for
 /// the subagents that session spawned.
 pub fn sessions_in(dir: &Path) -> Vec<Transcript> {
@@ -107,5 +144,27 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!((calls[0].cmd.as_str(), calls[0].output.as_str()), ("git status", "On branch main"));
+    }
+
+    #[test]
+    fn project_dirs_include_sessions_started_below_the_root() {
+        let base = std::env::temp_dir().join(format!("relay-projdirs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let root = base.join("repo");
+        let projects = base.join("projects");
+        let session = |cwd: &Path| {
+            let d = projects.join(project_slug(cwd));
+            std::fs::create_dir_all(&d).unwrap();
+            let line = format!(r#"{{"type":"user","cwd":"{}","message":{{"content":"hi"}}}}"#, cwd.display());
+            std::fs::write(d.join("s.jsonl"), format!("{{\"type\":\"summary\"}}\n{line}\n")).unwrap();
+            d
+        };
+        let own = session(&root);
+        let sub = session(&root.join("packages/web"));
+        // Same slug prefix, different project.
+        session(&base.join("repo-old"));
+        let dirs = project_dirs(&projects, &root);
+        std::fs::remove_dir_all(&base).unwrap();
+        assert_eq!(dirs, [own, sub]);
     }
 }
