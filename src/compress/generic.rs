@@ -7,6 +7,8 @@ pub const MAX_LINE_CHARS: usize = 400;
 pub const MAX_LINES: usize = 300;
 pub const HEAD_LINES: usize = 180;
 pub const TAIL_LINES: usize = 100;
+/// Signal lines rescued from the omitted middle of a capped output.
+pub const MAX_RESCUED: usize = 40;
 
 fn ansi_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -75,17 +77,38 @@ pub fn truncate_long_lines(lines: &[String]) -> Vec<String> {
 }
 
 /// Keep head and tail when output is very long. Errors usually live at
-/// the tail, so the tail window is never dropped.
+/// the tail, so the tail window is never dropped; errors in the middle
+/// (a failing module in a long build log) are rescued by rule.
 pub fn cap_lines(lines: &[String]) -> Vec<String> {
     if lines.len() <= MAX_LINES {
         return lines.to_vec();
     }
-    let omitted = lines.len() - HEAD_LINES - TAIL_LINES;
-    let mut out = Vec::with_capacity(HEAD_LINES + TAIL_LINES + 1);
+    let middle = &lines[HEAD_LINES..lines.len() - TAIL_LINES];
+    let mut out = Vec::with_capacity(HEAD_LINES + TAIL_LINES + MAX_RESCUED * 2 + 1);
     out.extend_from_slice(&lines[..HEAD_LINES]);
-    out.push(format!("… [{omitted} lines omitted, full output in original]"));
+    let mut skipped = 0;
+    let mut rescued = 0;
+    for l in middle {
+        if rescued < MAX_RESCUED && super::fidelity::is_signal(l) {
+            if skipped > 0 {
+                out.push(omitted(skipped));
+                skipped = 0;
+            }
+            out.push(l.clone());
+            rescued += 1;
+        } else {
+            skipped += 1;
+        }
+    }
+    if skipped > 0 {
+        out.push(omitted(skipped));
+    }
     out.extend_from_slice(&lines[lines.len() - TAIL_LINES..]);
     out
+}
+
+fn omitted(n: usize) -> String {
+    format!("… [{n} lines omitted, full output in original]")
 }
 
 pub fn apply(text: &str) -> String {
@@ -144,6 +167,15 @@ mod tests {
         assert!(out.len() < 300);
         assert_eq!(out.last().unwrap(), "line 999");
         assert!(out.iter().any(|l| l.contains("lines omitted")));
+    }
+
+    #[test]
+    fn cap_rescues_errors_from_the_middle() {
+        let mut v: Vec<String> = (0..1000).map(|i| format!("step {i}")).collect();
+        v[500] = "error: src/a.rs:3 broke".into();
+        let out = cap_lines(&v);
+        let i = out.iter().position(|l| l == "error: src/a.rs:3 broke").expect("rescued");
+        assert!(out[i - 1].contains("lines omitted") && out[i + 1].contains("lines omitted"));
     }
 
     #[test]

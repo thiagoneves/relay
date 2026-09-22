@@ -2,6 +2,7 @@
 //! then the generic pipeline. Any panic inside a filter is caught and
 //! the raw output is returned: a filter bug must never eat a real error.
 
+pub mod fidelity;
 pub mod generic;
 pub mod git;
 pub mod tests_runner;
