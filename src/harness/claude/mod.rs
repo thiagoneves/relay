@@ -26,7 +26,12 @@ fn config_dir() -> PathBuf {
 }
 
 fn target() -> hooks_json::Target {
-    hooks_json::Target { path: config_dir().join("settings.json"), marker: MARKER }
+    hooks_json::Target {
+        path: config_dir().join("settings.json"),
+        marker: MARKER,
+        events: hooks_json::CLAUDE_EVENTS,
+        layout: hooks_json::Layout::Grouped,
+    }
 }
 
 impl Harness for Claude {

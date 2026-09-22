@@ -16,17 +16,6 @@ use crate::helpers::env::{self, Var};
 use crate::helpers::{est_tokens, shell, slash};
 use crate::limits::store::KEEP_OUTPUTS;
 
-/// Events relay wants, with the matcher used in settings.json.
-pub const EVENTS: &[(&str, Option<&str>, u32)] = &[
-    ("PreToolUse", Some("Bash"), 5),
-    ("PostToolUse", Some("Bash|Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit"), 5),
-    ("UserPromptSubmit", None, 5),
-    ("SessionStart", None, 5),
-    ("SessionEnd", None, 2),
-    ("PreCompact", None, 5),
-    ("Stop", None, 5),
-];
-
 /// Errors are the caller's to swallow: `run_fail_open` logs them and the
 /// harness never sees a failure.
 pub fn run(harness: &dyn Harness) -> Result<()> {
