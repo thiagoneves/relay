@@ -27,12 +27,12 @@ pub fn parse_since(s: &str, now: SystemTime) -> Option<SystemTime> {
     let s = s.trim();
     if let Some(unit) = s.chars().last().filter(char::is_ascii_alphabetic) {
         let n: u64 = s[..s.len() - 1].parse().ok()?;
-        let secs = match unit {
-            'm' => n * 60,
-            'h' => n * 3600,
-            'd' => n * 86_400,
+        let secs = n.checked_mul(match unit {
+            'm' => 60,
+            'h' => 3600,
+            'd' => 86_400,
             _ => return None,
-        };
+        })?;
         return now.checked_sub(std::time::Duration::from_secs(secs));
     }
     let mut parts = s.split('-').map(str::parse::<i32>);
@@ -55,6 +55,7 @@ mod tests {
         assert_eq!(parse_since("1970-01-03", now), Some(UNIX_EPOCH + Duration::from_secs(2 * 86_400)));
         assert_eq!(parse_since("soon", now), None);
         assert_eq!(parse_since("5y", now), None);
+        assert_eq!(parse_since("999999999999999999d", now), None);
     }
 
     #[test]
