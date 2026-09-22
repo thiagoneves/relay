@@ -1,0 +1,1 @@
+for i in $(seq 1 1500); do echo "[build] compiled module $i/3000 in 12ms"; if [ $i = 700 ]; then echo 'ERROR in src/pages/checkout.tsx:42:7 TS2322: Type string is not assignable to type number'; fi; done

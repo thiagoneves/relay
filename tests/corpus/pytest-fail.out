@@ -1,0 +1,31 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+rootdir: /work/py
+plugins: anyio-4.12.1, asyncio-1.3.0, docker-3.1.1
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 62 items
+
+test_app.py ............................................................ [ 96%]
+FF                                                                       [100%]
+
+=================================== FAILURES ===================================
+_________________________________ test_totals __________________________________
+
+>   def test_totals(): assert sum([1, 2, 3]) == 7, "invoice total mismatch"
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: invoice total mismatch
+E   assert 6 == 7
+E    +  where 6 = sum([1, 2, 3])
+
+test_app.py:61: AssertionError
+_________________________________ test_lookup __________________________________
+
+>   def test_lookup(): assert {"a": 1}["b"] == 1
+                              ^^^^^^^^^^^^^
+E   KeyError: 'b'
+
+test_app.py:62: KeyError
+=========================== short test summary info ============================
+FAILED test_app.py::test_totals - AssertionError: invoice total mismatch
+FAILED test_app.py::test_lookup - KeyError: 'b'
+========================= 2 failed, 60 passed in 0.05s =========================

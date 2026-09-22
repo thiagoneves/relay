@@ -1,0 +1,1 @@
+ERROR in src/pages/checkout.tsx:42:7 TS2322: Type string is not assignable to type number

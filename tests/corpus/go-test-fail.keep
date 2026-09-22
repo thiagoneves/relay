@@ -1,0 +1,3 @@
+shop_test.go:43: discount: got 90, want 85
+--- FAIL: TestDiscount
+FAIL	example.com/shop

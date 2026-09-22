@@ -1,0 +1,86 @@
+=== RUN   TestOk1
+--- PASS: TestOk1 (0.00s)
+=== RUN   TestOk2
+--- PASS: TestOk2 (0.00s)
+=== RUN   TestOk3
+--- PASS: TestOk3 (0.00s)
+=== RUN   TestOk4
+--- PASS: TestOk4 (0.00s)
+=== RUN   TestOk5
+--- PASS: TestOk5 (0.00s)
+=== RUN   TestOk6
+--- PASS: TestOk6 (0.00s)
+=== RUN   TestOk7
+--- PASS: TestOk7 (0.00s)
+=== RUN   TestOk8
+--- PASS: TestOk8 (0.00s)
+=== RUN   TestOk9
+--- PASS: TestOk9 (0.00s)
+=== RUN   TestOk10
+--- PASS: TestOk10 (0.00s)
+=== RUN   TestOk11
+--- PASS: TestOk11 (0.00s)
+=== RUN   TestOk12
+--- PASS: TestOk12 (0.00s)
+=== RUN   TestOk13
+--- PASS: TestOk13 (0.00s)
+=== RUN   TestOk14
+--- PASS: TestOk14 (0.00s)
+=== RUN   TestOk15
+--- PASS: TestOk15 (0.00s)
+=== RUN   TestOk16
+--- PASS: TestOk16 (0.00s)
+=== RUN   TestOk17
+--- PASS: TestOk17 (0.00s)
+=== RUN   TestOk18
+--- PASS: TestOk18 (0.00s)
+=== RUN   TestOk19
+--- PASS: TestOk19 (0.00s)
+=== RUN   TestOk20
+--- PASS: TestOk20 (0.00s)
+=== RUN   TestOk21
+--- PASS: TestOk21 (0.00s)
+=== RUN   TestOk22
+--- PASS: TestOk22 (0.00s)
+=== RUN   TestOk23
+--- PASS: TestOk23 (0.00s)
+=== RUN   TestOk24
+--- PASS: TestOk24 (0.00s)
+=== RUN   TestOk25
+--- PASS: TestOk25 (0.00s)
+=== RUN   TestOk26
+--- PASS: TestOk26 (0.00s)
+=== RUN   TestOk27
+--- PASS: TestOk27 (0.00s)
+=== RUN   TestOk28
+--- PASS: TestOk28 (0.00s)
+=== RUN   TestOk29
+--- PASS: TestOk29 (0.00s)
+=== RUN   TestOk30
+--- PASS: TestOk30 (0.00s)
+=== RUN   TestOk31
+--- PASS: TestOk31 (0.00s)
+=== RUN   TestOk32
+--- PASS: TestOk32 (0.00s)
+=== RUN   TestOk33
+--- PASS: TestOk33 (0.00s)
+=== RUN   TestOk34
+--- PASS: TestOk34 (0.00s)
+=== RUN   TestOk35
+--- PASS: TestOk35 (0.00s)
+=== RUN   TestOk36
+--- PASS: TestOk36 (0.00s)
+=== RUN   TestOk37
+--- PASS: TestOk37 (0.00s)
+=== RUN   TestOk38
+--- PASS: TestOk38 (0.00s)
+=== RUN   TestOk39
+--- PASS: TestOk39 (0.00s)
+=== RUN   TestOk40
+--- PASS: TestOk40 (0.00s)
+=== RUN   TestDiscount
+    shop_test.go:43: discount: got 90, want 85
+--- FAIL: TestDiscount (0.00s)
+FAIL
+FAIL	example.com/shop	0.209s
+FAIL

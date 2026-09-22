@@ -1,0 +1,216 @@
+TAP version 13
+# Subtest: ok 1
+ok 1 - ok 1
+  ---
+  duration_ms: 1.260416
+  type: 'test'
+  ...
+# Subtest: ok 2
+ok 2 - ok 2
+  ---
+  duration_ms: 0.138416
+  type: 'test'
+  ...
+# Subtest: ok 3
+ok 3 - ok 3
+  ---
+  duration_ms: 0.047458
+  type: 'test'
+  ...
+# Subtest: ok 4
+ok 4 - ok 4
+  ---
+  duration_ms: 0.042
+  type: 'test'
+  ...
+# Subtest: ok 5
+ok 5 - ok 5
+  ---
+  duration_ms: 0.094125
+  type: 'test'
+  ...
+# Subtest: ok 6
+ok 6 - ok 6
+  ---
+  duration_ms: 0.035208
+  type: 'test'
+  ...
+# Subtest: ok 7
+ok 7 - ok 7
+  ---
+  duration_ms: 0.087416
+  type: 'test'
+  ...
+# Subtest: ok 8
+ok 8 - ok 8
+  ---
+  duration_ms: 0.033375
+  type: 'test'
+  ...
+# Subtest: ok 9
+ok 9 - ok 9
+  ---
+  duration_ms: 0.25325
+  type: 'test'
+  ...
+# Subtest: ok 10
+ok 10 - ok 10
+  ---
+  duration_ms: 0.263
+  type: 'test'
+  ...
+# Subtest: ok 11
+ok 11 - ok 11
+  ---
+  duration_ms: 0.091292
+  type: 'test'
+  ...
+# Subtest: ok 12
+ok 12 - ok 12
+  ---
+  duration_ms: 0.032708
+  type: 'test'
+  ...
+# Subtest: ok 13
+ok 13 - ok 13
+  ---
+  duration_ms: 0.027459
+  type: 'test'
+  ...
+# Subtest: ok 14
+ok 14 - ok 14
+  ---
+  duration_ms: 0.032208
+  type: 'test'
+  ...
+# Subtest: ok 15
+ok 15 - ok 15
+  ---
+  duration_ms: 0.023583
+  type: 'test'
+  ...
+# Subtest: ok 16
+ok 16 - ok 16
+  ---
+  duration_ms: 0.021625
+  type: 'test'
+  ...
+# Subtest: ok 17
+ok 17 - ok 17
+  ---
+  duration_ms: 0.023292
+  type: 'test'
+  ...
+# Subtest: ok 18
+ok 18 - ok 18
+  ---
+  duration_ms: 0.022833
+  type: 'test'
+  ...
+# Subtest: ok 19
+ok 19 - ok 19
+  ---
+  duration_ms: 0.022375
+  type: 'test'
+  ...
+# Subtest: ok 20
+ok 20 - ok 20
+  ---
+  duration_ms: 0.0225
+  type: 'test'
+  ...
+# Subtest: ok 21
+ok 21 - ok 21
+  ---
+  duration_ms: 0.026292
+  type: 'test'
+  ...
+# Subtest: ok 22
+ok 22 - ok 22
+  ---
+  duration_ms: 0.02425
+  type: 'test'
+  ...
+# Subtest: ok 23
+ok 23 - ok 23
+  ---
+  duration_ms: 0.515709
+  type: 'test'
+  ...
+# Subtest: ok 24
+ok 24 - ok 24
+  ---
+  duration_ms: 0.081125
+  type: 'test'
+  ...
+# Subtest: ok 25
+ok 25 - ok 25
+  ---
+  duration_ms: 0.044042
+  type: 'test'
+  ...
+# Subtest: ok 26
+ok 26 - ok 26
+  ---
+  duration_ms: 0.03
+  type: 'test'
+  ...
+# Subtest: ok 27
+ok 27 - ok 27
+  ---
+  duration_ms: 0.025833
+  type: 'test'
+  ...
+# Subtest: ok 28
+ok 28 - ok 28
+  ---
+  duration_ms: 0.027584
+  type: 'test'
+  ...
+# Subtest: ok 29
+ok 29 - ok 29
+  ---
+  duration_ms: 0.023458
+  type: 'test'
+  ...
+# Subtest: ok 30
+ok 30 - ok 30
+  ---
+  duration_ms: 0.026084
+  type: 'test'
+  ...
+# Subtest: rejects expired token
+not ok 31 - rejects expired token
+  ---
+  duration_ms: 0.666167
+  type: 'test'
+  location: '/work/node/app.test.js:32:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    token accepted after expiry
+    
+    true !== false
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: false
+  actual: true
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/work/node/app.test.js:32:44)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..31
+# tests 31
+# suites 0
+# pass 30
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 56.26025

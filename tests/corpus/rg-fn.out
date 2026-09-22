@@ -1,0 +1,107 @@
+src/helpers/fs.rs:5:pub fn write_atomic(path: &Path, content: &[u8]) -> anyhow::Result<()> {
+src/helpers/fs.rs:20:pub fn dir_size(path: &Path) -> u64 {
+src/helpers/text.rs:3:pub fn est_tokens(s: &str) -> usize {
+src/helpers/text.rs:8:pub fn truncate_chars(s: &str, max: usize) -> String {
+src/helpers/text.rs:16:pub fn human_bytes(n: u64) -> String {
+src/helpers/text.rs:27:pub fn human_tokens(n: usize) -> String {
+src/helpers/ids.rs:6:pub fn new_id(prefix: &str) -> String {
+src/helpers/git.rs:21:pub fn branch(root: &Path) -> String {
+src/helpers/git.rs:25:pub fn state(root: &Path) -> GitState {
+src/helpers/git.rs:35:pub fn hot_files(root: &Path, commits: usize, top: usize) -> Vec<(String, usize)> {
+src/helpers/git.rs:50:pub fn recent_commits(root: &Path, n: usize) -> Vec<String> {
+src/helpers/git.rs:56:pub fn tracked_files(root: &Path) -> Vec<String> {
+src/helpers/time.rs:7:pub fn now_iso() -> String {
+src/helpers/time.rs:15:pub fn now_millis() -> u128 {
+src/harness/mod.rs:44:pub fn by_name(name: &str) -> Result<Box<dyn Harness>> {
+src/harness/mod.rs:52:pub fn which(cmd: &str) -> Option<std::path::PathBuf> {
+src/harness/mod.rs:58:pub fn read_stdin_json() -> Result<Option<Value>> {
+src/harness/mod.rs:68:pub fn run_fail_open(name: &str, f: impl FnOnce() -> Result<()>) {
+src/harness/protocol/hooks_json.rs:72:pub fn install(target: &Target, exe: &Path) -> Result<InstallReport> {
+src/harness/protocol/hooks_json.rs:100:pub fn uninstall(target: &Target) -> Result<InstallReport> {
+src/harness/protocol/hook.rs:24:pub fn run(harness_id: &str) -> Result<()> {
+src/harness/protocol/hook.rs:150:pub fn should_wrap(cmd: &str) -> bool {
+src/harness/protocol/hook.rs:243:pub fn shell_quote(s: &str) -> String {
+src/harness/codex/mod.rs:23:pub fn codex_home() -> PathBuf {
+src/harness/codex/config_toml.rs:12:pub fn enable_hooks(path: &Path) -> Result<bool> {
+src/cli/bench.rs:9:pub fn run(corpus: Option<&Path>, json: bool, min_recall: Option<f64>) -> anyhow::Result<i32> {
+src/cli/init.rs:4:pub fn run() -> anyhow::Result<i32> {
+src/cli/wrap.rs:15:pub fn run(name: &str, last: bool, args: &[String]) -> anyhow::Result<i32> {
+src/cli/install.rs:3:pub fn install(name: &str) -> anyhow::Result<i32> {
+src/cli/install.rs:22:pub fn uninstall(name: &str) -> anyhow::Result<i32> {
+src/cli/status.rs:6:pub fn run() -> anyhow::Result<i32> {
+src/cli/brief.rs:5:pub fn run() -> anyhow::Result<i32> {
+src/cli/remember.rs:5:pub fn run(kind: Kind, text: &str, files: &[String]) -> anyhow::Result<i32> {
+src/cli/mod.rs:116:pub fn run() -> anyhow::Result<i32> {
+src/cli/get.rs:4:pub fn run(id: &str, meta: bool) -> anyhow::Result<i32> {
+src/cli/hook.rs:4:pub fn run(name: &str) -> anyhow::Result<i32> {
+src/cli/handoff.rs:7:pub fn run(session: Option<&str>, show: bool) -> anyhow::Result<i32> {
+src/compress/generic.rs:16:pub fn strip_ansi(s: &str) -> String {
+src/compress/generic.rs:21:pub fn collapse_whitespace(lines: &[String]) -> Vec<String> {
+src/compress/generic.rs:40:pub fn dedup_runs(lines: &[String]) -> Vec<String> {
+src/compress/generic.rs:62:pub fn truncate_long_lines(lines: &[String]) -> Vec<String> {
+src/compress/generic.rs:79:pub fn cap_lines(lines: &[String]) -> Vec<String> {
+src/compress/generic.rs:91:pub fn apply(text: &str) -> String {
+src/compress/generic.rs:102:pub fn group_by_file(text: &str) -> Option<String> {
+src/compress/tests_runner.rs:5:pub fn cargo_test(text: &str) -> String {
+src/compress/tests_runner.rs:33:pub fn js_test(text: &str) -> String {
+src/compress/tests_runner.rs:60:pub fn pytest(text: &str) -> String {
+src/compress/tests_runner.rs:91:pub fn go_test(text: &str) -> String {
+src/compress/git.rs:5:pub fn status(text: &str) -> String {
+src/compress/git.rs:34:pub fn diff(text: &str) -> String {
+src/compress/git.rs:87:pub fn log(text: &str) -> String {
+src/compress/fidelity.rs:38:    pub fn recall(&self) -> f64 {
+src/compress/fidelity.rs:43:pub fn signal_lines(raw: &str) -> Vec<String> {
+src/compress/fidelity.rs:54:pub fn measure(raw: &str, compressed: &str) -> Fidelity {
+src/compress/fidelity.rs:60:pub fn check(expected: &[String], compressed: &str) -> Fidelity {
+src/compress/mod.rs:18:pub fn head_tokens(cmd: &str) -> Vec<String> {
+src/compress/mod.rs:41:pub fn classify(cmd: &str) -> &'static str {
+src/compress/mod.rs:69:pub fn compress(cmd: &str, raw: &str) -> Compressed {
+src/cli/x.rs:5:pub fn run(cmd: &str, raw: bool) -> anyhow::Result<i32> {
+src/cli/purge.rs:4:pub fn run(yes: bool) -> anyhow::Result<i32> {
+src/core/bench.rs:48:    pub fn saved_pct(&self) -> f64 {
+src/core/bench.rs:52:    pub fn signal_recall(&self) -> f64 {
+src/core/bench.rs:97:pub fn from_store(paths: &Paths) -> Vec<Sample> {
+src/core/bench.rs:108:pub fn from_corpus(dir: &Path) -> Result<Vec<Sample>> {
+src/core/bench.rs:140:pub fn totals(samples: &[Sample]) -> (Vec<Totals>, Totals) {
+src/core/memory.rs:28:    pub fn as_str(self) -> &'static str {
+src/core/memory.rs:54:pub fn dir_for(paths: &Paths, kind: Kind) -> PathBuf {
+src/core/memory.rs:65:pub fn remember(paths: &Paths, item: &NewItem) -> Result<PathBuf> {
+src/core/memory.rs:100:pub fn list(paths: &Paths) -> Vec<Item> {
+src/core/bootstrap.rs:13:pub fn project_md(paths: &Paths) -> String {
+src/core/bootstrap.rs:57:pub fn ensure_shared(paths: &Paths) -> Result<bool> {
+src/core/exec.rs:22:pub fn run(cmd: &str, raw_only: bool) -> Result<Outcome> {
+src/core/handoff.rs:20:pub fn path_for(paths: &Paths, session: &str) -> PathBuf {
+src/core/handoff.rs:24:pub fn build(paths: &Paths, session: &str, reason: &str) -> Result<Handoff> {
+src/core/handoff.rs:206:pub fn latest(paths: &Paths, branch: &str) -> Option<(PathBuf, String)> {
+src/core/handoff.rs:222:pub fn frontmatter(body: &str, key: &str) -> Option<String> {
+src/core/handoff.rs:238:pub fn strip_frontmatter(body: &str) -> &str {
+src/core/outputs.rs:36:    pub fn saved(&self) -> usize {
+src/core/outputs.rs:42:pub fn spill_dir(paths: &Paths) -> PathBuf {
+src/core/outputs.rs:61:pub fn store(paths: &Paths, meta: &OutputMeta, raw: &str) -> Result<Stored> {
+src/core/outputs.rs:75:pub fn get(paths: &Paths, id: &str) -> Result<(OutputMeta, String)> {
+src/core/outputs.rs:88:pub fn record_fetch(paths: &Paths, id: &str) -> Result<()> {
+src/core/outputs.rs:96:pub fn fetched_ids(paths: &Paths) -> std::collections::HashSet<String> {
+src/core/outputs.rs:106:pub fn absorb_spill(paths: &Paths) -> usize {
+src/core/outputs.rs:143:pub fn list(paths: &Paths) -> Vec<OutputMeta> {
+src/core/outputs.rs:151:pub fn for_session(paths: &Paths, session: &str) -> Vec<OutputMeta> {
+src/core/paths.rs:23:    pub fn discover(start: &Path) -> Result<Self> {
+src/core/paths.rs:39:    pub fn from_cwd() -> Result<Self> {
+src/core/paths.rs:44:    pub fn spool(&self) -> PathBuf {
+src/core/paths.rs:47:    pub fn outputs(&self) -> PathBuf {
+src/core/paths.rs:50:    pub fn handoffs(&self) -> PathBuf {
+src/core/paths.rs:53:    pub fn claims(&self) -> PathBuf {
+src/core/paths.rs:56:    pub fn current_session_file(&self) -> PathBuf {
+src/core/paths.rs:59:    pub fn log_file(&self) -> PathBuf {
+src/core/paths.rs:62:    pub fn project_file(&self) -> PathBuf {
+src/core/paths.rs:66:    pub fn ensure_local(&self) -> Result<()> {
+src/core/paths.rs:73:    pub fn rel(&self, p: &Path) -> String {
+src/core/paths.rs:97:pub fn home() -> PathBuf {
+src/core/paths.rs:102:pub fn data_home() -> PathBuf {
+src/core/paths.rs:111:pub fn log(paths: &Paths, msg: &str) {
+src/core/brief.rs:12:pub fn build(paths: &Paths) -> String {
+src/core/spool.rs:29:    pub fn new(session: &str, event: &str, key: Option<&str>, data: Value) -> Self {
+src/core/spool.rs:44:pub fn append(paths: &Paths, ev: &Event) -> Result<()> {
+src/core/spool.rs:54:pub fn read(paths: &Paths, session: &str) -> Vec<Event> {
+src/core/spool.rs:63:pub fn sessions(paths: &Paths) -> Vec<(String, SystemTime)> {
+src/core/spool.rs:83:pub fn current_session(paths: &Paths) -> Option<String> {
+src/core/spool.rs:87:pub fn set_current_session(paths: &Paths, session: &str) {

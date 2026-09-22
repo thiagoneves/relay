@@ -1,0 +1,5 @@
+not ok 31 - rejects expired token
+location: '/work/node/app.test.js:32:1'
+token accepted after expiry
+# pass 30
+# fail 1

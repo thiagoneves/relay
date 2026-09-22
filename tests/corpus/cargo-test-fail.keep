@@ -1,0 +1,8 @@
+# Each line must appear verbatim (substring) in the compressed view.
+test tests::divides_by_zero ... FAILED
+test tests::parses_config ... FAILED
+panicked at src/lib.rs:82:56:
+attempt to divide by zero
+panicked at src/lib.rs:83:72:
+config port must fit in u8: ParseIntError { kind: PosOverflow }
+test result: FAILED. 80 passed; 2 failed

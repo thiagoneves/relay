@@ -1,0 +1,8 @@
+E   AssertionError: invoice total mismatch
+E   assert 6 == 7
+test_app.py:61: AssertionError
+E   KeyError: 'b'
+test_app.py:62: KeyError
+FAILED test_app.py::test_totals - AssertionError: invoice total mismatch
+FAILED test_app.py::test_lookup - KeyError: 'b'
+2 failed, 60 passed

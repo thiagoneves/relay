@@ -1,0 +1,29 @@
+   Compiling broken v0.1.0 (/work/broken)
+error[E0308]: mismatched types
+ --> src/main.rs:2:38
+  |
+2 | fn load() -> Config { Config { port: "8080", host: 42 } }
+  |                                      ^^^^^^ expected `u16`, found `&str`
+
+error[E0308]: mismatched types
+ --> src/main.rs:2:52
+  |
+2 | fn load() -> Config { Config { port: "8080", host: 42 } }
+  |                                                    ^^ expected `String`, found integer
+  |
+help: try using a conversion method
+  |
+2 | fn load() -> Config { Config { port: "8080", host: 42.to_string() } }
+  |                                                      ++++++++++++
+
+error[E0609]: no field `missing` on type `Config`
+ --> src/main.rs:3:46
+  |
+3 | fn main() { let c = load(); println!("{}", c.missing); }
+  |                                              ^^^^^^^ unknown field
+  |
+  = note: available fields are: `port`, `host`
+
+Some errors have detailed explanations: E0308, E0609.
+For more information about an error, try `rustc --explain E0308`.
+error: could not compile `broken` (bin "broken") due to 3 previous errors

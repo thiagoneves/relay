@@ -1,0 +1,109 @@
+   Compiling calc v0.1.0 (/work/calc)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (target/debug/deps/calc-e3561b8b51ebc290)
+
+running 82 tests
+test tests::adds_1 ... ok
+test tests::adds_10 ... ok
+test tests::adds_13 ... ok
+test tests::adds_11 ... ok
+test tests::adds_15 ... ok
+test tests::adds_14 ... ok
+test tests::adds_12 ... ok
+test tests::adds_16 ... ok
+test tests::adds_17 ... ok
+test tests::adds_18 ... ok
+test tests::adds_19 ... ok
+test tests::adds_2 ... ok
+test tests::adds_20 ... ok
+test tests::adds_21 ... ok
+test tests::adds_22 ... ok
+test tests::adds_23 ... ok
+test tests::adds_24 ... ok
+test tests::adds_25 ... ok
+test tests::adds_26 ... ok
+test tests::adds_27 ... ok
+test tests::adds_28 ... ok
+test tests::adds_29 ... ok
+test tests::adds_3 ... ok
+test tests::adds_30 ... ok
+test tests::adds_31 ... ok
+test tests::adds_32 ... ok
+test tests::adds_33 ... ok
+test tests::adds_34 ... ok
+test tests::adds_35 ... ok
+test tests::adds_36 ... ok
+test tests::adds_37 ... ok
+test tests::adds_38 ... ok
+test tests::adds_39 ... ok
+test tests::adds_4 ... ok
+test tests::adds_40 ... ok
+test tests::adds_41 ... ok
+test tests::adds_42 ... ok
+test tests::adds_43 ... ok
+test tests::adds_44 ... ok
+test tests::adds_45 ... ok
+test tests::adds_46 ... ok
+test tests::adds_47 ... ok
+test tests::adds_48 ... ok
+test tests::adds_49 ... ok
+test tests::adds_5 ... ok
+test tests::adds_50 ... ok
+test tests::adds_51 ... ok
+test tests::adds_52 ... ok
+test tests::adds_53 ... ok
+test tests::adds_54 ... ok
+test tests::adds_55 ... ok
+test tests::adds_56 ... ok
+test tests::adds_57 ... ok
+test tests::adds_58 ... ok
+test tests::adds_59 ... ok
+test tests::adds_6 ... ok
+test tests::adds_60 ... ok
+test tests::adds_61 ... ok
+test tests::adds_62 ... ok
+test tests::adds_63 ... ok
+test tests::adds_64 ... ok
+test tests::adds_65 ... ok
+test tests::adds_66 ... ok
+test tests::adds_67 ... ok
+test tests::adds_68 ... ok
+test tests::adds_69 ... ok
+test tests::adds_7 ... ok
+test tests::adds_70 ... ok
+test tests::adds_71 ... ok
+test tests::adds_72 ... ok
+test tests::adds_73 ... ok
+test tests::adds_74 ... ok
+test tests::adds_75 ... ok
+test tests::adds_76 ... ok
+test tests::adds_77 ... ok
+test tests::adds_78 ... ok
+test tests::adds_79 ... ok
+test tests::adds_80 ... ok
+test tests::adds_8 ... ok
+test tests::adds_9 ... ok
+test tests::divides_by_zero ... FAILED
+test tests::parses_config ... FAILED
+
+failures:
+
+---- tests::divides_by_zero stdout ----
+
+thread 'tests::divides_by_zero' (2022289) panicked at src/lib.rs:82:56:
+attempt to divide by zero
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- tests::parses_config stdout ----
+
+thread 'tests::parses_config' (2022290) panicked at src/lib.rs:83:72:
+config port must fit in u8: ParseIntError { kind: PosOverflow }
+
+
+failures:
+    tests::divides_by_zero
+    tests::parses_config
+
+test result: FAILED. 80 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`

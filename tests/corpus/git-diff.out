@@ -1,0 +1,76 @@
+diff --git a/src/mod_0.rs b/src/mod_0.rs
+index 25c8d11..b7d2565 100644
+--- a/src/mod_0.rs
++++ b/src/mod_0.rs
+@@ -1,4 +1,4 @@
+-line 1
++line one
+ line 2
+ line 3
+ line 4
+@@ -17,7 +17,7 @@ line 16
+ line 17
+ line 18
+ line 19
+-line 20
++return Err(Error::Timeout) // line 20
+ line 21
+ line 22
+ line 23
+diff --git a/src/mod_1.rs b/src/mod_1.rs
+index 74663b4..f974003 100644
+--- a/src/mod_1.rs
++++ b/src/mod_1.rs
+@@ -1,4 +1,4 @@
+-line 1
++line one
+ line 2
+ line 3
+ line 4
+@@ -17,7 +17,7 @@ line 16
+ line 17
+ line 18
+ line 19
+-line 20
++return Err(Error::Timeout) // line 20
+ line 21
+ line 22
+ line 23
+diff --git a/src/mod_2.rs b/src/mod_2.rs
+index 362a785..294ad3d 100644
+--- a/src/mod_2.rs
++++ b/src/mod_2.rs
+@@ -1,4 +1,4 @@
+-line 1
++line one
+ line 2
+ line 3
+ line 4
+@@ -17,7 +17,7 @@ line 16
+ line 17
+ line 18
+ line 19
+-line 20
++return Err(Error::Timeout) // line 20
+ line 21
+ line 22
+ line 23
+diff --git a/src/mod_3.rs b/src/mod_3.rs
+index b8077f3..5f09250 100644
+--- a/src/mod_3.rs
++++ b/src/mod_3.rs
+@@ -1,4 +1,4 @@
+-line 1
++line one
+ line 2
+ line 3
+ line 4
+@@ -17,7 +17,7 @@ line 16
+ line 17
+ line 18
+ line 19
+-line 20
++return Err(Error::Timeout) // line 20
+ line 21
+ line 22
+ line 23

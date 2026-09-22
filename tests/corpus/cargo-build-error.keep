@@ -1,0 +1,6 @@
+error[E0308]: mismatched types
+--> src/main.rs:2:38
+--> src/main.rs:2:52
+error[E0609]: no field `missing` on type `Config`
+--> src/main.rs:3:46
+error: could not compile `broken` (bin "broken") due to 3 previous errors
