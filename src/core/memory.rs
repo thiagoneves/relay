@@ -37,6 +37,15 @@ impl Kind {
     fn dir_name(self) -> String {
         format!("{}s", self.as_str())
     }
+
+    /// The OKF `type` of an item of this kind.
+    pub fn okf_type(self) -> &'static str {
+        match self {
+            Kind::Rule => "Rule",
+            Kind::Gotcha => "Gotcha",
+            Kind::Decision => "Decision",
+        }
+    }
 }
 
 impl std::fmt::Display for Kind {
@@ -137,12 +146,21 @@ pub fn remember(paths: &Paths, item: &NewItem) -> Result<PathBuf> {
     }
     let path = unique_path(&dir_for(paths, item.kind), &slug(&title));
     write_atomic(&path, render(item, &gitstate::state(&paths.root), &now_iso()).as_bytes())?;
+    crate::core::okf::refresh_index(paths)?;
     Ok(path)
 }
 
-/// The item file: where and when it was learned, then the text.
+/// The item file, an OKF concept: type, title and provenance up front, the
+/// text as the body. `branch`, `sha`, `session` and `paths` are relay's
+/// own keys, which OKF lets a producer add.
 fn render(item: &NewItem, git: &gitstate::GitState, created: &str) -> String {
-    let mut b = format!("---\nkind: {}\ncreated: {created}\n", item.kind);
+    let by = git.user.as_deref().map_or_else(|| "process:relay".to_string(), |u| format!("human:{u}"));
+    let mut b = format!(
+        "---\ntype: {}\ntitle: {}\ntimestamp: {created}\ngenerated: {{by: {}, at: {created}}}\n",
+        item.kind.okf_type(),
+        frontmatter::quote(&title_of(item.text)),
+        frontmatter::quote(&by)
+    );
     if !git.branch.is_empty() {
         b.push_str(&format!("branch: {}\n", git.branch));
     }
@@ -156,7 +174,7 @@ fn render(item: &NewItem, git: &gitstate::GitState, created: &str) -> String {
         b.push_str(&format!("paths: {}\n", item.files.join(", ")));
     }
     if let Some(e) = &item.expires {
-        b.push_str(&format!("expires: {e}\n"));
+        b.push_str(&format!("stale_after: {e}\n"));
     }
     format!("{b}---\n\n{}\n", item.text.trim())
 }
@@ -173,7 +191,9 @@ pub fn list(paths: &Paths) -> Vec<Item> {
                 continue;
             }
             let Ok(body) = std::fs::read_to_string(&p) else { continue };
-            let created = frontmatter::get(&body, "created").unwrap_or_default();
+            // `created`, `kind` and `expires` are what relay wrote before OKF.
+            let created =
+                frontmatter::get(&body, "timestamp").or_else(|| frontmatter::get(&body, "created")).unwrap_or_default();
             let title = title_of(frontmatter::strip(&body));
             if title.is_empty() {
                 continue;
@@ -182,7 +202,9 @@ pub fn list(paths: &Paths) -> Vec<Item> {
             let about = frontmatter::get(&body, "paths")
                 .map(|v| v.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect())
                 .unwrap_or_default();
-            let expires = frontmatter::get(&body, "expires").filter(|s| !s.is_empty());
+            let expires = frontmatter::get(&body, "stale_after")
+                .or_else(|| frontmatter::get(&body, "expires"))
+                .filter(|s| !s.is_empty());
             items.push(Item { kind, path: p, title, created, sha, about, expires });
         }
         items.sort_by(|a, b| b.created.cmp(&a.created).then(a.path.cmp(&b.path)));
@@ -279,12 +301,12 @@ mod tests {
 
     #[test]
     fn item_records_where_it_was_learned() {
-        let git = gitstate::GitState { branch: "main".into(), sha: "abc1234".into(), dirty: vec![] };
+        let git = gitstate::GitState { branch: "main".into(), sha: "abc1234".into(), dirty: vec![], user: None };
         let item =
             NewItem { kind: Kind::Gotcha, text: " Hooks fail open \n", files: &[], session: Some("s1"), expires: None };
         assert_eq!(
             render(&item, &git, "2026-09-22T10:00:00Z"),
-            "---\nkind: gotcha\ncreated: 2026-09-22T10:00:00Z\nbranch: main\nsha: abc1234\nsession: s1\n---\n\nHooks fail open\n"
+            "---\ntype: Gotcha\ntitle: \"Hooks fail open\"\ntimestamp: 2026-09-22T10:00:00Z\ngenerated: {by: \"process:relay\", at: 2026-09-22T10:00:00Z}\nbranch: main\nsha: abc1234\nsession: s1\n---\n\nHooks fail open\n"
         );
     }
 

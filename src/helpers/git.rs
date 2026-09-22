@@ -8,6 +8,7 @@ pub struct GitState {
     pub branch: String,
     pub sha: String,
     pub dirty: Vec<String>,
+    pub user: Option<String>,
 }
 
 fn git(root: &Path, args: &[&str]) -> Option<String> {
@@ -16,6 +17,11 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
         return None;
     }
     Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// The committer's name, for provenance; `None` when git has none.
+pub fn user(root: &Path) -> Option<String> {
+    git(root, &["config", "user.name"]).filter(|s| !s.is_empty())
 }
 
 pub fn branch(root: &Path) -> String {
@@ -28,7 +34,7 @@ pub fn state(root: &Path) -> GitState {
     let dirty = git(root, &["status", "--porcelain"])
         .map(|s| s.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect())
         .unwrap_or_default();
-    GitState { branch, sha, dirty }
+    GitState { branch, sha, dirty, user: user(root) }
 }
 
 /// Files changed by commits since `sha`. Uncommitted edits do not count:

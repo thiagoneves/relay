@@ -39,8 +39,14 @@ impl Facts {
 }
 
 fn render(f: &Facts, generated: &str) -> String {
-    let mut b =
-        format!("---\ngenerated: {generated}\nby: relay init (rules only, edit freely)\n---\n\n# {}\n\n", f.name);
+    let mut b = format!(
+        "---\ntype: Project\ntitle: {}\ntimestamp: {generated}\ngenerated: {{by: \"process:relay init\", at: {generated}}}\n",
+        crate::helpers::frontmatter::quote(&f.name)
+    );
+    if !f.readme.is_empty() {
+        b.push_str(&format!("description: {}\n", crate::helpers::frontmatter::quote(&f.readme)));
+    }
+    b.push_str(&format!("---\n\n# {}\n\n", f.name));
     if !f.readme.is_empty() {
         b.push_str(&format!("{}\n\n", f.readme));
     }
@@ -91,11 +97,13 @@ pub fn ensure_shared(paths: &Paths) -> Result<bool> {
         ensure_lf(&paths.root)?;
     }
     let pf = paths.project_file();
-    if pf.exists() {
-        return Ok(false);
+    let created = !pf.exists();
+    if created {
+        write_atomic(&pf, project_md(paths).as_bytes())?;
     }
-    write_atomic(&pf, project_md(paths).as_bytes())?;
-    Ok(true)
+    crate::core::okf::migrate(paths)?;
+    crate::core::okf::refresh_index(paths)?;
+    Ok(created)
 }
 
 const LF_RULE: &str = ".relay/** text eol=lf";
@@ -193,7 +201,10 @@ mod tests {
             recent: vec![],
         };
         let out = render(&f, "2026-09-22T10:00:00Z");
-        assert!(out.starts_with("---\ngenerated: 2026-09-22T10:00:00Z\n"), "{out}");
+        assert!(
+            out.starts_with("---\ntype: Project\ntitle: \"app\"\ntimestamp: 2026-09-22T10:00:00Z\ngenerated: {by: \"process:relay init\", at: 2026-09-22T10:00:00Z}\n"),
+            "{out}"
+        );
         assert!(
             out.contains("# app\n\n**Stack:** Rust\n\n**Most changed files:**\n- src/main.rs (3)\n\n## Conventions"),
             "{out}"

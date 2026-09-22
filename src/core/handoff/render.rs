@@ -24,9 +24,15 @@ pub fn render(h: &Header, s: &Summary, t: &Tail, git: &GitState) -> String {
     b
 }
 
+/// OKF concept fields first (type, title, timestamp), then relay's own.
 fn frontmatter(h: &Header, s: &Summary, t: &Tail, git: &GitState) -> String {
+    let day = &h.ended[..10.min(h.ended.len())];
+    let title =
+        if git.branch.is_empty() { format!("Handoff · {day}") } else { format!("Handoff · {} · {day}", git.branch) };
     format!(
-        "---\nsession: {}\nharness: {}\nbranch: {}\nsha: {}\ndirty: {}\nstarted: {}\nended: {}\nreason: {}\n{}---\n\n",
+        "---\ntype: Handoff\ntitle: {}\ntimestamp: {}\nsession: {}\nharness: {}\nbranch: {}\nsha: {}\ndirty: {}\nstarted: {}\nended: {}\nreason: {}\n{}---\n\n",
+        crate::helpers::frontmatter::quote(&title),
+        h.ended,
         h.session,
         s.harness,
         git.branch,
@@ -149,11 +155,16 @@ mod tests {
 
     #[test]
     fn renders_without_disk_or_clock() {
-        let git = GitState { branch: "main".into(), sha: "abc1234".into(), dirty: vec![] };
+        let git = GitState { branch: "main".into(), sha: "abc1234".into(), dirty: vec![], user: None };
         let t = Tail { replies: vec!["Retry added.".into()], ..Tail::default() };
         let h = Header { session: "s1", reason: "exit", ended: "2026-09-22T10:00:00Z" };
         let out = render(&h, &summary(), &t, &git);
-        assert!(out.starts_with("---\nsession: s1\nharness: claude-code\nbranch: main\n"), "{out}");
+        assert!(
+            out.starts_with(
+                "---\ntype: Handoff\ntitle: \"Handoff · main · 2026-09-22\"\ntimestamp: 2026-09-22T10:00:00Z\nsession: s1\nharness: claude-code\nbranch: main\n"
+            ),
+            "{out}"
+        );
         assert!(out.contains("# Handoff · main · 2026-09-22\n\n## Where it stopped\nRetry added.\n\n"), "{out}");
         assert!(out.contains("## Files touched\n- src/pay.rs (×2)\n"), "{out}");
         assert!(out.ends_with("## Git\nmain @ abc1234, clean\n"), "{out}");

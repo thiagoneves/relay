@@ -67,6 +67,7 @@ pub fn share(paths: &Paths, session: &str) -> Result<PathBuf> {
         .with_context(|| format!("no handoff for session {session}; `relay handoff --session {session}` builds one"))?;
     let shared = paths.shared.join("handoffs").join(format!("{session}.md"));
     write_atomic(&shared, redact(&body).as_bytes())?;
+    crate::core::okf::refresh_index(paths)?;
     Ok(shared)
 }
 
