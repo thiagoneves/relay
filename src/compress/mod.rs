@@ -107,8 +107,9 @@ pub fn classify(cmd: &str) -> Filter {
             Filter::Read
         } else if fed_by_pipe || seg.then == Joint::Pipe {
             // Mid-pipeline output is not what the agent sees, and a last
-            // stage prints a shape no filter knows (`git log | head`).
-            Filter::Generic
+            // stage prints a shape no filter knows (`git log | head`). A
+            // search anywhere in it still means every line was asked for.
+            if is_search(&toks) { Filter::Read } else { Filter::Generic }
         } else {
             classify_simple(text, &toks)
         };
@@ -179,12 +180,17 @@ fn classify_simple(seg: &str, toks: &[String]) -> Filter {
             Filter::JsTest
         }
         ("npm" | "pnpm" | "yarn", "run") if t2.contains("test") => Filter::JsTest,
-        ("grep" | "egrep" | "rg" | "ag", _) => Filter::Grep,
+        _ if is_search(toks) => Filter::Grep,
         ("ls", _) if toks.iter().any(|t| t.starts_with('-') && !t.starts_with("--") && t.contains('l')) => {
             Filter::LsLong
         }
         _ => Filter::Generic,
     }
+}
+
+/// Searches: the agent acts on each match, so none may be cut.
+fn is_search(toks: &[String]) -> bool {
+    toks.first().is_some_and(|t0| matches!(program(t0), "grep" | "egrep" | "fgrep" | "rg" | "ag"))
 }
 
 /// A command that prints a file the agent asked to see. The agent quotes
@@ -293,6 +299,9 @@ mod tests {
         assert_eq!(classify("git show HEAD:src/lib.rs"), Read);
         assert_eq!(classify("git cat-file -p HEAD:src/lib.rs"), Read);
         assert_eq!(classify("rg -n foo src; ls"), Read);
+        assert_eq!(classify("grep -in foo notes.md | cut -c1-250"), Read);
+        assert_eq!(classify("find . -iname '*x*' | grep -v .obsidian; echo ---; ls t/"), Read);
+        assert_eq!(classify("cd vault && grep -rn foo ."), Grep);
     }
 
     #[test]

@@ -214,9 +214,6 @@ pub fn should_wrap(cmd: &str) -> bool {
         &["vim", "vi", "nano", "less", "more", "top", "htop", "ssh", "tmux", "screen", "watch", "man"];
     // Their effect must outlive the command: the harness's shell keeps it.
     const SHELL_STATE: &[&str] = &["cd", "pushd", "popd", "export", "unset", "source", "."];
-    // Subcommands and scripts that serve or watch until killed.
-    const LONG_RUNNING: &[&str] =
-        &["dev", "serve", "server", "start", "watch", "preview", "runserver", "http.server", "--watch"];
     const WRAP: &[&str] = &[
         "git",
         "ls",
@@ -292,18 +289,39 @@ pub fn should_wrap(cmd: &str) -> bool {
         let toks = head_tokens(seg.text);
         let Some(t0) = toks.first().map(|t| program(t)) else { continue };
         let words: Vec<&str> = seg.text.split_whitespace().collect();
-        let follows = || words.iter().any(|w| matches!(*w, "-f" | "-F" | "--follow"));
-        let long_running = (t0 != "git" && toks[1..].iter().any(|t| LONG_RUNNING.contains(&t.as_str())))
-            || words.contains(&"--watch")
-            || (matches!(t0, "tail" | "journalctl") || words.contains(&"logs")) && follows()
-            || t0 == "vite" && toks.get(1).is_none_or(|t| t != "build");
         let already_wrapped = words.first().is_some_and(|w| matches!(program(w.trim_matches('\'')), "relay" | "rtk"));
-        if already_wrapped || INTERACTIVE.contains(&t0) || SHELL_STATE.contains(&t0) || long_running {
+        if already_wrapped
+            || INTERACTIVE.contains(&t0)
+            || SHELL_STATE.contains(&t0)
+            || runs_until_killed(t0, &toks, &words)
+        {
             return false;
         }
         any_wrap |= WRAP.contains(&t0);
     }
     any_wrap
+}
+
+/// Servers, watchers and followers: `npm run dev`, `pnpm dev`,
+/// `python -m http.server`, `tail -f`, `docker logs -f`, `tsc --watch`.
+fn runs_until_killed(t0: &str, toks: &[String], words: &[&str]) -> bool {
+    const SCRIPTS: &[&str] = &["dev", "serve", "server", "start", "watch", "preview", "runserver", "http.server"];
+    // Tools whose `start`/`server` subcommands return at once.
+    const MANAGERS: &[&str] = &["git", "docker", "podman", "kubectl", "systemctl", "brew", "launchctl", "pkill"];
+    let t1 = toks.get(1).map_or("", String::as_str);
+    // `npm run dev`, `python -m http.server`, `python manage.py runserver`.
+    let script = if matches!(t1, "run" | "run-script" | "-m" | "manage.py") {
+        toks.get(2).map_or("", String::as_str)
+    } else {
+        t1
+    };
+    let follows = words.iter().any(|w| matches!(*w, "-f" | "-F" | "--follow"));
+    let detached = words.iter().any(|w| matches!(*w, "-d" | "--detach"));
+    (!MANAGERS.contains(&t0) && SCRIPTS.contains(&script))
+        || words.contains(&"--watch")
+        || (matches!(t0, "tail" | "journalctl") || words.contains(&"logs")) && follows
+        || matches!(t0, "docker" | "podman" | "docker-compose") && words.contains(&"up") && !detached
+        || t0 == "vite" && t1 != "build"
 }
 
 /// Use the bare name when `relay` on PATH is this very binary; otherwise
@@ -373,9 +391,14 @@ mod tests {
         ] {
             assert!(!should_wrap(cmd), "{cmd}");
         }
+        assert!(!should_wrap("docker compose up api"));
+        assert!(!should_wrap("python manage.py runserver"));
         assert!(should_wrap("vite build"));
         assert!(should_wrap("git checkout dev"));
         assert!(should_wrap("tail -n 50 log/dev.log"));
+        assert!(should_wrap("grep -rn \"dev\" src"));
+        assert!(should_wrap("docker start api"));
+        assert!(should_wrap("docker compose up -d"));
     }
 
     #[test]
