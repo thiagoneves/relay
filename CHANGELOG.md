@@ -23,6 +23,13 @@ All notable changes to relay. Dates are UTC.
 
 ### Added
 
+- Gemini CLI and Cursor adapters, each translating its own hook dialect, and
+  `relay gemini`.
+- Remembered items whose paths changed since they were saved are marked "may
+  be stale" in the brief and counted in `relay status`.
+- Hooks time themselves; `relay status` shows the p95 against the budget.
+- At session end relay checks that the model saw the compressed output it
+  swapped in, and reports a miss in `relay status`.
 - `relay log`, and a failure count in `relay status`: hooks fail open, so this
   is where a broken relay shows up.
 - `relay x` stops a command just before the harness's timeout and shows what it

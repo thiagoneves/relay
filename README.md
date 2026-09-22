@@ -1,7 +1,7 @@
 # relay
 
-A context layer for coding agents. relay makes each Claude Code or Codex
-session start where the last one stopped, keeps long command output from
+A context layer for coding agents. relay makes each Claude Code, Codex,
+Gemini CLI or Cursor session start where the last one stopped, keeps long command output from
 filling the context, and stores everything in your repo.
 
 - **Continuity.** When a session ends, relay writes a handoff: where the work
@@ -30,16 +30,17 @@ cargo build --release
 ```
 
 `relay setup` copies the binary to `~/.local/bin`, puts that directory on your
-PATH if needed, and registers hooks in every harness it finds (Claude Code in
-`~/.claude/settings.json`, Codex in `~/.codex/hooks.json`). It keeps a backup of
-any file it changes.
+PATH if needed, and registers hooks in every harness it finds: Claude Code in
+`~/.claude/settings.json`, Codex in `~/.codex/hooks.json`, Gemini CLI in
+`~/.gemini/settings.json` and Cursor in `~/.cursor/hooks.json`. It keeps a
+backup of any file it changes.
 
 ## Use
 
 In any git repo:
 
 ```sh
-relay claude          # or: relay codex
+relay claude          # or: relay codex, relay gemini
 ```
 
 That is all day to day. The session gets the brief, output is compressed, and
@@ -59,7 +60,7 @@ Other commands:
 | `relay audit` | What fills your context and how to trim it |
 | `relay brief` / `relay handoff --show` | What the next session receives |
 | `relay purge` | Preview, then with `--yes` delete this worktree's local data |
-| `relay uninstall claude\|codex` | Remove the hooks |
+| `relay uninstall claude\|codex\|gemini\|cursor` | Remove the hooks |
 
 ## Where data lives
 
@@ -84,8 +85,12 @@ relay speaks the hook protocol Claude Code introduced and Codex adopted.
   they fail; relay never approves anything else. When such a command would hit
   the Bash tool's timeout, `relay x` stops it just before and shows what it
   printed so far (on Unix).
-- **Codex** only accepts a rewritten command that the hook also approves, so
-  there relay compresses reads and the same routine development tasks.
+- **Codex, Gemini CLI and Cursor** accept a rewritten command but cannot have
+  its output replaced, so there relay compresses reads and the same routine
+  development tasks, which it rewrites and approves. Each speaks its own hook
+  dialect; relay translates it. Cursor also runs Claude Code's hooks, and relay
+  leaves those events to its Cursor hooks so nothing is recorded twice. Cursor
+  works from the editor, so there is no `relay cursor`; its hooks do the work.
 
 ## Development
 
