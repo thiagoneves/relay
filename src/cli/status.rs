@@ -12,6 +12,13 @@ pub fn run() -> anyhow::Result<i32> {
     let ui = Ui::stdout();
     ui.heading("relay status", &tilde(&paths.root));
     let outs = outputs::list(&paths);
+    let saved: usize = outs.iter().map(outputs::OutputMeta::saved).sum();
+    ui.headline(&format!(
+        "{} tokens kept out of the context · {} handed off · {} remembered",
+        human_tokens(saved),
+        count(handoff::count(&paths), "session"),
+        count(memory::list(&paths).len(), "item")
+    ));
     print_compression(ui, &paths, &outs);
     print_last_session_context(ui, &paths);
     print_orientation(ui, &paths);

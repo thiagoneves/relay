@@ -2,6 +2,8 @@ exit: 0
 --- stdout
 relay status · ~
 
+  0 tokens kept out of the context · 0 sessions handed off · 1 item remembered
+
   Compression   nothing compressed yet
   Failures      none in the last 7 days
   Sessions      0 recorded · 0 handoffs

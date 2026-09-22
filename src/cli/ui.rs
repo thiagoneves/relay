@@ -43,6 +43,12 @@ impl Ui {
         self.blank();
     }
 
+    /// The one line to read when nothing else is: bold, then a blank line.
+    pub fn headline(self, text: &str) {
+        self.line(&format!("  {}", self.paint.bold(text)));
+        self.blank();
+    }
+
     pub fn field(self, label: &str, value: &str) {
         self.line(&format!("  {label:<LABEL_WIDTH$} {value}"));
     }

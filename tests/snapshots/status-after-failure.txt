@@ -2,6 +2,8 @@ exit: 0
 --- stdout
 relay status · ~
 
+  0 tokens kept out of the context · 0 sessions handed off · 0 items remembered
+
   Compression   nothing compressed yet
   Failures      1 in the last 7 days · last: hook claude-code error: expected ident at line 1 column 2
   Sessions      0 recorded · 0 handoffs
