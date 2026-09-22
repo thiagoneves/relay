@@ -74,7 +74,7 @@ pub fn run(cmd: &str, raw_only: bool, session: Option<&str>) -> Result<Outcome> 
             tokens_out,
         };
         match outputs::store(&paths, &meta, &raw) {
-            Ok(_) => Some(meta.id),
+            Ok(()) => Some(meta.id),
             Err(e) => {
                 crate::core::paths::log(&paths, &format!("store failed: {e}"));
                 None

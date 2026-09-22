@@ -56,17 +56,11 @@ fn write_pair(dir: &Path, meta: &OutputMeta, raw: &str) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum Stored {
-    Local,
-    Spilled,
-}
-
-pub fn store(paths: &Paths, meta: &OutputMeta, raw: &str) -> Result<Stored> {
+pub fn store(paths: &Paths, meta: &OutputMeta, raw: &str) -> Result<()> {
     match write_pair(&paths.outputs(), meta, raw) {
-        Ok(()) => Ok(Stored::Local),
+        Ok(()) => Ok(()),
         Err(local_err) => match write_pair(&spill_dir(paths), meta, raw) {
-            Ok(()) => Ok(Stored::Spilled),
+            Ok(()) => Ok(()),
             Err(spill_err) => bail!("local store: {local_err}; spill: {spill_err}"),
         },
     }
@@ -174,6 +168,15 @@ pub fn list(paths: &Paths) -> Vec<OutputMeta> {
 
 pub fn for_session(paths: &Paths, session: &str) -> Vec<OutputMeta> {
     list(paths).into_iter().filter(|m| m.session.as_deref() == Some(session)).collect()
+}
+
+/// Remove the spill dir of this worktree, if any.
+pub fn purge_spill(paths: &Paths) -> Result<()> {
+    let dir = spill_dir(paths);
+    if dir.exists() {
+        fs::remove_dir_all(&dir)?;
+    }
+    Ok(())
 }
 
 /// Originals older than this are deleted; handoffs cite recent ones.

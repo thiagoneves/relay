@@ -1,3 +1,4 @@
+use crate::core::outputs;
 use crate::core::paths::Paths;
 use crate::helpers::{dir_size, human_bytes};
 
@@ -6,7 +7,8 @@ pub fn run(yes: bool) -> anyhow::Result<i32> {
     let size = dir_size(&paths.local);
     println!("relay purge would delete the LOCAL store only:");
     println!("  {}  ({})", paths.local.display(), human_bytes(size));
-    println!("  spool, outputs, handoffs, claims, log");
+    println!("  spool, outputs, handoffs, log");
+    println!("  and originals spilled from sandboxed runs: {}", outputs::spill_dir(&paths).display());
     println!("It never touches the committed tier: {}", paths.rel(&paths.shared));
     if !yes {
         println!("Re-run with --yes to proceed.");
@@ -15,6 +17,7 @@ pub fn run(yes: bool) -> anyhow::Result<i32> {
     if paths.local.exists() {
         std::fs::remove_dir_all(&paths.local)?;
     }
+    outputs::purge_spill(&paths)?;
     println!("relay: local store removed");
     Ok(0)
 }

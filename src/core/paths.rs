@@ -53,9 +53,6 @@ impl Paths {
     pub fn handoffs(&self) -> PathBuf {
         self.local.join("handoffs")
     }
-    pub fn claims(&self) -> PathBuf {
-        self.local.join("claims")
-    }
     pub fn current_session_file(&self) -> PathBuf {
         self.local.join("current_session")
     }
@@ -67,7 +64,7 @@ impl Paths {
     }
 
     pub fn ensure_local(&self) -> Result<()> {
-        for d in [self.spool(), self.outputs(), self.handoffs(), self.claims()] {
+        for d in [self.spool(), self.outputs(), self.handoffs()] {
             std::fs::create_dir_all(&d).with_context(|| format!("mkdir {}", d.display()))?;
         }
         Ok(())
