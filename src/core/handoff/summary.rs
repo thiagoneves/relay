@@ -114,7 +114,8 @@ fn files_touched(events: &[Event], rel: &impl Fn(&str) -> String) -> Vec<(String
 /// `rel` leaves a path outside the repo absolute. Those are the agent's
 /// scratch and notes, not the project: the next session cannot use them.
 fn in_repo(rel: &str) -> bool {
-    !std::path::Path::new(rel).is_absolute()
+    // A POSIX path is not "absolute" to Windows, but it is still not ours.
+    !(std::path::Path::new(rel).is_absolute() || rel.starts_with('/'))
 }
 
 /// Files the agent read to orient itself before its first edit, most
