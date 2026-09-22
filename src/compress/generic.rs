@@ -6,7 +6,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use crate::limits;
+use crate::limits::compress::{HEAD_LINES, MAX_LINE_CHARS, MAX_LINES, MAX_RESCUED, TAIL_LINES};
 
 // CSI (colours, cursor), OSC ended by BEL or ESC \ (titles, hyperlinks;
 // never past the next ESC, so an unterminated one cannot swallow text),
@@ -87,36 +87,40 @@ pub fn dedup_runs(lines: &[String]) -> Vec<String> {
 }
 
 pub fn truncate_long_lines(lines: &[String]) -> Vec<String> {
-    lines
-        .iter()
-        .map(|l| {
-            let n = l.chars().count();
-            if n > limits::compress::MAX_LINE_CHARS {
-                let head: String = l.chars().take(limits::compress::MAX_LINE_CHARS).collect();
-                format!("{head}… [+{} chars]", n - limits::compress::MAX_LINE_CHARS)
-            } else {
-                l.clone()
-            }
-        })
-        .collect()
+    lines.iter().map(|l| truncate_line(l)).collect()
+}
+
+fn truncate_line(l: &str) -> String {
+    let n = l.chars().count();
+    if n <= MAX_LINE_CHARS {
+        return l.to_string();
+    }
+    let head: String = l.chars().take(MAX_LINE_CHARS).collect();
+    format!("{head}… [+{} chars]", n - MAX_LINE_CHARS)
 }
 
 /// Keep head and tail when output is very long. Errors usually live at
 /// the tail, so the tail window is never dropped; errors in the middle
 /// (a failing module in a long build log) are rescued by rule.
 pub fn cap_lines(lines: &[String]) -> Vec<String> {
-    if lines.len() <= limits::compress::MAX_LINES {
+    if lines.len() <= MAX_LINES {
         return lines.to_vec();
     }
-    let middle = &lines[limits::compress::HEAD_LINES..lines.len() - limits::compress::TAIL_LINES];
-    let mut out = Vec::with_capacity(
-        limits::compress::HEAD_LINES + limits::compress::TAIL_LINES + limits::compress::MAX_RESCUED * 2 + 1,
-    );
-    out.extend_from_slice(&lines[..limits::compress::HEAD_LINES]);
+    let mut out = Vec::with_capacity(HEAD_LINES + TAIL_LINES + MAX_RESCUED * 2 + 1);
+    out.extend_from_slice(&lines[..HEAD_LINES]);
+    out.extend(rescue_signal(&lines[HEAD_LINES..lines.len() - TAIL_LINES]));
+    out.extend_from_slice(&lines[lines.len() - TAIL_LINES..]);
+    out
+}
+
+/// The signal lines of a dropped middle, up to `MAX_RESCUED`, with a
+/// marker for each run of lines left out.
+fn rescue_signal(middle: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
     let mut skipped = 0;
     let mut rescued = 0;
     for l in middle {
-        if rescued < limits::compress::MAX_RESCUED && super::fidelity::is_signal(l) {
+        if rescued < MAX_RESCUED && super::fidelity::is_signal(l) {
             if skipped > 0 {
                 out.push(omitted(skipped));
                 skipped = 0;
@@ -130,7 +134,6 @@ pub fn cap_lines(lines: &[String]) -> Vec<String> {
     if skipped > 0 {
         out.push(omitted(skipped));
     }
-    out.extend_from_slice(&lines[lines.len() - limits::compress::TAIL_LINES..]);
     out
 }
 
@@ -138,20 +141,20 @@ fn omitted(n: usize) -> String {
     format!("… [{n} lines omitted, full output in original]")
 }
 
+fn lines_of(text: &str) -> Vec<String> {
+    strip_ansi(text).lines().map(str::to_string).collect()
+}
+
 pub fn apply_read(text: &str) -> String {
-    let lines: Vec<String> = strip_ansi(text).lines().map(str::to_string).collect();
-    trim_number_gutter(&lines).join("\n")
+    trim_number_gutter(&lines_of(text)).join("\n")
 }
 
 pub fn apply(text: &str) -> String {
-    let clean = strip_ansi(text);
-    let lines: Vec<String> = clean.lines().map(std::string::ToString::to_string).collect();
-    let lines = collapse_whitespace(&lines);
+    let lines = collapse_whitespace(&lines_of(text));
     let lines = trim_number_gutter(&lines);
     let lines = dedup_runs(&lines);
     let lines = truncate_long_lines(&lines);
-    let lines = cap_lines(&lines);
-    lines.join("\n")
+    cap_lines(&lines).join("\n")
 }
 
 /// `path:line:text` style output (grep, rg, eslint compact) grouped by file.
