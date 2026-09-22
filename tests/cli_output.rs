@@ -16,6 +16,7 @@ fn normalize(text: &str) -> String {
     let text = size.replace_all(text, "<size>");
     let text = id.replace_all(&text, "<id>");
     let text = backup.replace_all(&text, "relay-bak-<time>");
+    let text = text.replace("relay.exe", "relay");
     time.replace_all(&text, "<time>").into_owned()
 }
 
