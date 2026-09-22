@@ -24,7 +24,7 @@ fn setup_installs_hooks_once_and_leaves_profiles_alone() {
     let first = setup();
     let out = String::from_utf8_lossy(&first.stdout);
     assert!(first.status.success(), "{out}{}", String::from_utf8_lossy(&first.stderr));
-    assert!(out.contains("claude-code hooks installed"), "{out}");
+    assert!(out.contains("claude hooks installed"), "{out}");
     let exe = repo.root.join(".local").join("bin").join(format!("relay{}", std::env::consts::EXE_SUFFIX));
     assert!(exe.is_file(), "stable copy missing");
     let settings = std::fs::read_to_string(repo.root.join("settings.json")).unwrap();
@@ -32,7 +32,7 @@ fn setup_installs_hooks_once_and_leaves_profiles_alone() {
 
     let second = setup();
     let out = String::from_utf8_lossy(&second.stdout);
-    assert!(second.status.success() && out.contains("claude-code hooks already current"), "{out}");
+    assert!(second.status.success() && out.contains("claude hooks already current"), "{out}");
     assert!(!String::from_utf8_lossy(&second.stderr).contains("installed"), "binary recopied on an unchanged run");
 
     for f in [".zshrc", ".bashrc", ".bash_profile", ".profile"] {

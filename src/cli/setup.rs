@@ -4,54 +4,58 @@
 
 use crate::core::machine::{self, Installed, Refresh};
 use crate::harness;
+use crate::helpers::env::tilde;
 use crate::helpers::profile::PathChange;
 
+use super::ui::Ui;
+
 pub fn run() -> anyhow::Result<i32> {
+    let ui = Ui::stdout();
+    ui.heading("relay setup", "this machine");
     let inst = machine::install_self()?;
     report(&inst);
 
     let mut found = Vec::new();
     for h in harness::all() {
         if !h.detect() {
-            println!("relay: {} not found, skipped", h.command());
+            ui.note(&format!("  {} not found, skipped", h.command()));
             continue;
         }
         let r = h.install(&inst.exe)?;
-        let state = if r.changed { "installed" } else { "already current" };
-        println!("relay: {} hooks {state} in {}", h.id(), r.settings_path.display());
+        let state = if r.changed { "hooks installed in" } else { "hooks already current in" };
+        ui.ok(&format!("{} {state} {}", h.command(), tilde(&r.settings_path)));
         found.push(h.command());
     }
-
-    println!();
+    ui.blank();
     if found.is_empty() {
-        println!("Install Claude Code or Codex, then run `relay setup` again.");
+        ui.next("Install Claude Code or Codex, then run `relay setup` again.");
         return Ok(0);
     }
-    match &inst.path {
-        PathChange::Added(f) | PathChange::InProfile(f) => {
-            println!("Open a new terminal (or `source {}`), then in any git repo:", f.display());
-        }
-        PathChange::Present | PathChange::Manual => println!("Ready. In any git repo:"),
+    if let PathChange::Added(f) | PathChange::InProfile(f) = &inst.path {
+        ui.next(&format!("Open a new terminal (or run `source {}`) so `relay` is on your PATH.", tilde(f)));
     }
-    for c in found {
-        println!("  relay {c}");
-    }
+    let commands: Vec<String> = found.iter().map(|c| format!("`relay {c}`")).collect();
+    ui.next(&format!("In any git repo, start a session with {}.", commands.join(" or ")));
     Ok(0)
 }
 
+/// What installing relay itself changed, on stderr: `relay claude` and
+/// `relay install` print it before their own output.
 pub fn report(inst: &Installed) {
-    let dir = machine::bin_dir();
+    let ui = Ui::stderr();
+    let dir = tilde(&machine::bin_dir());
     match &inst.refresh {
         Refresh::Unchanged => {}
-        Refresh::Updated => eprintln!("relay: installed {}", inst.exe.display()),
-        Refresh::KeptOld(why) => {
-            eprintln!("relay: could not replace {} ({why}); hooks keep the previous build", inst.exe.display());
-        }
+        Refresh::Updated => ui.ok(&format!("relay installed at {}", tilde(&inst.exe))),
+        Refresh::KeptOld(why) => ui.warn(&format!(
+            "Could not replace {} ({why}); hooks keep running the previous build until relay is not running.",
+            tilde(&inst.exe)
+        )),
     }
     match &inst.path {
         PathChange::Present => {}
-        PathChange::InProfile(f) => eprintln!("relay: {} adds {} to PATH (new terminals)", f.display(), dir.display()),
-        PathChange::Added(f) => eprintln!("relay: added {} to PATH in {}", dir.display(), f.display()),
-        PathChange::Manual => eprintln!("relay: add {} to your PATH to type `relay`", dir.display()),
+        PathChange::InProfile(f) => ui.ok(&format!("{} already adds {dir} to PATH for new terminals", tilde(f))),
+        PathChange::Added(f) => ui.ok(&format!("Added {dir} to PATH in {}", tilde(f))),
+        PathChange::Manual => ui.warn(&format!("Add {dir} to your PATH to type `relay` directly.")),
     }
 }
