@@ -7,6 +7,9 @@ rust-version = "1.88"
 description = "Context layer for coding agents: compresses what goes in, remembers what matters, lives in your repo."
 license = "MIT"
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "relay"
 path = "src/main.rs"
