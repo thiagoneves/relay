@@ -91,13 +91,42 @@ pub fn problem(what: impl Into<String>, next: impl Into<String>) -> anyhow::Erro
 /// How a failed command ends: the problem, its next step when known.
 pub fn report_error(e: &anyhow::Error) {
     let ui = Ui::stderr();
-    match e.downcast_ref::<Problem>() {
-        Some(p) => {
-            ui.fail(&p.what);
-            if let Some(next) = &p.next {
-                ui.next(next);
-            }
+    if let Some(p) = e.downcast_ref::<Problem>() {
+        ui.fail(&p.what);
+        if let Some(next) = &p.next {
+            ui.next(next);
         }
-        None => ui.fail(&format!("{e:#}")),
+    } else {
+        ui.fail(&format!("{e:#}"));
+        if let Some(next) = io_next_step(e) {
+            ui.next(next);
+        }
+    }
+}
+
+/// A next step for the file-system failures a user can fix themselves.
+fn io_next_step(e: &anyhow::Error) -> Option<&'static str> {
+    let io = e.chain().find_map(|c| c.downcast_ref::<std::io::Error>())?;
+    match io.kind() {
+        std::io::ErrorKind::PermissionDenied => Some(
+            "Check that you can write to this repo's .git directory; `relay status` shows where relay keeps its data.",
+        ),
+        std::io::ErrorKind::StorageFull => {
+            Some("Free some disk space; `relay purge` shows what relay stores for this worktree.")
+        }
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn io_failures_a_user_can_fix_get_a_next_step() {
+        let denied = anyhow::Error::from(std::io::Error::from(std::io::ErrorKind::PermissionDenied)).context("mkdir x");
+        assert!(io_next_step(&denied).is_some_and(|s| s.contains(".git")));
+        let other = anyhow::Error::from(std::io::Error::from(std::io::ErrorKind::InvalidData));
+        assert_eq!(io_next_step(&other), None);
     }
 }
