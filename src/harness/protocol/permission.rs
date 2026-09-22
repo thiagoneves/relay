@@ -1,5 +1,4 @@
 //! Whether a rewritten command may skip the harness's permission prompt.
-//! Pure: no IO, so the policy is testable apart from the hook plumbing.
 //!
 //! A rewrite is `relay x … -- '<cmd>'`, and harness permission rules are
 //! matched against that rewritten text, not the original. Approving it
@@ -7,6 +6,7 @@
 //! `git`; leaving it to the harness means the user's own allow rules no
 //! longer match. Only commands that cannot change anything are approved.
 
+use crate::compress::command::segments;
 use crate::harness::RewriteSupport;
 
 /// What the hook answers for a command it wants to route through relay.
@@ -38,40 +38,37 @@ const HARMLESS_REDIRECTS: &[&str] = &["2>&1", "1>&2", ">&2", "2>/dev/null", ">/d
 /// nothing writes to a file or runs a substituted command. Unknown means
 /// not read-only: a false negative costs a prompt, a false positive
 /// skips one.
-pub fn is_read_only(cmd: &str) -> bool {
+fn is_read_only(cmd: &str) -> bool {
     let mut cleaned = cmd.to_string();
     for r in HARMLESS_REDIRECTS {
         cleaned = cleaned.replace(r, " ");
     }
-    let Some(segments) = split_unquoted(&cleaned) else { return false };
-    !segments.is_empty() && segments.iter().all(|s| segment_read_only(s))
+    if writes_or_substitutes(&cleaned) {
+        return false;
+    }
+    let segs = segments(&cleaned);
+    !segs.is_empty() && segs.iter().all(|s| segment_read_only(s.text))
 }
 
-/// Split on `; & | newline` outside quotes. `None` when the command
-/// redirects output or substitutes a command anywhere outside single
-/// quotes, since those can write or run anything.
-fn split_unquoted(cmd: &str) -> Option<Vec<String>> {
-    let mut segments = Vec::new();
-    let mut cur = String::new();
+/// A redirection outside quotes, or a command substitution outside single
+/// quotes: either can write or run anything.
+fn writes_or_substitutes(cmd: &str) -> bool {
     let (mut single, mut double) = (false, false);
     let mut chars = cmd.chars().peekable();
     while let Some(c) = chars.next() {
         match c {
+            '\\' if !single => {
+                chars.next();
+            }
             '\'' if !double => single = !single,
             '"' if !single => double = !double,
-            '`' if !single => return None,
-            '$' if !single && chars.peek() == Some(&'(') => return None,
-            '>' | '<' if !single && !double => return None,
-            ';' | '&' | '|' | '\n' if !single && !double => {
-                segments.push(std::mem::take(&mut cur));
-                continue;
-            }
+            '`' if !single => return true,
+            '$' if !single && chars.peek() == Some(&'(') => return true,
+            '>' | '<' if !single && !double => return true,
             _ => {}
         }
-        cur.push(c);
     }
-    segments.push(cur);
-    Some(segments.into_iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+    false
 }
 
 fn segment_read_only(seg: &str) -> bool {
