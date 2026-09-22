@@ -28,6 +28,9 @@ static RULES: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
         (r"\bxox[abprs]-[A-Za-z0-9-]{10,}", MASK),
         (r"\bAKIA[0-9A-Z]{16}\b", MASK),
         (r"\bAIza[0-9A-Za-z_-]{30,}", MASK),
+        // A JWT, and the body of a PEM private key.
+        (r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}", MASK),
+        (r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----", "-----PRIVATE KEY ***-----"),
     ]
     .into_iter()
     .map(|(re, to)| (Regex::new(re).expect("valid regex"), to))
@@ -57,6 +60,8 @@ mod tests {
             ("tool --password hunter2 --verbose", "tool --password *** --verbose"),
             ("key sk-proj_0123456789abcdefghij0123", "key ***"),
             ("aws AKIAABCDEFGHIJKLMNOP", "aws ***"),
+            ("jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghijk", "jwt ***"),
+            ("-----BEGIN RSA PRIVATE KEY-----\nMIIE\n-----END RSA PRIVATE KEY-----", "-----PRIVATE KEY ***-----"),
         ] {
             assert_eq!(redact(input), want, "{input}");
         }
