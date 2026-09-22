@@ -15,6 +15,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::core::paths::Paths;
+use crate::helpers::write_atomic;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputMeta {
@@ -45,10 +46,11 @@ pub fn spill_dir(paths: &Paths) -> PathBuf {
     std::env::temp_dir().join("relay").join(slug).join("outputs")
 }
 
+/// The original lands before its sidecar, each by rename: a reader that
+/// sees a `.json` can rely on the complete `.out` beside it.
 fn write_pair(dir: &Path, meta: &OutputMeta, raw: &str) -> Result<()> {
-    fs::create_dir_all(dir)?;
-    fs::write(dir.join(format!("{}.out", meta.id)), raw)?;
-    fs::write(dir.join(format!("{}.json", meta.id)), serde_json::to_vec_pretty(meta)?)?;
+    write_atomic(&dir.join(format!("{}.out", meta.id)), raw.as_bytes())?;
+    write_atomic(&dir.join(format!("{}.json", meta.id)), &serde_json::to_vec_pretty(meta)?)?;
     Ok(())
 }
 
