@@ -31,7 +31,7 @@ pub fn install_self() -> Result<Installed> {
 
     let on_path =
         shell::which("relay").and_then(|p| std::fs::canonicalize(p).ok()) == std::fs::canonicalize(&target).ok();
-    let path = if on_path { PathChange::Present } else { profile::ensure_on_path(&dir, &home())? };
+    let path = if on_path { PathChange::Present } else { profile::ensure_on_path(&dir, &home()) };
     Ok(Installed { exe: target, updated, path })
 }
 
