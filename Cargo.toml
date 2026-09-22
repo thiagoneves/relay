@@ -2,6 +2,8 @@
 name = "relay"
 version = "0.1.0"
 edition = "2024"
+# let-chains (`if let … && let …`) are stable from 1.88.
+rust-version = "1.88"
 description = "Context layer for coding agents: compresses what goes in, remembers what matters, lives in your repo."
 license = "MIT"
 
@@ -15,7 +17,7 @@ clap = { version = "4", features = ["derive"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-time = { version = "0.3", features = ["formatting", "parsing", "macros"] }
+time = { version = "0.3", features = ["formatting", "parsing"] }
 
 [profile.release]
 opt-level = 3
