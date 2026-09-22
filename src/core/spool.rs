@@ -88,11 +88,25 @@ pub fn sessions(paths: &Paths) -> Vec<(String, SystemTime)> {
 /// by `SessionStart` and refreshed by tool events. Known limitation: two
 /// live sessions in the same worktree share this pointer.
 pub fn current_session(paths: &Paths) -> Option<String> {
-    fs::read_to_string(paths.current_session_file()).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    read_pointer(&paths.current_session_file())
 }
 
 pub fn set_current_session(paths: &Paths, session: &str) {
     let _ = write_atomic(&paths.current_session_file(), session.as_bytes());
+}
+
+/// The session whose handoff was written last, which `relay claude
+/// --last` resumes.
+pub fn last_session(paths: &Paths) -> Option<String> {
+    read_pointer(&paths.last_session_file())
+}
+
+pub fn set_last_session(paths: &Paths, session: &str) {
+    let _ = write_atomic(&paths.last_session_file(), session.as_bytes());
+}
+
+fn read_pointer(file: &std::path::Path) -> Option<String> {
+    fs::read_to_string(file).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
 }
 
 /// The wrapper that launched this session, from its `session_start`

@@ -39,9 +39,9 @@ pub fn run(id: HarnessId, last: bool, args: &[String]) -> anyhow::Result<i32> {
 
     let mut launch: Vec<String> = Vec::new();
     if last {
-        match std::fs::read_to_string(paths.local.join("last_session")) {
-            Ok(id) if !id.trim().is_empty() => launch.extend(h.resume_args(id.trim())),
-            _ => eprintln!("relay: no previous session to resume, starting fresh"),
+        match spool::last_session(&paths) {
+            Some(id) => launch.extend(h.resume_args(&id)),
+            None => eprintln!("relay: no previous session to resume, starting fresh"),
         }
     }
     launch.extend(args.iter().cloned());

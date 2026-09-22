@@ -57,6 +57,12 @@ impl Paths {
     pub fn current_session_file(&self) -> PathBuf {
         self.local.join("current_session")
     }
+    pub fn last_session_file(&self) -> PathBuf {
+        self.local.join("last_session")
+    }
+    pub fn fetches_file(&self) -> PathBuf {
+        self.local.join("fetches.jsonl")
+    }
     pub fn log_file(&self) -> PathBuf {
         self.local.join("relay.log")
     }

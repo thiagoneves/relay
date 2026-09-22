@@ -17,6 +17,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::core::paths::Paths;
+use crate::helpers::fs::path_slug;
 use crate::helpers::write_atomic;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,9 +44,7 @@ impl OutputMeta {
 
 /// Where originals spill when the local tier is not writable.
 pub fn spill_dir(paths: &Paths) -> PathBuf {
-    let slug: String =
-        paths.root.display().to_string().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
-    std::env::temp_dir().join("relay").join(slug).join("outputs")
+    std::env::temp_dir().join("relay").join(path_slug(&paths.root)).join("outputs")
 }
 
 /// The original lands before its sidecar, each by rename: a reader that
@@ -86,13 +85,13 @@ pub fn get(paths: &Paths, id: &str) -> Result<(OutputMeta, String)> {
 pub fn record_fetch(paths: &Paths, id: &str) -> Result<()> {
     use std::io::Write;
     let line = serde_json::json!({ "ts": crate::helpers::now_iso(), "id": id });
-    let mut f = fs::OpenOptions::new().create(true).append(true).open(paths.local.join("fetches.jsonl"))?;
+    let mut f = fs::OpenOptions::new().create(true).append(true).open(paths.fetches_file())?;
     writeln!(f, "{line}")?;
     Ok(())
 }
 
 pub fn fetched_ids(paths: &Paths) -> std::collections::HashSet<String> {
-    let Ok(text) = fs::read_to_string(paths.local.join("fetches.jsonl")) else {
+    let Ok(text) = fs::read_to_string(paths.fetches_file()) else {
         return std::collections::HashSet::default();
     };
     text.lines()
