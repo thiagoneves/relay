@@ -59,6 +59,11 @@ pub fn session(path: &Path) -> Option<SessionAudit> {
                 }
                 Some("tool_use") => {
                     col.add("Conversation: agent tool calls", Origin::Work, &b["input"].to_string());
+                    if b["name"] == "Skill"
+                        && let Some(skill) = b["input"]["skill"].as_str()
+                    {
+                        col.audit.skills_invoked.insert(skill.to_string());
+                    }
                     if let (Some(id), Some(name)) = (b["id"].as_str(), b["name"].as_str()) {
                         tool_names.insert(id.to_string(), tool_label(name));
                     }
