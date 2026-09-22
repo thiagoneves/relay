@@ -57,6 +57,9 @@ impl Repo {
         for var in ["HOME", "USERPROFILE", "LOCALAPPDATA", "XDG_DATA_HOME", "CODEX_HOME", "CLAUDE_CONFIG_DIR"] {
             c.env(var, &self.root);
         }
+        // Startup files are found through these too: an inherited ZDOTDIR
+        // would point `relay setup` at the developer's real .zshrc.
+        c.env_remove("ZDOTDIR").env("SHELL", "/bin/sh");
         c
     }
 
