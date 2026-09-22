@@ -21,23 +21,34 @@ pub struct Paths {
     /// the user's data dir when there is no git repo).
     pub local: PathBuf,
     pub in_git: bool,
+    /// Memory kept under the local tier instead of `.relay/`: a repo that
+    /// is not the user's to commit to (`relay init --local`).
+    pub memory_local: bool,
 }
 
 impl Paths {
     pub fn discover(start: &Path) -> Result<Self> {
         let start = if start.is_absolute() { start.to_path_buf() } else { std::env::current_dir()?.join(start) };
-        if let Some((root, gitdir)) = git_paths(&start) {
-            Ok(Self { shared: root.join(".relay"), local: gitdir.join("relay"), root, in_git: true })
-        } else {
-            let root = start.clone();
-            let slug = path_slug(&root);
-            Ok(Self {
-                shared: root.join(".relay"),
-                local: data_home().join("projects").join(slug),
-                root,
-                in_git: false,
-            })
-        }
+        let (root, local, in_git) = match git_paths(&start) {
+            Some((root, gitdir)) => (root, gitdir.join("relay"), true),
+            None => (start.clone(), data_home().join("projects").join(path_slug(&start)), false),
+        };
+        Ok(Self::at(root, local, in_git))
+    }
+
+    /// `.relay/` in the repo when it exists or nothing local does; the
+    /// local memory dir otherwise, so a committed `.relay/` always wins.
+    fn at(root: PathBuf, local: PathBuf, in_git: bool) -> Self {
+        let committed = root.join(".relay");
+        let local_memory = local.join("shared");
+        let memory_local = !committed.exists() && local_memory.exists();
+        Self { shared: if memory_local { local_memory } else { committed }, local, root, in_git, memory_local }
+    }
+
+    /// Switch memory to the local tier for this worktree.
+    pub fn with_local_memory(self) -> Self {
+        let shared = self.local.join("shared");
+        Self { shared, memory_local: true, ..self }
     }
 
     pub fn from_cwd() -> Result<Self> {

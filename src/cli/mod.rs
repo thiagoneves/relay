@@ -40,7 +40,11 @@ pub enum Commands {
     /// One-time machine setup: put `relay` on PATH, register hooks in every harness found
     Setup,
     /// Set up this repo: `.relay/` (shared) and the local store
-    Init,
+    Init {
+        /// Keep memory in the local store instead of `.relay/` (a repo you cannot commit to)
+        #[arg(long)]
+        local: bool,
+    },
     /// Register hooks for a harness (claude, codex)
     Install { harness: HarnessId },
     /// Remove relay hooks from a harness (claude, codex)
@@ -196,7 +200,7 @@ fn run() -> anyhow::Result<i32> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Setup => setup::run(),
-        Commands::Init => init::run(),
+        Commands::Init { local } => init::run(local),
         Commands::Install { harness } => install::install(harness),
         Commands::Uninstall { harness } => install::uninstall(harness),
         Commands::Hook { harness } => hook::run(harness),

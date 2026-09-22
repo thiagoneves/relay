@@ -4,9 +4,16 @@ use crate::helpers::env::tilde;
 
 use super::ui::Ui;
 
-pub fn run() -> anyhow::Result<i32> {
+pub fn run(local: bool) -> anyhow::Result<i32> {
     let ui = Ui::stdout();
-    let paths = Paths::from_cwd()?;
+    let mut paths = Paths::from_cwd()?;
+    if local {
+        if paths.root.join(".relay").exists() {
+            ui.warn("This repo already has a committed .relay/; leaving memory there.");
+        } else {
+            paths = paths.with_local_memory();
+        }
+    }
     paths.ensure_local()?;
     let created = bootstrap::ensure_shared(&paths)?;
     let project = paths.rel(&paths.project_file());
@@ -19,6 +26,14 @@ pub fn run() -> anyhow::Result<i32> {
     if !paths.in_git {
         ui.note("  Not a git repo, so the local store lives in your user data directory.");
     }
-    ui.next(&format!("Commit {} to share it with your team.", paths.rel(&paths.shared)));
+    if paths.memory_local {
+        ui.note(&format!(
+            "  Memory stays in {}, never committed (this repo is not yours to commit to).",
+            tilde(&paths.shared)
+        ));
+        ui.next("To share it later, move that directory to .relay/ in the repo and commit it.");
+    } else {
+        ui.next(&format!("Commit {} to share it with your team.", paths.rel(&paths.shared)));
+    }
     Ok(0)
 }

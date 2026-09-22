@@ -127,7 +127,7 @@ mod tests {
     fn paths(name: &str) -> Paths {
         let root = std::env::temp_dir().join(format!("relay-ut-spool-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
-        Paths { shared: root.join(".relay"), local: root.join("local"), root, in_git: false }
+        Paths { shared: root.join(".relay"), local: root.join("local"), root, in_git: false, memory_local: false }
     }
 
     #[test]

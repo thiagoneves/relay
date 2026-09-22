@@ -72,7 +72,7 @@ fn list(b: &mut String, title: &str, items: impl Iterator<Item = String>) {
 /// Create `.relay/` with a project.md. Never overwrites an existing one.
 pub fn ensure_shared(paths: &Paths) -> Result<bool> {
     std::fs::create_dir_all(&paths.shared)?;
-    if paths.in_git {
+    if paths.in_git && !paths.memory_local {
         ensure_lf(&paths.root)?;
     }
     let pf = paths.project_file();

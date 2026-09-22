@@ -57,3 +57,17 @@ fn an_expired_item_leaves_the_brief_and_is_counted() {
     assert!(ok.status.success());
     assert!(brief(&repo).contains("Still valid"));
 }
+
+#[test]
+fn local_memory_stays_out_of_the_repo() {
+    let repo = Repo::new("memory-local");
+    let init = repo.run(&["init", "--local"]);
+    assert!(init.status.success(), "{}", String::from_utf8_lossy(&init.stderr));
+    assert!(!repo.root.join(".relay").exists());
+    assert!(repo.root.join(".git/relay/shared/project.md").exists());
+    assert!(repo.run(&["remember", "rule", "Never force-push here"]).status.success());
+    assert!(repo.root.join(".git/relay/shared/rules").read_dir().unwrap().next().is_some());
+    assert!(brief(&repo).contains("Never force-push here"));
+    let status = String::from_utf8(repo.run(&["status"]).stdout).unwrap();
+    assert!(status.contains("local memory, never committed"), "{status}");
+}

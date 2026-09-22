@@ -229,7 +229,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("relay-ut-outputs-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
-        Paths { shared: root.join(".relay"), local: root.join("local"), root, in_git: false }
+        Paths { shared: root.join(".relay"), local: root.join("local"), root, in_git: false, memory_local: false }
     }
 
     fn meta(id: &str) -> OutputMeta {

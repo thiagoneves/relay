@@ -23,7 +23,12 @@ pub fn run() -> anyhow::Result<i32> {
     ui.blank();
     ui.field(
         "Shared",
-        &format!("{} · {} · committed with the repo", paths.rel(&paths.shared), human_bytes(dir_size(&paths.shared))),
+        &format!(
+            "{} · {} · {}",
+            paths.rel(&paths.shared),
+            human_bytes(dir_size(&paths.shared)),
+            if paths.memory_local { "local memory, never committed" } else { "committed with the repo" }
+        ),
     );
     ui.field(
         "Local",

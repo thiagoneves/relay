@@ -243,7 +243,13 @@ mod tests {
     #[test]
     fn crlf_item_lists_by_its_title() {
         let root = std::env::temp_dir().join(format!("relay-ut-memory-crlf-{}", std::process::id()));
-        let paths = Paths { shared: root.join(".relay"), local: root.join("local"), root: root.clone(), in_git: false };
+        let paths = Paths {
+            shared: root.join(".relay"),
+            local: root.join("local"),
+            root: root.clone(),
+            in_git: false,
+            memory_local: false,
+        };
         let dir = dir_for(&paths, Kind::ALL[0]);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("hooks.md"), "---\r\ncreated: 2026-09-22\r\n---\r\n\r\n# Hooks fail open\r\n").unwrap();
