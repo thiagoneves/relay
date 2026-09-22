@@ -92,6 +92,9 @@ pub enum Commands {
         /// Every project, not only this one
         #[arg(long)]
         all_projects: bool,
+        /// Only sessions started since then: `30m`, `12h`, `7d` or `2026-09-22`
+        #[arg(long)]
+        since: Option<String>,
         /// Machine-readable output
         #[arg(long)]
         json: bool,
@@ -154,8 +157,8 @@ pub fn run() -> anyhow::Result<i32> {
         Commands::Get { id, meta } => get::run(&id, meta),
         Commands::Handoff { session, show } => handoff::run(session.as_deref(), show),
         Commands::Remember { kind, text, paths } => remember::run(kind, &text.join(" "), &paths),
-        Commands::Audit { harness, sessions, all_projects, json } => {
-            audit::run(harness.as_deref(), sessions, all_projects, json)
+        Commands::Audit { harness, sessions, all_projects, since, json } => {
+            audit::run(&audit::Options { only: harness, sessions, all_projects, since, json })
         }
         Commands::Bench { corpus, history, history_dir, json, min_recall } => {
             let source = match (corpus, history) {

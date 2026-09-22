@@ -1,26 +1,56 @@
 use crate::core::audit::{self, Origin, Report, Severity};
 use crate::core::paths::Paths;
 use crate::harness;
-use crate::helpers::{human_tokens, truncate_chars};
+use std::time::SystemTime;
+
+use crate::helpers::{human_tokens, parse_since, truncate_chars};
 
 const SOURCES_SHOWN: usize = 15;
 
-pub fn run(only: Option<&str>, sessions: usize, all_projects: bool, json: bool) -> anyhow::Result<i32> {
-    let root = if all_projects { None } else { Some(Paths::from_cwd()?.root) };
-    let harnesses = match only {
+pub struct Options {
+    pub only: Option<String>,
+    pub sessions: usize,
+    pub all_projects: bool,
+    pub since: Option<String>,
+    pub json: bool,
+}
+
+pub fn run(o: &Options) -> anyhow::Result<i32> {
+    let root = if o.all_projects { None } else { Some(Paths::from_cwd()?.root) };
+    let since = match &o.since {
+        Some(s) => Some(
+            parse_since(s, SystemTime::now())
+                .ok_or_else(|| anyhow::anyhow!("--since: use 30m, 12h, 7d or 2026-09-22"))?,
+        ),
+        None => None,
+    };
+    let harnesses = match &o.only {
         Some(name) => vec![harness::by_name(name)?],
         None => harness::all(),
     };
-    let scope = if all_projects { "all projects".to_string() } else { "this project".to_string() };
+    let mut scope = if o.all_projects { "all projects".to_string() } else { "this project".to_string() };
+    if let Some(s) = &o.since {
+        scope.push_str(&format!(", since {s}"));
+    }
     let mut reports = Vec::new();
     for h in harnesses {
-        let picked = audit::select(h.transcripts(root.as_deref()), sessions);
-        let audits: Vec<_> = picked.iter().filter_map(|t| h.audit_session(&t.path)).collect();
+        let recent: Vec<_> =
+            h.transcripts(root.as_deref()).into_iter().filter(|t| since.is_none_or(|s| t.started >= s)).collect();
+        let picked = audit::select(recent, o.sessions);
+        let audits: Vec<_> = picked
+            .iter()
+            .filter_map(|t| {
+                let mut a = h.audit_session(&t.path)?;
+                a.seen = Some(t.modified);
+                Some(a)
+            })
+            .collect();
         if !audits.is_empty() {
-            reports.push((h.id(), audit::report(audits)));
+            let hooks = h.configured_hooks(root.as_deref());
+            reports.push((h.id(), audit::report(audits, hooks.as_deref())));
         }
     }
-    if json {
+    if o.json {
         let out: serde_json::Map<String, serde_json::Value> =
             reports.iter().map(|(id, r)| ((*id).to_string(), serde_json::to_value(r).unwrap_or_default())).collect();
         println!("{}", serde_json::to_string_pretty(&out)?);
@@ -55,13 +85,18 @@ fn print_report(id: &str, r: &Report, scope: &str) {
     if !r.findings.is_empty() {
         println!("Findings, worst first:");
         for f in &r.findings {
-            let mark = if f.severity == Severity::Broken { "✗" } else { "!" };
+            let mark = match (f.severity, f.still_configured) {
+                (_, Some(false)) => "✓",
+                (Severity::Broken, _) => "✗",
+                (Severity::Waste, _) => "!",
+            };
             let cost = if f.resent > 0 {
                 format!(" · {} resent ({:.1}%)", human_tokens(f.resent), pct(f.resent, r.context_sent))
             } else {
                 String::new()
             };
-            println!("  {mark} {}{cost}", truncate_chars(&f.text, 110));
+            let seen = f.last_seen.as_deref().map(|t| format!(" · last seen {t}")).unwrap_or_default();
+            println!("  {mark} {}{cost}{seen}", truncate_chars(&f.text, 100));
             println!("    → {}", f.fix);
         }
         println!();
