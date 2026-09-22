@@ -34,6 +34,8 @@ fn an_item_about_a_file_that_changed_is_marked_stale() {
     assert!(brief(&repo).contains("- gotcha: Amounts are in cents\n"), "{}", brief(&repo));
 
     std::fs::write(repo.root.join("src/pay.rs"), "fn pay(amount: f64) {}\n").unwrap();
+    assert!(!brief(&repo).contains("may be stale"), "an uncommitted edit is not a change since");
+    git(&repo, &["commit", "-qam", "pay takes an amount"]);
     let out = brief(&repo);
     assert!(out.contains("Amounts are in cents _(may be stale: src/pay.rs changed since)_"), "{out}");
     let status = String::from_utf8(repo.run(&["status"]).stdout).unwrap();

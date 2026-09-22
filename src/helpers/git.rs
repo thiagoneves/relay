@@ -31,10 +31,11 @@ pub fn state(root: &Path) -> GitState {
     GitState { branch, sha, dirty }
 }
 
-/// Files that differ from commit `sha`, committed or not. `None` when git
-/// does not know the commit (it was rebased away, or the clone is shallow).
+/// Files changed by commits since `sha`. Uncommitted edits do not count:
+/// they may have been there when the item was saved. `None` when git does
+/// not know the commit (rebased away, or a shallow clone).
 pub fn changed_since(root: &Path, sha: &str) -> Option<Vec<String>> {
-    git(root, &["diff", "--name-only", sha, "--"]).map(|s| s.lines().map(str::to_string).collect())
+    git(root, &["diff", "--name-only", sha, "HEAD", "--"]).map(|s| s.lines().map(str::to_string).collect())
 }
 
 /// Files with the most commits in recent history, for the project brief.
