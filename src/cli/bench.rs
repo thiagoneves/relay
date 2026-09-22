@@ -6,6 +6,8 @@ use crate::harness::{self, HarnessId};
 use crate::helpers::{human_tokens, truncate_chars};
 use crate::limits;
 
+use super::ui::Ui;
+
 pub enum Source {
     Store,
     Corpus(PathBuf),
@@ -43,10 +45,14 @@ pub fn run(source: Source, json: bool, min_recall: Option<f64>) -> anyhow::Resul
         });
         println!("{}", serde_json::to_string_pretty(&out)?);
     } else if samples.is_empty() {
-        println!("relay bench: nothing to measure; run commands through `relay x`, or pass --corpus or --history");
+        let ui = Ui::stdout();
+        ui.ok("Nothing to measure yet: no stored outputs in this worktree.");
+        ui.next(
+            "Measure against your own history with `relay bench --history claude`, or a fixture dir with `--corpus`.",
+        );
         return Ok(0);
     } else {
-        println!("relay bench · {} outputs · {label}\n", total.samples);
+        Ui::stdout().heading("relay bench", &format!("{} outputs · {label}", total.samples));
         print_filters(&filters, &total);
         if total.wrapped < total.samples {
             print_families(&families, &total);

@@ -9,6 +9,8 @@ use crate::helpers::term::{self, Color, Paint};
 use crate::helpers::{human_tokens, parse_since, truncate_chars};
 use crate::limits;
 
+use super::ui::Ui;
+
 pub struct Options {
     pub only: Option<HarnessId>,
     pub sessions: usize,
@@ -48,15 +50,18 @@ pub fn run(o: &Options) -> anyhow::Result<i32> {
         return Ok(0);
     }
     if reports.is_empty() {
-        println!("relay audit: no transcripts found for {scope}");
+        let ui = Ui::stdout();
+        ui.ok(&format!("No sessions to audit for {scope}."));
+        ui.next("Widen the scope with `--since 7d` or `--all-projects`, or start a session with `relay claude`.");
         return Ok(0);
     }
     let p = Paint::stdout();
     for (id, r) in &reports {
         print_report(p, *id, r, &scope);
     }
-    println!("{}", p.dim("Sizes are estimates; calls and totals are exact, from the transcripts."));
-    println!("{}", p.dim("Share = size × API calls after it entered the context: what it cost on your quota."));
+    let ui = Ui::stdout();
+    ui.note("Sizes are estimates; calls and totals are exact, from the transcripts.");
+    ui.note("Share = size × API calls after it entered the context: what it cost on your quota.");
     Ok(0)
 }
 
