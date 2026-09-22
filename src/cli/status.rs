@@ -1,57 +1,82 @@
 use crate::core::memory::{self, Kind};
 use crate::core::paths::Paths;
 use crate::core::{handoff, outputs, spool, usage};
+use crate::helpers::env::tilde;
 use crate::helpers::{dir_size, human_bytes, human_tokens};
+
+use super::ui::Ui;
 
 pub fn run() -> anyhow::Result<i32> {
     let paths = Paths::from_cwd()?;
+    let ui = Ui::stdout();
+    ui.heading("relay status", &tilde(&paths.root));
     let outs = outputs::list(&paths);
+    print_compression(ui, &paths, &outs);
+    print_last_session_context(ui, &paths);
+    print_orientation(ui, &paths);
+    let sessions = spool::sessions(&paths).len();
+    ui.field("Sessions", &format!("{sessions} recorded · {} handoffs", handoff::count(&paths)));
+    let items = memory::list(&paths);
+    let count = |k: Kind| items.iter().filter(|i| i.kind == k).count();
+    let remembered = [Kind::Rule, Kind::Gotcha, Kind::Decision].map(count);
+    ui.field(
+        "Remembered",
+        &format!("{} rules · {} gotchas · {} decisions", remembered[0], remembered[1], remembered[2]),
+    );
+    ui.blank();
+    ui.field(
+        "Shared",
+        &format!("{} · {} · committed with the repo", paths.rel(&paths.shared), human_bytes(dir_size(&paths.shared))),
+    );
+    ui.field(
+        "Local",
+        &format!(
+            "{} · {} · this worktree, never leaves the machine",
+            paths.rel(&paths.local),
+            human_bytes(dir_size(&paths.local))
+        ),
+    );
+    ui.blank();
+    ui.next(next_step(sessions, remembered.iter().sum()));
+    Ok(0)
+}
+
+fn next_step(sessions: usize, remembered: usize) -> &'static str {
+    match (sessions, remembered) {
+        (0, _) => "Start a session with `relay claude` or `relay codex`.",
+        (_, 0) => "Save what a new session should know: `relay remember rule \"<one line>\"`.",
+        _ => "See what fills your context and how to trim it: `relay audit`.",
+    }
+}
+
+fn print_compression(ui: Ui, paths: &Paths, outs: &[outputs::OutputMeta]) {
+    if outs.is_empty() {
+        ui.field("Compression", "nothing compressed yet");
+        return;
+    }
     let tokens_in: usize = outs.iter().map(|m| m.tokens_in).sum();
     let tokens_out: usize = outs.iter().map(|m| m.tokens_out).sum();
     let saved = tokens_in.saturating_sub(tokens_out);
-    let pct = if tokens_in > 0 { saved * 100 / tokens_in } else { 0 };
-    let refetched = outputs::fetched_ids(&paths).len();
-    let sessions = spool::sessions(&paths).len();
-    let handoffs = handoff::count(&paths);
-
-    println!("relay status · {}", paths.root.display());
-    println!();
-    println!(
-        "Compression   {} → {} tokens, saved {} ({pct}%) over {} outputs  [estimate]",
-        human_tokens(tokens_in),
-        human_tokens(tokens_out),
-        human_tokens(saved),
-        outs.len()
+    ui.field(
+        "Compression",
+        &format!(
+            "{} → {} tokens · {}% saved over {} outputs (estimate)",
+            human_tokens(tokens_in),
+            human_tokens(tokens_out),
+            saved * 100 / tokens_in.max(1),
+            outs.len()
+        ),
     );
-    if !outs.is_empty() {
-        println!(
-            "Refetched     {refetched} of {} originals ({}%): how often the compressed view was not enough",
-            outs.len(),
-            refetched * 100 / outs.len()
-        );
-    }
-    print_last_session_context(&paths);
-    print_orientation(&paths);
-    println!("Sessions      {sessions} recorded, {handoffs} handoffs");
-    let items = memory::list(&paths);
-    let count = |k: Kind| items.iter().filter(|i| i.kind == k).count();
-    println!(
-        "Remembered    {} rules, {} gotchas, {} decisions",
-        count(Kind::Rule),
-        count(Kind::Gotcha),
-        count(Kind::Decision)
+    let refetched = outputs::fetched_ids(paths).len();
+    ui.field(
+        "Refetched",
+        &format!("{refetched} of {} originals · how often the compressed view was not enough", outs.len()),
     );
-    println!("Layer cost    0 tokens (no LLM calls in the default path)");
-    println!();
-    println!("Shared (committed)  {}  {}", paths.rel(&paths.shared), human_bytes(dir_size(&paths.shared)));
-    println!("Local (this worktree) {}  {}", paths.local.display(), human_bytes(dir_size(&paths.local)));
-    println!("Leaves this machine: nothing.");
-    Ok(0)
 }
 
 /// Median tokens read before the first edit, sessions with a brief against
 /// sessions without one. Only sessions that edited count.
-fn print_orientation(paths: &Paths) {
+fn print_orientation(ui: Ui, paths: &Paths) {
     let (mut with, mut without) = (Vec::new(), Vec::new());
     for (s, _) in spool::sessions(paths) {
         let u = usage::of(&spool::read(paths, &s));
@@ -63,21 +88,23 @@ fn print_orientation(paths: &Paths) {
     }
     let side = |v: Vec<usize>, label: &str| {
         let n = v.len();
-        usage::median(v)
-            .map_or_else(|| format!("{label}: no sessions yet"), |m| format!("{} {label} (n={n})", human_tokens(m)))
+        usage::median(v).map_or_else(|| format!("none {label} yet"), |m| format!("{} {label} (n={n})", human_tokens(m)))
     };
     if !with.is_empty() || !without.is_empty() {
-        println!(
-            "Orientation   median tokens read before the first edit: {} · {}  [estimate]",
-            side(with, "with brief"),
-            side(without, "without")
+        ui.field(
+            "Orientation",
+            &format!(
+                "tokens read before the first edit: {} · {} (median, estimate)",
+                side(with, "with a brief"),
+                side(without, "without")
+            ),
         );
     }
 }
 
 /// Exact numbers for the newest session, read from the harness transcript
 /// whose path the `SessionStart` hook recorded.
-fn print_last_session_context(paths: &Paths) {
+fn print_last_session_context(ui: Ui, paths: &Paths) {
     let Some((session, _)) = spool::sessions(paths).into_iter().next() else { return };
     let events = spool::read(paths, &session);
     let Some(start) = events.iter().find(|e| e.event == "session_start") else { return };
@@ -91,11 +118,14 @@ fn print_last_session_context(paths: &Paths) {
         return;
     };
     let u = audit.usage;
-    println!(
-        "Context       last session: {} calls, {} tokens sent ({}% cached), {} at the first call  [exact] · `relay audit` for waste",
-        u.calls,
-        human_tokens(u.context_sent),
-        u.cached * 100 / u.context_sent.max(1),
-        human_tokens(u.first_context)
+    ui.field(
+        "Last session",
+        &format!(
+            "{} calls · {} tokens sent, {}% cached · {} at the first call",
+            u.calls,
+            human_tokens(u.context_sent),
+            u.cached * 100 / u.context_sent.max(1),
+            human_tokens(u.first_context)
+        ),
     );
 }

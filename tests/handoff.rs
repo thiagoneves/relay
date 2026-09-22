@@ -93,7 +93,7 @@ fn status_reports_orientation_and_reads_are_not_edits() {
     repo.hook("claude", json!({ "hook_event_name": "SessionEnd", "session_id": s, "reason": "exit" }));
 
     let status = String::from_utf8(repo.run(&["status"]).stdout).unwrap();
-    let line = status.lines().find(|l| l.starts_with("Orientation")).unwrap_or_else(|| panic!("{status}"));
+    let line = status.lines().find(|l| l.trim_start().starts_with("Orientation")).unwrap_or_else(|| panic!("{status}"));
     assert!(line.contains("without (n=1)"), "{line}");
     let handoff = String::from_utf8(repo.run(&["handoff", "--show"]).stdout).unwrap();
     let section = |name: &str| {

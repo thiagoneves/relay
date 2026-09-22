@@ -25,6 +25,10 @@ impl Paint {
         Self { on: std::io::stdout().is_terminal() && !env::is_set(Var::NoColor) }
     }
 
+    pub fn stderr() -> Self {
+        Self { on: std::io::stderr().is_terminal() && !env::is_set(Var::NoColor) }
+    }
+
     fn wrap(self, code: &str, s: &str) -> String {
         if self.on { format!("\x1b[{code}m{s}\x1b[0m") } else { s.to_string() }
     }

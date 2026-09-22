@@ -14,6 +14,7 @@ mod purge;
 mod remember;
 mod setup;
 mod status;
+mod ui;
 mod wrap;
 mod x;
 
@@ -156,7 +157,19 @@ pub enum Commands {
     },
 }
 
-pub fn run() -> anyhow::Result<i32> {
+/// Run the command line and return the process exit code. Errors are
+/// reported here, with a next step when relay knows one.
+pub fn main() -> i32 {
+    match run() {
+        Ok(code) => code,
+        Err(e) => {
+            ui::report_error(&e);
+            1
+        }
+    }
+}
+
+fn run() -> anyhow::Result<i32> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Setup => setup::run(),
