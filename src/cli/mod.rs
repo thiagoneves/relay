@@ -8,6 +8,7 @@ mod hook;
 mod init;
 mod install;
 mod purge;
+mod remember;
 mod status;
 mod wrap;
 mod x;
@@ -56,6 +57,17 @@ pub enum Commands {
         #[arg(long)]
         show: bool,
     },
+    /// Save a rule, gotcha or decision to `.relay/` (committed, one file per item)
+    Remember {
+        /// rule, gotcha or decision
+        kind: String,
+        /// The item; first line becomes the title
+        #[arg(required = true, num_args = 1..)]
+        text: Vec<String>,
+        /// Paths the item is about (repeatable)
+        #[arg(long = "path")]
+        paths: Vec<String>,
+    },
     /// Print the brief a new session would receive
     Brief,
     /// What relay saved, what it stores, and where
@@ -93,6 +105,7 @@ pub fn run() -> anyhow::Result<i32> {
         Commands::Exec { raw, cmd } => x::run(&cmd.join(" "), raw),
         Commands::Get { id, meta } => get::run(&id, meta),
         Commands::Handoff { session, show } => handoff::run(session.as_deref(), show),
+        Commands::Remember { kind, text, paths } => remember::run(&kind, &text.join(" "), &paths),
         Commands::Brief => brief::run(),
         Commands::Status => status::run(),
         Commands::Purge { yes } => purge::run(yes),

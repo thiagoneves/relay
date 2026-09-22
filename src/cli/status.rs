@@ -1,5 +1,5 @@
 use crate::core::paths::Paths;
-use crate::core::{outputs, spool};
+use crate::core::{memory, outputs, spool};
 use crate::helpers::{dir_size, human_bytes, human_tokens};
 
 pub fn run() -> anyhow::Result<i32> {
@@ -17,6 +17,9 @@ pub fn run() -> anyhow::Result<i32> {
     println!("Compression   {} → {} tokens, saved {} ({pct}%) over {} outputs  [estimate: bytes/4]",
         human_tokens(tokens_in), human_tokens(tokens_out), human_tokens(saved), outs.len());
     println!("Sessions      {sessions} recorded, {handoffs} handoffs");
+    let items = memory::list(&paths);
+    let count = |k: &str| items.iter().filter(|i| i.kind == k).count();
+    println!("Remembered    {} rules, {} gotchas, {} decisions", count("rule"), count("gotcha"), count("decision"));
     println!("Layer cost    0 tokens (no LLM calls in the default path)");
     println!();
     println!("Shared (committed)  {}  {}", paths.rel(&paths.shared), human_bytes(dir_size(&paths.shared)));

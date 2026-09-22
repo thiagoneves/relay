@@ -88,6 +88,12 @@ pub fn build(paths: &Paths, session: &str, reason: &str) -> Result<Handoff> {
         }
     }
 
+    let remembered: Vec<String> = events
+        .iter()
+        .filter(|e| e.event == "remember")
+        .filter_map(|e| Some(format!("{}: {}", e.data["kind"].as_str()?, e.data["path"].as_str()?)))
+        .collect();
+
     let last_assistant = events
         .iter()
         .rev()
@@ -119,6 +125,13 @@ pub fn build(paths: &Paths, session: &str, reason: &str) -> Result<Handoff> {
         files.sort_by(|a, b| b.1.cmp(&a.1));
         for (f, n) in files.iter().take(15) {
             b.push_str(&format!("- {f}{}\n", if *n > 1 { format!(" (×{n})") } else { String::new() }));
+        }
+        b.push('\n');
+    }
+    if !remembered.is_empty() {
+        b.push_str("## Remembered\n");
+        for r in &remembered {
+            b.push_str(&format!("- {r}\n"));
         }
         b.push('\n');
     }

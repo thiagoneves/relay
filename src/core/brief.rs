@@ -1,23 +1,28 @@
-//! The SessionStart brief: project.md head + latest handoff, capped at
-//! roughly 600 tokens. File reads and one git call; no LLM.
+//! The SessionStart brief: project.md head + remembered items + latest
+//! handoff, capped at roughly 600 tokens. File reads and one git call; no LLM.
 
 use crate::helpers::git as gitstate;
-use crate::core::handoff;
+use crate::core::{handoff, memory};
 use crate::core::paths::Paths;
 
 pub const BRIEF_MAX_CHARS: usize = 2400;
 const PROJECT_MAX_CHARS: usize = 1000;
+const MEMORY_MAX_CHARS: usize = 700;
 
 pub fn build(paths: &Paths) -> String {
     let project = std::fs::read_to_string(paths.project_file()).unwrap_or_default();
     let branch = gitstate::branch(&paths.root);
     let handoff = handoff::latest(paths, &branch);
+    let items = memory::list(paths);
 
     let mut out = String::new();
     out.push_str("# relay brief\n");
     if !project.trim().is_empty() {
         out.push_str(&cut(handoff::strip_frontmatter(&project).trim(), PROJECT_MAX_CHARS));
         out.push_str("\n\n");
+    }
+    if !items.is_empty() {
+        out.push_str(&memory_section(paths, &items));
     }
     match handoff {
         Some((p, body)) => {
@@ -29,13 +34,33 @@ pub fn build(paths: &Paths) -> String {
             out.push_str(&format!("\n\n_Full handoff: {}_\n", paths.rel(&p)));
         }
         None => {
-            if project.trim().is_empty() {
+            if project.trim().is_empty() && items.is_empty() {
                 return String::new();
             }
         }
     }
     out.push_str("_Outputs shown by relay are compressed; `relay get <id>` prints the original._\n");
+    out.push_str("_When you settle a decision, hit a gotcha or learn a project rule, save it: `relay remember decision|gotcha|rule \"<one line>\"`._\n");
     out
+}
+
+/// One line per item, grouped by kind, until the budget runs out.
+fn memory_section(paths: &Paths, items: &[memory::Item]) -> String {
+    let mut s = String::from("## Remembered\n");
+    let mut shown = 0;
+    for it in items {
+        let line = format!("- {}: {}\n", it.kind, it.title);
+        if s.len() + line.len() > MEMORY_MAX_CHARS {
+            break;
+        }
+        s.push_str(&line);
+        shown += 1;
+    }
+    if shown < items.len() {
+        s.push_str(&format!("- … +{} more in {}\n", items.len() - shown, paths.rel(&paths.shared)));
+    }
+    s.push('\n');
+    s
 }
 
 fn cut(s: &str, max: usize) -> String {
