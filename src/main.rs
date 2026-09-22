@@ -1,11 +1,4 @@
 //! relay: context layer for coding agents.
-//!
-//! Layout
-//! - `cli/`      thin command handlers
-//! - `core/`     domain: storage tiers, output store, spool, exec, handoff, brief
-//! - `compress/` output filters (generic + structured)
-//! - `harness/`  one adapter per coding agent (claude, …)
-//! - `helpers/`  small shared utilities
 
 mod cli;
 mod compress;

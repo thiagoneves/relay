@@ -38,31 +38,29 @@ pub fn head_tokens(cmd: &str) -> Vec<String> {
 /// chain (`&&`, `;`, `|`) drives the choice; that is where the bulk of
 /// the output usually comes from.
 pub fn classify(cmd: &str) -> &'static str {
-    let first = cmd
-        .split("&&")
-        .next()
-        .unwrap_or(cmd)
-        .split("||")
-        .next()
-        .unwrap_or(cmd)
-        .split(';')
-        .next()
-        .unwrap_or(cmd);
+    let first =
+        cmd.split("&&").next().unwrap_or(cmd).split("||").next().unwrap_or(cmd).split(';').next().unwrap_or(cmd);
     let piped = first.contains('|');
     let toks = head_tokens(first.split('|').next().unwrap_or(first));
-    let t0 = toks.first().map(String::as_str).unwrap_or("");
-    let t1 = toks.get(1).map(String::as_str).unwrap_or("");
-    let t2 = toks.get(2).map(String::as_str).unwrap_or("");
+    let t0 = toks.first().map_or("", String::as_str);
+    let t1 = toks.get(1).map_or("", String::as_str);
+    let t2 = toks.get(2).map_or("", String::as_str);
     match (t0, t1) {
         ("git", "status") if !piped && !first.contains("--porcelain") && !first.contains("-s") => "git-status",
-        ("git", "diff") | ("git", "show") if !piped && !first.contains("--stat") => "git-diff",
-        ("git", "log") if !piped && !first.contains("--oneline") && !first.contains("--format") && !first.contains("--pretty") => "git-log",
-        ("cargo", "test") | ("cargo", "nextest") => "cargo-test",
+        ("git", "diff" | "show") if !piped && !first.contains("--stat") => "git-diff",
+        ("git", "log")
+            if !piped && !first.contains("--oneline") && !first.contains("--format") && !first.contains("--pretty") =>
+        {
+            "git-log"
+        }
+        ("cargo", "test" | "nextest") => "cargo-test",
         ("go", "test") => "go-test",
         ("pytest", _) | ("python", "-m") if t0 == "pytest" || t2 == "pytest" => "pytest",
-        ("npx", "jest") | ("npx", "vitest") | ("jest", _) | ("vitest", _) => "js-test",
-        ("npm", "test") | ("pnpm", "test") | ("yarn", "test") | ("bun", "test") | ("npm", "run") | ("pnpm", "run") if t1 != "run" || t2.contains("test") => "js-test",
-        ("grep", _) | ("rg", _) | ("ag", _) => "grep",
+        ("npx", "jest" | "vitest") | ("jest" | "vitest", _) => "js-test",
+        ("npm" | "pnpm" | "yarn" | "bun", "test") | ("npm" | "pnpm", "run") if t1 != "run" || t2.contains("test") => {
+            "js-test"
+        }
+        ("grep" | "rg" | "ag", _) => "grep",
         _ => "generic",
     }
 }

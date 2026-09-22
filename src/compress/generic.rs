@@ -1,7 +1,4 @@
-//! Generic, command-agnostic strategies. Always safe to apply:
-//! strip ANSI, trim trailing space, collapse blank runs, dedup repeated
-//! lines with a count, truncate very long lines, cap total lines with a
-//! head + tail window.
+//! Generic, command-agnostic strategies. Always safe to apply.
 
 use regex::Regex;
 use std::sync::OnceLock;
@@ -91,10 +88,9 @@ pub fn cap_lines(lines: &[String]) -> Vec<String> {
     out
 }
 
-/// Full generic pipeline.
 pub fn apply(text: &str) -> String {
     let clean = strip_ansi(text);
-    let lines: Vec<String> = clean.lines().map(|l| l.to_string()).collect();
+    let lines: Vec<String> = clean.lines().map(std::string::ToString::to_string).collect();
     let lines = collapse_whitespace(&lines);
     let lines = dedup_runs(&lines);
     let lines = truncate_long_lines(&lines);
@@ -137,7 +133,7 @@ mod tests {
 
     #[test]
     fn dedups_runs_with_count() {
-        let v: Vec<String> = ["a", "a", "a", "b", "b"].iter().map(|s| s.to_string()).collect();
+        let v: Vec<String> = ["a", "a", "a", "b", "b"].iter().map(std::string::ToString::to_string).collect();
         assert_eq!(dedup_runs(&v), vec!["a (×3)", "b", "b"]);
     }
 

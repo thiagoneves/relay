@@ -21,28 +21,18 @@ pub struct Paths {
 
 impl Paths {
     pub fn discover(start: &Path) -> Result<Self> {
-        let start = if start.is_absolute() {
-            start.to_path_buf()
+        let start = if start.is_absolute() { start.to_path_buf() } else { std::env::current_dir()?.join(start) };
+        if let Some((root, gitdir)) = git_paths(&start) {
+            Ok(Self { shared: root.join(".relay"), local: gitdir.join("relay"), root, in_git: true })
         } else {
-            std::env::current_dir()?.join(start)
-        };
-        match git_paths(&start) {
-            Some((root, gitdir)) => Ok(Self {
+            let root = start.clone();
+            let slug = slugify(&root);
+            Ok(Self {
                 shared: root.join(".relay"),
-                local: gitdir.join("relay"),
+                local: data_home().join("projects").join(slug),
                 root,
-                in_git: true,
-            }),
-            None => {
-                let root = start.clone();
-                let slug = slugify(&root);
-                Ok(Self {
-                    shared: root.join(".relay"),
-                    local: data_home().join("projects").join(slug),
-                    root,
-                    in_git: false,
-                })
-            }
+                in_git: false,
+            })
         }
     }
 
@@ -51,13 +41,27 @@ impl Paths {
         Self::discover(&cwd)
     }
 
-    pub fn spool(&self) -> PathBuf { self.local.join("spool") }
-    pub fn outputs(&self) -> PathBuf { self.local.join("outputs") }
-    pub fn handoffs(&self) -> PathBuf { self.local.join("handoffs") }
-    pub fn claims(&self) -> PathBuf { self.local.join("claims") }
-    pub fn current_session_file(&self) -> PathBuf { self.local.join("current_session") }
-    pub fn log_file(&self) -> PathBuf { self.local.join("relay.log") }
-    pub fn project_file(&self) -> PathBuf { self.shared.join("project.md") }
+    pub fn spool(&self) -> PathBuf {
+        self.local.join("spool")
+    }
+    pub fn outputs(&self) -> PathBuf {
+        self.local.join("outputs")
+    }
+    pub fn handoffs(&self) -> PathBuf {
+        self.local.join("handoffs")
+    }
+    pub fn claims(&self) -> PathBuf {
+        self.local.join("claims")
+    }
+    pub fn current_session_file(&self) -> PathBuf {
+        self.local.join("current_session")
+    }
+    pub fn log_file(&self) -> PathBuf {
+        self.local.join("relay.log")
+    }
+    pub fn project_file(&self) -> PathBuf {
+        self.shared.join("project.md")
+    }
 
     pub fn ensure_local(&self) -> Result<()> {
         for d in [self.spool(), self.outputs(), self.handoffs(), self.claims()] {
@@ -66,11 +70,8 @@ impl Paths {
         Ok(())
     }
 
-    /// Relative display path for user-facing output.
     pub fn rel(&self, p: &Path) -> String {
-        p.strip_prefix(&self.root)
-            .map(|r| r.display().to_string())
-            .unwrap_or_else(|_| p.display().to_string())
+        p.strip_prefix(&self.root).map_or_else(|_| p.display().to_string(), |r| r.display().to_string())
     }
 }
 
@@ -94,25 +95,16 @@ fn git_paths(start: &Path) -> Option<(PathBuf, PathBuf)> {
 }
 
 pub fn home() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
+    std::env::var_os("HOME").map_or_else(|| PathBuf::from("/tmp"), PathBuf::from)
 }
 
 /// `$XDG_DATA_HOME/relay` or `~/.local/share/relay`.
 pub fn data_home() -> PathBuf {
-    std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home().join(".local/share"))
-        .join("relay")
+    std::env::var_os("XDG_DATA_HOME").map_or_else(|| home().join(".local/share"), PathBuf::from).join("relay")
 }
 
 fn slugify(p: &Path) -> String {
-    p.display()
-        .to_string()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect()
+    p.display().to_string().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
 }
 
 /// Append one line to the local log. Never fails loudly.
@@ -121,11 +113,7 @@ pub fn log(paths: &Paths, msg: &str) {
     if std::fs::create_dir_all(&paths.local).is_err() {
         return;
     }
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(paths.log_file())
-    {
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(paths.log_file()) {
         let _ = writeln!(f, "{} {}", crate::helpers::now_iso(), msg);
     }
 }

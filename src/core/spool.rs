@@ -10,15 +10,16 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::helpers::{now_iso, write_atomic};
 use crate::core::paths::Paths;
+use crate::helpers::{now_iso, write_atomic};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[expect(clippy::struct_field_names, reason = "field names are the on-disk JSONL format")]
 pub struct Event {
     pub ts: String,
     pub session: String,
     pub event: String,
-    /// Idempotency key: tool_use_id when available, else event + ts.
+    /// Idempotency key: `tool_use_id` when available, else event + ts.
     pub key: String,
     #[serde(default)]
     pub data: Value,
@@ -27,7 +28,7 @@ pub struct Event {
 impl Event {
     pub fn new(session: &str, event: &str, key: Option<&str>, data: Value) -> Self {
         let ts = now_iso();
-        let key = key.map(str::to_string).unwrap_or_else(|| format!("{event}:{ts}"));
+        let key = key.map_or_else(|| format!("{event}:{ts}"), str::to_string);
         Self { ts, session: session.to_string(), event: event.to_string(), key, data }
     }
 }
@@ -55,10 +56,7 @@ pub fn read(paths: &Paths, session: &str) -> Vec<Event> {
         return Vec::new();
     };
     let mut seen = std::collections::HashSet::new();
-    text.lines()
-        .filter_map(|l| serde_json::from_str::<Event>(l).ok())
-        .filter(|e| seen.insert(e.key.clone()))
-        .collect()
+    text.lines().filter_map(|l| serde_json::from_str::<Event>(l).ok()).filter(|e| seen.insert(e.key.clone())).collect()
 }
 
 /// Sessions with a spool file, most recently modified first.
@@ -80,7 +78,7 @@ pub fn sessions(paths: &Paths) -> Vec<(String, SystemTime)> {
 }
 
 /// The session whose hooks fired most recently in this worktree. Written
-/// by SessionStart and refreshed by tool events. Known limitation: two
+/// by `SessionStart` and refreshed by tool events. Known limitation: two
 /// live sessions in the same worktree share this pointer.
 pub fn current_session(paths: &Paths) -> Option<String> {
     fs::read_to_string(paths.current_session_file()).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())

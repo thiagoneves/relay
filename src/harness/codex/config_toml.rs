@@ -22,7 +22,7 @@ pub fn enable_hooks(path: &Path) -> Result<bool> {
     Ok(false)
 }
 
-/// Pure transformation. `None` when nothing needs to change.
+/// `None` when nothing needs to change.
 fn with_hooks_enabled(text: &str) -> Option<String> {
     let lines: Vec<&str> = text.lines().collect();
     let mut in_features = false;
@@ -42,27 +42,26 @@ fn with_hooks_enabled(text: &str) -> Option<String> {
                 if v.trim().starts_with("true") {
                     return None;
                 }
-                let mut out: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
+                let mut out: Vec<String> = lines.iter().map(std::string::ToString::to_string).collect();
                 out[i] = "hooks = true".into();
-                return Some(finish(out));
+                return Some(finish(&out));
             }
         }
     }
-    let mut out: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
-    match features_header {
-        Some(i) => out.insert(i + 1, "hooks = true".into()),
-        None => {
-            if !out.is_empty() && !out.last().unwrap().trim().is_empty() {
-                out.push(String::new());
-            }
-            out.push("[features]".into());
-            out.push("hooks = true".into());
+    let mut out: Vec<String> = lines.iter().map(std::string::ToString::to_string).collect();
+    if let Some(i) = features_header {
+        out.insert(i + 1, "hooks = true".into());
+    } else {
+        if !out.is_empty() && !out.last().unwrap().trim().is_empty() {
+            out.push(String::new());
         }
+        out.push("[features]".into());
+        out.push("hooks = true".into());
     }
-    Some(finish(out))
+    Some(finish(&out))
 }
 
-fn finish(lines: Vec<String>) -> String {
+fn finish(lines: &[String]) -> String {
     let mut s = lines.join("\n");
     s.push('\n');
     s

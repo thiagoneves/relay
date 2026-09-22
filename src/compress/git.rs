@@ -64,8 +64,8 @@ pub fn diff(text: &str) -> String {
         if l.starts_with("@@") {
             // "@@ -1,2 +1,3 @@ fn main" -> "@@ fn main"; keep ranges when no context.
             let parts: Vec<&str> = l.splitn(3, "@@").collect();
-            let ranges = parts.get(1).map(|s| s.trim()).unwrap_or("");
-            let ctx = parts.get(2).map(|s| s.trim()).unwrap_or("");
+            let ranges = parts.get(1).map_or("", |s| s.trim());
+            let ctx = parts.get(2).map_or("", |s| s.trim());
             out.push(format!("@@ {}", if ctx.is_empty() { ranges } else { ctx }));
             continue;
         }
@@ -76,7 +76,6 @@ pub fn diff(text: &str) -> String {
             }
             in_file += 1;
             out.push(l.to_string());
-            continue;
         }
         // Context lines are dropped: the agent can `relay get` the original.
     }

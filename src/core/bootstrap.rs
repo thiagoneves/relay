@@ -18,10 +18,8 @@ pub fn project_md(paths: &Paths) -> String {
     let langs = languages(&files);
     let hot = git::hot_files(root, 300, 8);
     let recent = git::recent_commits(root, 5);
-    let agent_files: Vec<&str> = ["CLAUDE.md", "AGENTS.md", "GEMINI.md", ".cursorrules"]
-        .into_iter()
-        .filter(|f| root.join(f).exists())
-        .collect();
+    let agent_files: Vec<&str> =
+        ["CLAUDE.md", "AGENTS.md", "GEMINI.md", ".cursorrules"].into_iter().filter(|f| root.join(f).exists()).collect();
 
     let mut b = String::new();
     b.push_str("---\n");
@@ -98,7 +96,7 @@ fn readme_lead(root: &Path) -> String {
             }
             continue;
         }
-        if t.starts_with('#') || t.starts_with("[![") || t.starts_with("<") || t.starts_with("!") {
+        if t.starts_with('#') || t.starts_with("[![") || t.starts_with('<') || t.starts_with('!') {
             continue;
         }
         para.push(t);
@@ -107,7 +105,7 @@ fn readme_lead(root: &Path) -> String {
 }
 
 fn languages(files: &[String]) -> Vec<String> {
-    let mut counts: std::collections::HashMap<&str, usize> = Default::default();
+    let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::default();
     for f in files {
         let lang = match f.rsplit('.').next().unwrap_or("") {
             "rs" => "Rust",

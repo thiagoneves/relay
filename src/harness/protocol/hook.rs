@@ -5,10 +5,10 @@
 use anyhow::Result;
 use serde_json::{Value, json};
 
-use crate::helpers::truncate_chars;
 use crate::core::paths::Paths;
 use crate::core::spool::{self, Event};
 use crate::core::{brief, handoff};
+use crate::helpers::truncate_chars;
 
 /// Events relay wants, with the matcher used in settings.json.
 pub const EVENTS: &[(&str, Option<&str>, u32)] = &[
@@ -21,7 +21,7 @@ pub const EVENTS: &[(&str, Option<&str>, u32)] = &[
     ("Stop", None, 5),
 ];
 
-pub fn run(harness_id: &str, hook_cmd: &str) -> Result<()> {
+pub fn run(harness_id: &str) -> Result<()> {
     let Some(input) = crate::harness::read_stdin_json()? else { return Ok(()) };
     let event = input["hook_event_name"].as_str().unwrap_or("").to_string();
     let session = input["session_id"].as_str().unwrap_or("unknown").to_string();
@@ -33,7 +33,10 @@ pub fn run(harness_id: &str, hook_cmd: &str) -> Result<()> {
     paths.ensure_local()?;
 
     match event.as_str() {
-        "PreToolUse" => pre_tool_use(&paths, &session, &input, hook_cmd),
+        "PreToolUse" => {
+            pre_tool_use(&paths, &session, &input);
+            Ok(())
+        }
         "PostToolUse" => post_tool_use(&paths, &session, &input),
         "UserPromptSubmit" => {
             let prompt = input["prompt"].as_str().unwrap_or("");
@@ -115,20 +118,20 @@ fn post_tool_use(paths: &Paths, session: &str, input: &Value) -> Result<()> {
     record(paths, session, "tool", key, data)
 }
 
-fn pre_tool_use(paths: &Paths, session: &str, input: &Value, _hook_cmd: &str) -> Result<()> {
+fn pre_tool_use(paths: &Paths, session: &str, input: &Value) {
     if input["tool_name"].as_str() != Some("Bash") {
-        return Ok(());
+        return;
     }
     let cmd = input["tool_input"]["command"].as_str().unwrap_or("").trim();
     if cmd.is_empty() {
-        return Ok(());
+        return;
     }
     // Keep the "current session" pointer fresh for `relay x`.
     if spool::current_session(paths).as_deref() != Some(session) {
         spool::set_current_session(paths, session);
     }
     if !should_wrap(cmd) {
-        return Ok(());
+        return;
     }
     let rewritten = format!("{} x -- {}", relay_invocation(), shell_quote(cmd));
     let out = json!({
@@ -140,12 +143,68 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, _hook_cmd: &str) ->
         }
     });
     println!("{out}");
-    Ok(())
 }
 
 /// Commands worth routing through `relay x`. Conservative on purpose:
 /// anything interactive, backgrounded, or already wrapped is left alone.
 pub fn should_wrap(cmd: &str) -> bool {
+    const INTERACTIVE: &[&str] =
+        &["vim", "vi", "nano", "less", "more", "top", "htop", "ssh", "tmux", "screen", "watch", "man"];
+    const WRAP: &[&str] = &[
+        "git",
+        "ls",
+        "tree",
+        "find",
+        "grep",
+        "rg",
+        "ag",
+        "cargo",
+        "npm",
+        "pnpm",
+        "yarn",
+        "npx",
+        "bun",
+        "bunx",
+        "pytest",
+        "python",
+        "python3",
+        "go",
+        "make",
+        "tsc",
+        "eslint",
+        "prettier",
+        "docker",
+        "kubectl",
+        "cat",
+        "head",
+        "tail",
+        "wc",
+        "diff",
+        "curl",
+        "mvn",
+        "gradle",
+        "dotnet",
+        "swift",
+        "xcodebuild",
+        "terraform",
+        "gh",
+        "brew",
+        "pip",
+        "uv",
+        "ruff",
+        "mypy",
+        "jest",
+        "vitest",
+        "playwright",
+        "cypress",
+        "next",
+        "vite",
+        "webpack",
+        "gcc",
+        "clang",
+        "cmake",
+        "ninja",
+    ];
     let t = cmd.trim();
     if t.starts_with("relay ") || t.contains("relay x ") || t.starts_with("rtk ") {
         return false;
@@ -153,17 +212,10 @@ pub fn should_wrap(cmd: &str) -> bool {
     if t.contains("<<") || t.ends_with('&') || t.contains("$(") || t.contains('`') {
         return false;
     }
-    const INTERACTIVE: &[&str] = &["vim", "vi", "nano", "less", "more", "top", "htop", "ssh", "tmux", "screen", "watch", "man"];
-    const WRAP: &[&str] = &[
-        "git", "ls", "tree", "find", "grep", "rg", "ag", "cargo", "npm", "pnpm", "yarn", "npx", "bun", "bunx", "pytest",
-        "python", "python3", "go", "make", "tsc", "eslint", "prettier", "docker", "kubectl", "cat", "head", "tail", "wc",
-        "diff", "curl", "mvn", "gradle", "dotnet", "swift", "xcodebuild", "terraform", "gh", "brew", "pip", "uv", "ruff",
-        "mypy", "jest", "vitest", "playwright", "cypress", "next", "vite", "webpack", "gcc", "clang", "cmake", "ninja",
-    ];
     // Look at every segment of a chain: `cd src && cargo test` is worth
     // wrapping because of the second command, `vim x` never is.
     let mut any_wrap = false;
-    for seg in t.split(|c| c == '&' || c == ';' || c == '|').map(str::trim).filter(|s| !s.is_empty()) {
+    for seg in t.split(['&', ';', '|']).map(str::trim).filter(|s| !s.is_empty()) {
         let Some(t0) = crate::compress::head_tokens(seg).into_iter().next() else { continue };
         if INTERACTIVE.contains(&t0.as_str()) {
             return false;
@@ -185,7 +237,7 @@ fn relay_invocation() -> String {
             }
         }
     }
-    exe.map(|p| p.display().to_string()).unwrap_or_else(|| "relay".into())
+    exe.map_or_else(|| "relay".into(), |p| p.display().to_string())
 }
 
 pub fn shell_quote(s: &str) -> String {

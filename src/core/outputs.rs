@@ -40,13 +40,8 @@ impl OutputMeta {
 
 /// Where originals spill when the local tier is not writable.
 pub fn spill_dir(paths: &Paths) -> PathBuf {
-    let slug: String = paths
-        .root
-        .display()
-        .to_string()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect();
+    let slug: String =
+        paths.root.display().to_string().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
     std::env::temp_dir().join("relay").join(slug).join("outputs")
 }
 
@@ -57,7 +52,6 @@ fn write_pair(dir: &Path, meta: &OutputMeta, raw: &str) -> Result<()> {
     Ok(())
 }
 
-/// Where the original was written.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Stored {
     Local,
@@ -75,10 +69,7 @@ pub fn store(paths: &Paths, meta: &OutputMeta, raw: &str) -> Result<Stored> {
 }
 
 fn find_meta(paths: &Paths, id: &str) -> Option<PathBuf> {
-    [paths.outputs(), spill_dir(paths)]
-        .into_iter()
-        .map(|d| d.join(format!("{id}.json")))
-        .find(|p| p.exists())
+    [paths.outputs(), spill_dir(paths)].into_iter().map(|d| d.join(format!("{id}.json"))).find(|p| p.exists())
 }
 
 pub fn get(paths: &Paths, id: &str) -> Result<(OutputMeta, String)> {
@@ -140,8 +131,5 @@ pub fn list(paths: &Paths) -> Vec<OutputMeta> {
 }
 
 pub fn for_session(paths: &Paths, session: &str) -> Vec<OutputMeta> {
-    list(paths)
-        .into_iter()
-        .filter(|m| m.session.as_deref() == Some(session))
-        .collect()
+    list(paths).into_iter().filter(|m| m.session.as_deref() == Some(session)).collect()
 }

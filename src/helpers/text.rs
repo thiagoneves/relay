@@ -13,7 +13,6 @@ pub fn truncate_chars(s: &str, max: usize) -> String {
     format!("{cut}…")
 }
 
-
 pub fn human_bytes(n: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let mut v = n as f64;

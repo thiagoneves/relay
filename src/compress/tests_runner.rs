@@ -11,7 +11,11 @@ pub fn cargo_test(text: &str) -> String {
             ok += 1;
             continue;
         }
-        if t.starts_with("   Compiling ") || t.starts_with("    Finished ") || t.starts_with("     Running ") || t.starts_with("   Doc-tests ") {
+        if t.starts_with("   Compiling ")
+            || t.starts_with("    Finished ")
+            || t.starts_with("     Running ")
+            || t.starts_with("   Doc-tests ")
+        {
             continue;
         }
         if t.starts_with("running ") && t.ends_with(" tests") || t == "running 1 test" {
@@ -68,7 +72,11 @@ pub fn pytest(text: &str) -> String {
             continue;
         }
         // Progress lines: "tests/test_x.py ......F..   [ 40%]"
-        if tt.contains("[") && tt.ends_with("%]") && tt.chars().filter(|c| *c == '.').count() > 2 && !tt.contains("FAILED") {
+        if tt.contains('[')
+            && tt.ends_with("%]")
+            && tt.chars().filter(|c| *c == '.').count() > 2
+            && !tt.contains("FAILED")
+        {
             if tt.contains('F') || tt.contains('E') {
                 out.push(t.to_string());
             }
@@ -79,13 +87,16 @@ pub fn pytest(text: &str) -> String {
     out.join("\n")
 }
 
-/// `go test`: drop `ok`/`PASS` lines for packages with no failures? No:
-/// keep `ok` (one per package, useful), drop `=== RUN` and `--- PASS`.
+/// `go test`: keep one `ok` per package, drop `=== RUN` and `--- PASS`.
 pub fn go_test(text: &str) -> String {
     text.lines()
         .filter(|l| {
             let t = l.trim_start();
-            !(t.starts_with("=== RUN") || t.starts_with("--- PASS") || t.starts_with("=== PAUSE") || t.starts_with("=== CONT") || t == "PASS")
+            !(t.starts_with("=== RUN")
+                || t.starts_with("--- PASS")
+                || t.starts_with("=== PAUSE")
+                || t.starts_with("=== CONT")
+                || t == "PASS")
         })
         .collect::<Vec<_>>()
         .join("\n")

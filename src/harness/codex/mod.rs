@@ -21,7 +21,7 @@ pub struct Codex;
 const MARKER: &str = " hook codex";
 
 pub fn codex_home() -> PathBuf {
-    std::env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(|| home().join(".codex"))
+    std::env::var_os("CODEX_HOME").map_or_else(|| home().join(".codex"), PathBuf::from)
 }
 
 fn target() -> hooks_json::Target {
@@ -51,7 +51,7 @@ impl Harness for Codex {
     }
 
     fn handle_hook(&self) -> Result<()> {
-        hook::run(self.id(), MARKER)
+        hook::run(self.id())
     }
 
     fn resume_args(&self, session_id: &str) -> Vec<String> {

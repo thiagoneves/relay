@@ -1,9 +1,9 @@
-//! The SessionStart brief: project.md head + remembered items + latest
+//! The `SessionStart` brief: project.md head + remembered items + latest
 //! handoff, capped at roughly 600 tokens. File reads and one git call; no LLM.
 
-use crate::helpers::git as gitstate;
-use crate::core::{handoff, memory};
 use crate::core::paths::Paths;
+use crate::core::{handoff, memory};
+use crate::helpers::git as gitstate;
 
 pub const BRIEF_MAX_CHARS: usize = 2400;
 const PROJECT_MAX_CHARS: usize = 1000;
@@ -28,7 +28,11 @@ pub fn build(paths: &Paths) -> String {
         Some((p, body)) => {
             let hb = handoff::frontmatter(&body, "branch").unwrap_or_default();
             let when = handoff::frontmatter(&body, "ended").unwrap_or_default();
-            out.push_str(&format!("## Last session ({}{})\n", &when[..10.min(when.len())], if hb != branch && !hb.is_empty() { format!(", branch {hb}") } else { String::new() }));
+            out.push_str(&format!(
+                "## Last session ({}{})\n",
+                &when[..10.min(when.len())],
+                if hb != branch && !hb.is_empty() { format!(", branch {hb}") } else { String::new() }
+            ));
             let room = BRIEF_MAX_CHARS.saturating_sub(out.len() + 200);
             out.push_str(&cut(handoff::strip_frontmatter(&body), room));
             out.push_str(&format!("\n\n_Full handoff: {}_\n", paths.rel(&p)));
@@ -72,6 +76,6 @@ fn cut(s: &str, max: usize) -> String {
         end -= 1;
     }
     let head = &s[..end];
-    let head = head.rfind('\n').map(|i| &head[..i]).unwrap_or(head);
+    let head = head.rfind('\n').map_or(head, |i| &head[..i]);
     format!("{head}\n…")
 }

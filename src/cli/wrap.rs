@@ -35,18 +35,18 @@ pub fn run(name: &str, last: bool, args: &[String]) -> anyhow::Result<i32> {
     }
     eprintln!("relay: {}", notes.join(" · "));
 
-    let mut argv: Vec<String> = Vec::new();
+    let mut launch: Vec<String> = Vec::new();
     if last {
         match std::fs::read_to_string(paths.local.join("last_session")) {
-            Ok(id) if !id.trim().is_empty() => argv.extend(h.resume_args(id.trim())),
+            Ok(id) if !id.trim().is_empty() => launch.extend(h.resume_args(id.trim())),
             _ => eprintln!("relay: no previous session to resume, starting fresh"),
         }
     }
-    argv.extend(args.iter().cloned());
+    launch.extend(args.iter().cloned());
 
     let started = SystemTime::now();
     let status = Command::new(h.command())
-        .args(&argv)
+        .args(&launch)
         .current_dir(&paths.root)
         .status()
         .with_context(|| format!("failed to launch {}", h.command()))?;
@@ -61,7 +61,7 @@ pub fn run(name: &str, last: bool, args: &[String]) -> anyhow::Result<i32> {
             let _ = handoff::build(&paths, &session, "wrapper-exit");
         }
         let outs = outputs::for_session(&paths, &session);
-        let saved: usize = outs.iter().map(|m| m.saved()).sum();
+        let saved: usize = outs.iter().map(super::super::core::outputs::OutputMeta::saved).sum();
         eprintln!(
             "relay: session {} · saved ~{} tokens over {} outputs · handoff {}",
             &session[..8.min(session.len())],

@@ -28,7 +28,6 @@ pub struct InstallReport {
 pub trait Harness {
     /// Stable id used in spool events and handoffs, e.g. `claude-code`.
     fn id(&self) -> &'static str;
-    /// Executable name, e.g. `claude`.
     fn command(&self) -> &'static str;
     fn detect(&self) -> bool {
         which(self.command()).is_some()

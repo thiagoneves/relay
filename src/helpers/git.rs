@@ -37,7 +37,7 @@ pub fn hot_files(root: &Path, commits: usize, top: usize) -> Vec<(String, usize)
     let Some(out) = git(root, &["log", "--name-only", "--format=", "-n", &n]) else {
         return Vec::new();
     };
-    let mut counts: std::collections::HashMap<String, usize> = Default::default();
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::default();
     for l in out.lines().map(str::trim).filter(|l| !l.is_empty()) {
         *counts.entry(l.to_string()).or_default() += 1;
     }

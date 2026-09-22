@@ -6,10 +6,10 @@ use std::process::{Command, Stdio};
 use anyhow::Result;
 
 use crate::compress;
-use crate::helpers::{est_tokens, human_tokens, new_id, now_iso};
 use crate::core::outputs::{self, OutputMeta};
 use crate::core::paths::Paths;
 use crate::core::spool;
+use crate::helpers::{est_tokens, human_tokens, new_id, now_iso};
 
 /// Outputs shorter than this are printed as is, no footer, not stored.
 const MIN_STORE_BYTES: usize = 200;

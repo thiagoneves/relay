@@ -14,7 +14,7 @@ pub struct Claude;
 const MARKER: &str = " hook claude";
 
 fn target() -> hooks_json::Target {
-    let dir = std::env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).unwrap_or_else(|| home().join(".claude"));
+    let dir = std::env::var_os("CLAUDE_CONFIG_DIR").map_or_else(|| home().join(".claude"), PathBuf::from);
     hooks_json::Target { path: dir.join("settings.json"), marker: MARKER }
 }
 
@@ -36,7 +36,7 @@ impl Harness for Claude {
     }
 
     fn handle_hook(&self) -> Result<()> {
-        hook::run(self.id(), MARKER)
+        hook::run(self.id())
     }
 
     fn resume_args(&self, session_id: &str) -> Vec<String> {
