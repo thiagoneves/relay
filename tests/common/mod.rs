@@ -31,17 +31,16 @@ impl Repo {
     }
 
     pub fn run(&self, args: &[&str]) -> Output {
-        relay().args(args).current_dir(&self.root).env("HOME", &self.root).output().unwrap()
+        self.isolated(relay()).args(args).output().unwrap()
     }
 
     /// Deliver one hook event the way a harness does: JSON on stdin.
     pub fn hook(&self, harness: &str, event: serde_json::Value) -> String {
         let mut event = event;
         event["cwd"] = self.root.display().to_string().into();
-        let mut child = relay()
+        let mut child = self
+            .isolated(relay())
             .args(["hook", harness])
-            .current_dir(&self.root)
-            .env("HOME", &self.root)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
@@ -50,6 +49,15 @@ impl Repo {
         let out = child.wait_with_output().unwrap();
         assert!(out.status.success(), "hook must never fail");
         String::from_utf8(out.stdout).unwrap()
+    }
+
+    /// Run inside the repo with every home-like variable pointing at it.
+    fn isolated(&self, mut c: Command) -> Command {
+        c.current_dir(&self.root);
+        for var in ["HOME", "USERPROFILE", "LOCALAPPDATA", "XDG_DATA_HOME", "CODEX_HOME", "CLAUDE_CONFIG_DIR"] {
+            c.env(var, &self.root);
+        }
+        c
     }
 
     pub fn path(&self, rel: &str) -> String {
