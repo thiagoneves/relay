@@ -58,6 +58,33 @@ pub fn of(events: &[Event]) -> SessionUsage {
     u
 }
 
+/// Exact API usage of one session, read from the harness's transcript.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ApiUsage {
+    pub calls: usize,
+    /// Context of the first call: everything sent before any work.
+    pub first_context: usize,
+    pub peak_context: usize,
+    /// Sum of the context of every call; each call resends the history.
+    pub context_sent: usize,
+    /// Part of `context_sent` served from the provider's prompt cache.
+    pub cached: usize,
+    pub output: usize,
+}
+
+impl ApiUsage {
+    pub fn add_call(&mut self, context: usize, cached: usize, output: usize) {
+        if self.calls == 0 {
+            self.first_context = context;
+        }
+        self.calls += 1;
+        self.peak_context = self.peak_context.max(context);
+        self.context_sent += context;
+        self.cached += cached;
+        self.output += output;
+    }
+}
+
 pub fn median(mut v: Vec<usize>) -> Option<usize> {
     v.sort_unstable();
     v.get(v.len() / 2).copied()
