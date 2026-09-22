@@ -152,6 +152,11 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness_id: &str) {
     if spool::current_session(paths).as_deref() != Some(session) {
         spool::set_current_session(paths, session);
     }
+    // A background command's output is read later, while it runs;
+    // `relay x` would hold all of it until exit.
+    if input["tool_input"]["run_in_background"].as_bool() == Some(true) {
+        return;
+    }
     if !rewrites_commands(harness_id) || !should_wrap(cmd) {
         return;
     }
