@@ -6,7 +6,7 @@ use super::ui::Ui;
 pub fn install(id: HarnessId) -> anyhow::Result<i32> {
     let ui = Ui::stdout();
     let h = id.adapter();
-    let inst = crate::core::machine::install_self()?;
+    let inst = crate::machine::install_self()?;
     super::setup::report(&inst);
     let r = h.install(&inst.exe)?;
     if r.changed {

@@ -2,10 +2,10 @@
 //! at its stable path, on PATH, with hooks in every harness found.
 //! `relay claude|codex` and `relay install` do the same for one harness.
 
-use crate::core::machine::{self, Installed, Refresh};
 use crate::harness;
 use crate::helpers::env::tilde;
 use crate::helpers::profile::PathChange;
+use crate::machine::{self, Installed, Refresh};
 
 use super::ui::Ui;
 

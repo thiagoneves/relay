@@ -8,10 +8,11 @@ use std::time::SystemTime;
 use anyhow::Context;
 
 use crate::core::paths::Paths;
-use crate::core::{bootstrap, handoff, machine, outputs, spool};
+use crate::core::{bootstrap, handoff, outputs, spool};
 use crate::harness::{self, Harness, HarnessId};
 use crate::helpers::env::Var;
 use crate::helpers::{human_tokens, new_id, shell};
+use crate::machine;
 
 use super::ui::{Ui, problem};
 

@@ -10,6 +10,7 @@ mod core;
 mod harness;
 mod helpers;
 mod limits;
+mod machine;
 
 pub use cli::main;
 pub use compress::{Compressed, Filter, compress};
