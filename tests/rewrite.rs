@@ -20,3 +20,16 @@ fn background_commands_are_left_alone() {
     let repo = Repo::new("rewrite-bg");
     assert!(pre(&repo, "claude", json!({ "command": "npm run dev", "run_in_background": true })).is_none());
 }
+
+#[test]
+fn remember_carries_the_session() {
+    let repo = Repo::new("rewrite-remember");
+    let out = pre(&repo, "claude", json!({ "command": "relay remember rule \"Hooks fail open\"" })).unwrap();
+    assert_eq!(out["updatedInput"]["command"], "relay remember --session 's1' rule \"Hooks fail open\"");
+    assert!(out.get("permissionDecision").is_none());
+
+    let run = repo.run(&["remember", "--session", "s1", "rule", "Hooks fail open"]);
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    let item = std::fs::read_dir(repo.root.join(".relay/rules")).unwrap().flatten().next().unwrap().path();
+    assert!(std::fs::read_to_string(item).unwrap().contains("s1"));
+}

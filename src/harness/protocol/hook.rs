@@ -139,6 +139,12 @@ fn rewrites_commands(harness_id: &str) -> bool {
     !(cfg!(windows) && harness_id == "codex")
 }
 
+/// Codex rejects `updatedInput` unless the hook also approves the call;
+/// Claude Code runs a bare rewrite through its normal permission flow.
+fn accepts_bare_rewrite(harness_id: &str) -> bool {
+    harness_id != "codex"
+}
+
 fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness_id: &str) {
     if input["tool_name"].as_str() != Some("Bash") {
         return;
@@ -147,8 +153,8 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness_id: &str) {
     if cmd.is_empty() {
         return;
     }
-    // `relay remember` and hand-typed `relay x` have no session of their
-    // own; they fall back to this pointer.
+    // Hand-typed `relay x` has no session of its own; it falls back to
+    // this pointer.
     if spool::current_session(paths).as_deref() != Some(session) {
         spool::set_current_session(paths, session);
     }
@@ -157,19 +163,36 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness_id: &str) {
     if input["tool_input"]["run_in_background"].as_bool() == Some(true) {
         return;
     }
+    if accepts_bare_rewrite(harness_id)
+        && let Some(rewritten) = remember_with_session(cmd, session)
+    {
+        println!("{}", rewrite_output(&rewritten, false));
+        return;
+    }
     if !rewrites_commands(harness_id) || !should_wrap(cmd) {
         return;
     }
     let rewritten = format!("{} x --session {} -- {}", relay_invocation(), shell::quote(session), shell::quote(cmd));
-    let out = json!({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-            "permissionDecisionReason": "relay compress",
-            "updatedInput": { "command": rewritten },
-        }
-    });
-    println!("{out}");
+    println!("{}", rewrite_output(&rewritten, true));
+}
+
+/// `relay remember …` typed by the agent, with the session added so the
+/// item is filed under it even when another session moved the pointer.
+fn remember_with_session(cmd: &str, session: &str) -> Option<String> {
+    let rest = cmd.strip_prefix("relay remember ")?;
+    if rest.contains("--session") {
+        return None;
+    }
+    Some(format!("relay remember --session {} {rest}", shell::quote(session)))
+}
+
+fn rewrite_output(command: &str, approve: bool) -> Value {
+    let mut out = json!({ "hookEventName": "PreToolUse", "updatedInput": { "command": command } });
+    if approve {
+        out["permissionDecision"] = "allow".into();
+        out["permissionDecisionReason"] = "relay compress".into();
+    }
+    json!({ "hookSpecificOutput": out })
 }
 
 /// Commands worth routing through `relay x`. Conservative on purpose:
