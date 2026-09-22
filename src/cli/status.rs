@@ -1,6 +1,6 @@
 use crate::core::memory::{self, Kind};
 use crate::core::paths::Paths;
-use crate::core::{outputs, spool};
+use crate::core::{outputs, spool, usage};
 use crate::helpers::{dir_size, human_bytes, human_tokens};
 
 pub fn run() -> anyhow::Result<i32> {
@@ -30,6 +30,7 @@ pub fn run() -> anyhow::Result<i32> {
             refetched * 100 / outs.len()
         );
     }
+    print_orientation(&paths);
     println!("Sessions      {sessions} recorded, {handoffs} handoffs");
     let items = memory::list(&paths);
     let count = |k: Kind| items.iter().filter(|i| i.kind == k).count();
@@ -45,4 +46,30 @@ pub fn run() -> anyhow::Result<i32> {
     println!("Local (this worktree) {}  {}", paths.local.display(), human_bytes(dir_size(&paths.local)));
     println!("Leaves this machine: nothing.");
     Ok(0)
+}
+
+/// Median tokens read before the first edit, sessions with a brief against
+/// sessions without one. Only sessions that edited count.
+fn print_orientation(paths: &Paths) {
+    let (mut with, mut without) = (Vec::new(), Vec::new());
+    for (s, _) in spool::sessions(paths) {
+        let u = usage::of(&spool::read(paths, &s));
+        match u.brief_tokens {
+            Some(b) if u.edited && b > 0 => with.push(u.orientation_tokens),
+            Some(_) if u.edited => without.push(u.orientation_tokens),
+            _ => {}
+        }
+    }
+    let side = |v: Vec<usize>, label: &str| {
+        let n = v.len();
+        usage::median(v)
+            .map_or_else(|| format!("{label}: no sessions yet"), |m| format!("{} {label} (n={n})", human_tokens(m)))
+    };
+    if !with.is_empty() || !without.is_empty() {
+        println!(
+            "Orientation   median tokens read before the first edit: {} · {}  [estimate]",
+            side(with, "with brief"),
+            side(without, "without")
+        );
+    }
 }

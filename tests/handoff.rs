@@ -72,3 +72,32 @@ fn latest_session_wins_across_a_round_trip() {
     // Remembered items are durable: both survive.
     assert!(brief.contains("50 cents (first)") && brief.contains("50 cents (second)"), "{brief}");
 }
+
+#[test]
+fn status_reports_orientation_and_reads_are_not_edits() {
+    let repo = Repo::new("orient");
+    let s = "orient-1";
+    repo.hook("claude", json!({ "hook_event_name": "SessionStart", "session_id": s, "source": "startup" }));
+    repo.hook(
+        "claude",
+        json!({
+            "hook_event_name": "PostToolUse", "session_id": s, "tool_name": "Read", "tool_use_id": "r1",
+            "tool_input": { "file_path": repo.path("src/big.rs") },
+            "tool_response": { "type": "text", "file": { "content": "fn main() { println!(\"hi\"); }\n".repeat(200) } }
+        }),
+    );
+    repo.hook("claude", json!({
+        "hook_event_name": "PostToolUse", "session_id": s, "tool_name": "Edit", "tool_use_id": "e1",
+        "tool_input": { "file_path": repo.path("src/pay.rs") }, "tool_response": { "originalFile": "x".repeat(5000) }
+    }));
+    repo.hook("claude", json!({ "hook_event_name": "SessionEnd", "session_id": s, "reason": "exit" }));
+
+    let status = String::from_utf8(repo.run(&["status"]).stdout).unwrap();
+    let line = status.lines().find(|l| l.starts_with("Orientation")).unwrap_or_else(|| panic!("{status}"));
+    assert!(line.contains("without (n=1)"), "{line}");
+    let handoff = String::from_utf8(repo.run(&["handoff", "--show"]).stdout).unwrap();
+    assert!(
+        handoff.contains("- src/pay.rs") && !handoff.contains("big.rs"),
+        "reads leaked into Files touched:\n{handoff}"
+    );
+}

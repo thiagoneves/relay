@@ -9,6 +9,7 @@ use anyhow::Result;
 use crate::core::outputs;
 use crate::core::paths::Paths;
 use crate::core::spool::{self, Event};
+use crate::core::usage;
 use crate::helpers::git as gitstate;
 use crate::helpers::{now_iso, truncate_chars, write_atomic};
 
@@ -91,7 +92,8 @@ impl Summary {
 
 fn files_touched(paths: &Paths, events: &[Event]) -> Vec<(String, usize)> {
     let mut files: Vec<(String, usize)> = Vec::new();
-    for f in events.iter().filter(|e| e.event == "tool").filter_map(|e| e.data["file"].as_str()) {
+    let edits = events.iter().filter(|e| e.event == "tool" && e.data["tool"].as_str().is_some_and(usage::is_edit));
+    for f in edits.filter_map(|e| e.data["file"].as_str()) {
         let rel = paths.rel_file(f);
         match files.iter_mut().find(|(p, _)| *p == rel) {
             Some(x) => x.1 += 1,

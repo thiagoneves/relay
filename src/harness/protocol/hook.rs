@@ -7,13 +7,14 @@ use serde_json::{Value, json};
 
 use crate::core::paths::Paths;
 use crate::core::spool::{self, Event};
+use crate::core::usage;
 use crate::core::{brief, handoff};
-use crate::helpers::{shell, slash, truncate_chars};
+use crate::helpers::{est_tokens, shell, slash, truncate_chars};
 
 /// Events relay wants, with the matcher used in settings.json.
 pub const EVENTS: &[(&str, Option<&str>, u32)] = &[
     ("PreToolUse", Some("Bash"), 5),
-    ("PostToolUse", Some("Bash|Write|Edit|MultiEdit|NotebookEdit"), 5),
+    ("PostToolUse", Some("Bash|Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit"), 5),
     ("UserPromptSubmit", None, 5),
     ("SessionStart", None, 5),
     ("SessionEnd", None, 2),
@@ -70,6 +71,7 @@ fn record(paths: &Paths, session: &str, name: &str, key: Option<&str>, data: Val
 
 fn session_start(paths: &Paths, session: &str, input: &Value, harness_id: &str) -> Result<()> {
     spool::set_current_session(paths, session);
+    let text = brief::build(paths);
     record(
         paths,
         session,
@@ -80,9 +82,9 @@ fn session_start(paths: &Paths, session: &str, input: &Value, harness_id: &str) 
             "transcript_path": input["transcript_path"],
             "cwd": input["cwd"],
             "harness": harness_id,
+            "brief_tokens": est_tokens(&text),
         }),
     )?;
-    let text = brief::build(paths);
     if !text.trim().is_empty() {
         // Plain stdout on SessionStart becomes context for the model.
         println!("{text}");
@@ -98,6 +100,9 @@ fn post_tool_use(paths: &Paths, session: &str, input: &Value) -> Result<()> {
         crate::core::outputs::absorb_spill(paths);
     }
     let key = input["tool_use_id"].as_str();
+    // What the agent read, for orientation cost. Edit responses echo the
+    // file back to the harness, not to the model, so they are not counted.
+    let tokens = if usage::is_edit(tool) { 0 } else { usage::response_tokens(&input["tool_response"]) };
     let data = match tool {
         "Bash" => {
             let cmd = input["tool_input"]["command"].as_str().unwrap_or("");
@@ -108,11 +113,13 @@ fn post_tool_use(paths: &Paths, session: &str, input: &Value) -> Result<()> {
                 "command": truncate_chars(cmd, 300),
                 "interrupted": resp["interrupted"],
                 "tail": truncate_chars(out.trim_end().rsplit('\n').next().unwrap_or(""), 200),
+                "tokens": tokens,
             })
         }
         _ => json!({
             "tool": tool,
             "file": input["tool_input"]["file_path"].as_str().or(input["tool_input"]["notebook_path"].as_str()),
+            "tokens": tokens,
         }),
     };
     record(paths, session, "tool", key, data)
