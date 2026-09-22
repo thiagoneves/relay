@@ -1,0 +1,56 @@
+Randomized with seed 51234
+
+Payment
+  handles case 1 correctly
+  handles case 2 correctly
+  handles case 3 correctly
+  handles case 4 correctly
+  handles case 5 correctly
+  handles case 6 correctly
+  handles case 7 correctly
+  handles case 8 correctly
+  handles case 9 correctly
+  handles case 10 correctly
+  handles case 11 correctly
+  handles case 12 correctly
+  handles case 13 correctly
+  handles case 14 correctly
+  handles case 15 correctly
+  handles case 16 correctly
+  handles case 17 correctly
+  handles case 18 correctly
+  handles case 19 correctly
+  handles case 20 correctly
+  handles case 21 correctly
+  handles case 22 correctly
+  handles case 23 correctly
+  handles case 24 correctly
+  handles case 25 correctly
+  handles case 26 correctly
+  handles case 27 correctly
+  handles case 28 correctly
+  handles case 29 correctly
+  handles case 30 correctly
+  #charge
+    charges the card
+    retries on timeout (FAILED - 1)
+
+Failures:
+
+  1) Payment#charge retries on timeout
+     Failure/Error: expect(client.attempts).to eq(3)
+
+       expected: 3
+            got: 1
+
+       (compared using ==)
+     # ./spec/payment_spec.rb:42:in `block (3 levels) in <top (required)>'
+
+Finished in 0.83 seconds (files took 1.2 seconds to load)
+32 examples, 1 failure
+
+Failed examples:
+
+rspec ./spec/payment_spec.rb:38 # Payment#charge retries on timeout
+
+Randomized with seed 51234

@@ -24,7 +24,9 @@ static SIGNAL: LazyLock<Regex> = LazyLock::new(|| {
         | \S+\.[A-Za-z]{1,5}:\d+        # path/file.ext:line
         | \bexit\ (code|status)\b
         | (^|\s)[✕✖×●](\s|$)           # jest, vitest, mocha failure marks
-        | ^\s*\d+\)\s                   # mocha: `  1) suite name`
+        | ^\s*\d+\)\s                   # mocha, rspec, exunit, phpunit: `  1) name`
+        | \[E\]\s*$                     # dart test failure mark
+        | Failure/Error | Failed\ asserting | \(FAILED\ -
         ",
     )
     .expect("valid regex")

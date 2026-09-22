@@ -1,0 +1,44 @@
+00:00 +0: loading test/payment_test.dart
+00:00 +1: Payment handles case 1
+00:00 +2: Payment handles case 2
+00:00 +3: Payment handles case 3
+00:00 +4: Payment handles case 4
+00:00 +5: Payment handles case 5
+00:00 +6: Payment handles case 6
+00:00 +7: Payment handles case 7
+00:00 +8: Payment handles case 8
+00:01 +9: Payment handles case 9
+00:01 +10: Payment handles case 10
+00:01 +11: Payment handles case 11
+00:01 +12: Payment handles case 12
+00:01 +13: Payment handles case 13
+00:01 +14: Payment handles case 14
+00:01 +15: Payment handles case 15
+00:01 +16: Payment handles case 16
+00:01 +17: Payment handles case 17
+00:02 +18: Payment handles case 18
+00:02 +19: Payment handles case 19
+00:02 +20: Payment handles case 20
+00:02 +21: Payment handles case 21
+00:02 +22: Payment handles case 22
+00:02 +23: Payment handles case 23
+00:02 +24: Payment handles case 24
+00:02 +25: Payment handles case 25
+00:02 +26: Payment handles case 26
+00:03 +27: Payment handles case 27
+00:03 +28: Payment handles case 28
+00:03 +29: Payment handles case 29
+00:03 +30: Payment handles case 30
+00:03 +31: Payment handles case 31
+00:03 +32: Payment handles case 32
+00:03 +33: Payment handles case 33
+00:03 +34: Payment handles case 34
+00:03 +35: Payment handles case 35
+00:04 +35 -1: Payment retries on timeout [E]
+  Expected: <3>
+    Actual: <1>
+  
+  package:matcher                              expect
+  test/payment_test.dart 42:7                  main.<fn>.<fn>
+  
+00:04 +35 -1: Some tests failed.

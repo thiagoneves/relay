@@ -12,6 +12,9 @@ pub enum Filter {
     GoTest,
     Pytest,
     JsTest,
+    /// `RSpec`, `ExUnit`, `PHPUnit`, Minitest.
+    DotTest,
+    DartTest,
     /// Search results: grouped by file, never cut.
     Grep,
     LsLong,
@@ -30,6 +33,8 @@ impl Filter {
             Self::GoTest => "go-test",
             Self::Pytest => "pytest",
             Self::JsTest => "js-test",
+            Self::DotTest => "dot-test",
+            Self::DartTest => "dart-test",
             Self::Grep => "grep",
             Self::LsLong => "ls-long",
             Self::Read => "read",
@@ -58,6 +63,8 @@ impl Filter {
             Self::GoTest => tests_runner::go_test(&clean),
             Self::Pytest => tests_runner::pytest(&clean),
             Self::JsTest => tests_runner::js_test(&clean),
+            Self::DotTest => tests_runner::dot_test(&clean),
+            Self::DartTest => tests_runner::dart_test(&clean),
             Self::LsLong => listing::ls_long(&clean),
             Self::Read | Self::Grep | Self::Generic => clean,
         }

@@ -1,0 +1,5 @@
+  1) test charge retries on timeout (Shop.PaymentTest)
+     test/shop/payment_test.exs:42
+     left:  1
+     right: 3
+36 tests, 1 failure

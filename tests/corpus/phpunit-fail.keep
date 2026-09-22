@@ -1,0 +1,4 @@
+1) Shop\Tests\PaymentTest::testChargeRetriesOnTimeout
+Failed asserting that 1 matches expected 3.
+/app/tests/PaymentTest.php:42
+Tests: 36, Assertions: 72, Failures: 1.

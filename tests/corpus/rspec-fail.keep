@@ -1,0 +1,5 @@
+  1) Payment#charge retries on timeout
+     Failure/Error: expect(client.attempts).to eq(3)
+            got: 1
+     # ./spec/payment_spec.rb:42:in `block (3 levels) in <top (required)>'
+32 examples, 1 failure

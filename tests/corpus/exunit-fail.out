@@ -1,0 +1,55 @@
+Compiling 3 files (.ex)
+Generated shop app
+Running ExUnit with seed: 84293, max_cases: 16
+Excluding tags: [:integration]
+
+  * test handles case 1 (1.1ms) [L#11]
+  * test handles case 2 (1.2ms) [L#12]
+  * test handles case 3 (1.3ms) [L#13]
+  * test handles case 4 (1.4ms) [L#14]
+  * test handles case 5 (1.5ms) [L#15]
+  * test handles case 6 (1.6ms) [L#16]
+  * test handles case 7 (1.7ms) [L#17]
+  * test handles case 8 (1.8ms) [L#18]
+  * test handles case 9 (1.0ms) [L#19]
+  * test handles case 10 (1.1ms) [L#20]
+  * test handles case 11 (1.2ms) [L#21]
+  * test handles case 12 (1.3ms) [L#22]
+  * test handles case 13 (1.4ms) [L#23]
+  * test handles case 14 (1.5ms) [L#24]
+  * test handles case 15 (1.6ms) [L#25]
+  * test handles case 16 (1.7ms) [L#26]
+  * test handles case 17 (1.8ms) [L#27]
+  * test handles case 18 (1.0ms) [L#28]
+  * test handles case 19 (1.1ms) [L#29]
+  * test handles case 20 (1.2ms) [L#30]
+  * test handles case 21 (1.3ms) [L#31]
+  * test handles case 22 (1.4ms) [L#32]
+  * test handles case 23 (1.5ms) [L#33]
+  * test handles case 24 (1.6ms) [L#34]
+  * test handles case 25 (1.7ms) [L#35]
+  * test handles case 26 (1.8ms) [L#36]
+  * test handles case 27 (1.0ms) [L#37]
+  * test handles case 28 (1.1ms) [L#38]
+  * test handles case 29 (1.2ms) [L#39]
+  * test handles case 30 (1.3ms) [L#40]
+  * test handles case 31 (1.4ms) [L#41]
+  * test handles case 32 (1.5ms) [L#42]
+  * test handles case 33 (1.6ms) [L#43]
+  * test handles case 34 (1.7ms) [L#44]
+  * test handles case 35 (1.8ms) [L#45]
+  * test charge retries on timeout [L#42]
+
+  1) test charge retries on timeout (Shop.PaymentTest)
+     test/shop/payment_test.exs:42
+     Assertion with == failed
+     code:  assert client.attempts == 3
+     left:  1
+     right: 3
+     stacktrace:
+       test/shop/payment_test.exs:45: (test)
+
+Finished in 0.4 seconds (0.00s async, 0.4s sync)
+36 tests, 1 failure
+
+Randomized with seed 84293

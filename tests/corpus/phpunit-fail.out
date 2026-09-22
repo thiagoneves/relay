@@ -1,0 +1,59 @@
+PHPUnit 10.5.20 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.3.6
+Configuration: /app/phpunit.xml
+
+Payment (Shop\Tests\Payment)
+ ✔ Handles case 1
+ ✔ Handles case 2
+ ✔ Handles case 3
+ ✔ Handles case 4
+ ✔ Handles case 5
+ ✔ Handles case 6
+ ✔ Handles case 7
+ ✔ Handles case 8
+ ✔ Handles case 9
+ ✔ Handles case 10
+ ✔ Handles case 11
+ ✔ Handles case 12
+ ✔ Handles case 13
+ ✔ Handles case 14
+ ✔ Handles case 15
+ ✔ Handles case 16
+ ✔ Handles case 17
+ ✔ Handles case 18
+ ✔ Handles case 19
+ ✔ Handles case 20
+ ✔ Handles case 21
+ ✔ Handles case 22
+ ✔ Handles case 23
+ ✔ Handles case 24
+ ✔ Handles case 25
+ ✔ Handles case 26
+ ✔ Handles case 27
+ ✔ Handles case 28
+ ✔ Handles case 29
+ ✔ Handles case 30
+ ✔ Handles case 31
+ ✔ Handles case 32
+ ✔ Handles case 33
+ ✔ Handles case 34
+ ✔ Handles case 35
+ ✘ Charge retries on timeout
+   │
+   │ Failed asserting that 1 matches expected 3.
+   │
+   │ /app/tests/PaymentTest.php:42
+   │
+
+Time: 00:00.412, Memory: 12.00 MB
+
+There was 1 failure:
+
+1) Shop\Tests\PaymentTest::testChargeRetriesOnTimeout
+Failed asserting that 1 matches expected 3.
+
+/app/tests/PaymentTest.php:42
+
+FAILURES!
+Tests: 36, Assertions: 72, Failures: 1.
