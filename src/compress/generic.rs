@@ -1,22 +1,47 @@
-//! Generic, command-agnostic strategies. Always safe to apply.
+//! Generic, command-agnostic strategies. `apply` is for tool output;
+//! `apply_read` is for commands that print files the agent asked to
+//! see, where every line must stay as it is in the file.
 
 use regex::Regex;
 use std::sync::OnceLock;
 
 pub const MAX_LINE_CHARS: usize = 400;
-pub const MAX_LINES: usize = 300;
-pub const HEAD_LINES: usize = 180;
-pub const TAIL_LINES: usize = 100;
+/// Tool output longer than this is cut to head + tail + signal lines; the
+/// original stays one `relay get` away. Sized on real agent history: 80 +
+/// 40 saves ~9% of all shell output tokens, the old 180 + 100 about 2%.
+pub const MAX_LINES: usize = 150;
+pub const HEAD_LINES: usize = 80;
+pub const TAIL_LINES: usize = 40;
 /// Signal lines rescued from the omitted middle of a capped output.
 pub const MAX_RESCUED: usize = 40;
 
 fn ansi_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07|\r").unwrap())
+    RE.get_or_init(|| Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07").unwrap())
 }
 
+/// Remove colour codes and replay carriage returns: a progress bar that
+/// redrew itself fifty times shows only its final state.
 pub fn strip_ansi(s: &str) -> String {
-    ansi_re().replace_all(s, "").into_owned()
+    let s = ansi_re().replace_all(s, "");
+    if !s.contains('\r') {
+        return s.into_owned();
+    }
+    s.split('\n').map(|l| l.trim_end_matches('\r').rsplit('\r').next().unwrap_or("")).collect::<Vec<_>>().join("\n")
+}
+
+/// `cat -n` style gutters pad numbers to a fixed width; the padding costs
+/// tokens and carries nothing. Applied only when most lines have a gutter,
+/// so indented content that merely starts with a number is left alone.
+pub fn trim_number_gutter(lines: &[String]) -> Vec<String> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"^ +(\d+)(\t| ?│)").unwrap());
+    let filled: Vec<&String> = lines.iter().filter(|l| !l.trim().is_empty()).collect();
+    let with_gutter = filled.iter().filter(|l| re.is_match(l)).count();
+    if filled.len() < 5 || with_gutter * 10 < filled.len() * 8 {
+        return lines.to_vec();
+    }
+    lines.iter().map(|l| re.replace(l, "$1$2").into_owned()).collect()
 }
 
 /// Normalise whitespace: trailing spaces, tabs kept, blank runs -> one blank.
@@ -111,10 +136,16 @@ fn omitted(n: usize) -> String {
     format!("… [{n} lines omitted, full output in original]")
 }
 
+pub fn apply_read(text: &str) -> String {
+    let lines: Vec<String> = strip_ansi(text).lines().map(str::to_string).collect();
+    trim_number_gutter(&lines).join("\n")
+}
+
 pub fn apply(text: &str) -> String {
     let clean = strip_ansi(text);
     let lines: Vec<String> = clean.lines().map(std::string::ToString::to_string).collect();
     let lines = collapse_whitespace(&lines);
+    let lines = trim_number_gutter(&lines);
     let lines = dedup_runs(&lines);
     let lines = truncate_long_lines(&lines);
     let lines = cap_lines(&lines);
@@ -189,5 +220,25 @@ mod tests {
     #[test]
     fn strips_ansi() {
         assert_eq!(strip_ansi("\x1b[31mred\x1b[0m"), "red");
+    }
+
+    #[test]
+    fn carriage_returns_keep_the_final_redraw() {
+        assert_eq!(strip_ansi("10%\r50%\r100%\nok\r\n"), "100%\nok\n");
+    }
+
+    #[test]
+    fn trims_gutters_only_when_most_lines_have_one() {
+        let cat_n: Vec<String> = (1..=6).map(|i| format!("     {i}\tline {i}")).collect();
+        assert_eq!(trim_number_gutter(&cat_n)[0], "1\tline 1");
+        let yaml: Vec<String> =
+            ["responses:", "  200:", "    ok", "  404:", "    missing", "x"].iter().map(|s| (*s).to_string()).collect();
+        assert_eq!(trim_number_gutter(&yaml), yaml);
+    }
+
+    #[test]
+    fn reads_keep_every_line_of_the_file() {
+        let file = "a\n\n\n}\n}\n}\n  trailing  \n";
+        assert_eq!(apply_read(file), "a\n\n\n}\n}\n}\n  trailing  ");
     }
 }

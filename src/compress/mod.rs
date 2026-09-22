@@ -5,10 +5,19 @@
 pub mod fidelity;
 pub mod generic;
 pub mod git;
+pub mod listing;
 pub mod tests_runner;
+
+use crate::helpers::est_tokens;
+
+/// What the `[relay N→M tokens · original: relay get <id>]` footer costs.
+pub const FOOTER_TOKENS: usize = 20;
 
 pub struct Compressed {
     pub text: String,
+    /// False when the view is the original (colour codes aside) because
+    /// compressing would not pay for its own footer.
+    pub shortened: bool,
     /// Name of the structured filter used, `generic` when none matched.
     pub filter: &'static str,
 }
@@ -22,7 +31,11 @@ pub fn head_tokens(cmd: &str) -> Vec<String> {
             if raw.contains('=') && !raw.starts_with('-') {
                 continue; // FOO=bar prefix
             }
-            if matches!(raw, "sudo" | "rtk" | "time" | "env" | "command" | "exec") {
+            if matches!(raw, "sudo" | "rtk" | "time" | "env" | "command" | "exec" | "nohup" | "timeout") {
+                continue;
+            }
+            // `timeout 30 cmd`: the duration is not the command.
+            if raw.chars().next().is_some_and(|c| c.is_ascii_digit()) {
                 continue;
             }
         }
@@ -61,9 +74,24 @@ pub fn classify(cmd: &str) -> &'static str {
         ("npm" | "pnpm" | "yarn" | "bun", "test") | ("npm" | "pnpm", "run") if t1 != "run" || t2.contains("test") => {
             "js-test"
         }
-        ("grep" | "rg" | "ag", _) => "grep",
+        ("grep" | "rg" | "ag", _) if !piped => "grep",
+        ("ls", _) if !piped && toks.iter().any(|t| t.starts_with('-') && !t.starts_with("--") && t.contains('l')) => {
+            "ls-long"
+        }
+        _ if is_read(cmd) => "read",
         _ => "generic",
     }
+}
+
+/// Commands whose every output line was asked for: file reads and
+/// searches. The agent quotes read lines back in edits and acts on each
+/// match, so these are never cut, only cleaned.
+pub fn is_read(cmd: &str) -> bool {
+    const READS: &[&str] = &["cat", "sed", "head", "tail", "nl", "bat", "less", "more", "grep", "rg", "ag", "egrep"];
+    cmd.split(['&', '|', ';', '\n']).map(str::trim).any(|seg| {
+        let seg = ["do ", "then ", "else "].iter().find_map(|k| seg.strip_prefix(k)).unwrap_or(seg);
+        head_tokens(seg).first().is_some_and(|t0| READS.contains(&t0.rsplit('/').next().unwrap_or(t0)))
+    })
 }
 
 /// Coarse name for reports: `git status`, `cargo test`, `sed`. Leading
@@ -90,10 +118,7 @@ pub fn family(cmd: &str) -> String {
         "terraform",
     ];
     for seg in cmd.split(['&', '|', ';', '\n']).map(str::trim).filter(|s| !s.is_empty()) {
-        let mut toks = head_tokens(seg);
-        if toks.first().is_some_and(|t| t == "timeout") {
-            toks.drain(..2.min(toks.len()));
-        }
+        let toks = head_tokens(seg);
         let Some(t0) = toks.first() else { continue };
         let t0 = t0.rsplit(['/', '\\']).next().unwrap_or(t0).to_string();
         if SETUP.contains(&t0.as_str()) {
@@ -109,14 +134,20 @@ pub fn family(cmd: &str) -> String {
 
 pub fn compress(cmd: &str, raw: &str) -> Compressed {
     let filter = classify(cmd);
-    let result = std::panic::catch_unwind(|| apply_filter(filter, raw));
-    match result {
-        Ok(text) => Compressed { text, filter },
-        Err(_) => Compressed { text: generic::strip_ansi(raw), filter: "raw" },
+    let Ok(text) = std::panic::catch_unwind(|| apply_filter(filter, raw)) else {
+        return Compressed { text: generic::strip_ansi(raw), shortened: false, filter: "raw" };
+    };
+    let clean = generic::strip_ansi(raw);
+    if est_tokens(&text) + FOOTER_TOKENS >= est_tokens(&clean) {
+        return Compressed { text: clean, shortened: false, filter };
     }
+    Compressed { text, shortened: true, filter }
 }
 
 fn apply_filter(filter: &str, raw: &str) -> String {
+    if filter == "read" {
+        return generic::apply_read(raw);
+    }
     let clean = generic::strip_ansi(raw);
     let structured = match filter {
         "git-status" => git::status(&clean),
@@ -126,7 +157,8 @@ fn apply_filter(filter: &str, raw: &str) -> String {
         "go-test" => tests_runner::go_test(&clean),
         "pytest" => tests_runner::pytest(&clean),
         "js-test" => tests_runner::js_test(&clean),
-        "grep" => generic::group_by_file(&clean).unwrap_or(clean.clone()),
+        "grep" => return generic::apply_read(&generic::group_by_file(&clean).unwrap_or(clean)),
+        "ls-long" => listing::ls_long(&clean),
         _ => clean.clone(),
     };
     generic::apply(&structured)
@@ -150,7 +182,15 @@ mod tests {
         assert_eq!(classify("pnpm run build"), "generic");
         assert_eq!(classify("rg foo src"), "grep");
         assert_eq!(classify("python -m pytest tests/"), "pytest");
-        assert_eq!(classify("ls -la"), "generic");
+        assert_eq!(classify("ls -la"), "ls-long");
+        assert_eq!(classify("ls src"), "generic");
+        assert_eq!(classify("sed -n '1,80p' src/main.rs"), "read");
+        assert_eq!(classify("echo ---; cat a.rs; echo ---; head -40 b.rs"), "read");
+        assert_eq!(classify("for f in a b; do cat $f; done"), "read");
+        assert_eq!(classify("cat log | grep error"), "read");
+        assert_eq!(classify("sed -n 1,9p a.py; python3 -c 'print(1)'"), "read");
+        assert_eq!(classify("python3 build.py"), "generic");
+        assert_eq!(classify("timeout 60 cargo test"), "cargo-test");
     }
 
     #[test]
