@@ -11,4 +11,4 @@ pub mod time;
 pub use fs::{dir_size, slash, write_atomic};
 pub use ids::new_id;
 pub use text::{est_tokens, human_bytes, human_tokens, truncate_chars};
-pub use time::{now_iso, now_millis};
+pub use time::{now_iso, now_millis, parse_since, short_utc};
