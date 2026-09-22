@@ -127,6 +127,12 @@ pub trait Harness {
         let _ = tool_input;
         None
     }
+    /// How a session starts under relay: through `relay <command>` for
+    /// harnesses relay can launch, or `None` when the hooks alone do it (an
+    /// editor such as Cursor).
+    fn launcher(&self) -> Option<String> {
+        Some(format!("relay {}", self.command()))
+    }
     /// Extra arguments to resume a native session by id.
     fn resume_args(&self, session_id: &str) -> Vec<String>;
     /// Session transcripts for the project at `root`, or for every

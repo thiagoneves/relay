@@ -10,5 +10,5 @@ relay status · ~
   Shared        .relay · <size> · committed with the repo
   Local         .git/relay · <size> · this worktree, never leaves the machine
 
-→ Start a session with `relay claude` or `relay codex`.
+→ Start a session with `relay claude`, `relay codex` or `relay gemini`, or open the project in Cursor.
 --- stderr

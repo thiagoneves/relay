@@ -63,7 +63,9 @@ fn print_remembered(ui: Ui, paths: &Paths) -> usize {
 fn next_step(failures: usize, sessions: usize, remembered: usize) -> &'static str {
     match (sessions, remembered) {
         _ if failures > 0 => "See what failed and when: `relay log`.",
-        (0, _) => "Start a session with `relay claude` or `relay codex`.",
+        (0, _) => {
+            "Start a session with `relay claude`, `relay codex` or `relay gemini`, or open the project in Cursor."
+        }
         (_, 0) => "Save what a new session should know: `relay remember rule \"<one line>\"`.",
         _ => "See what fills your context and how to trim it: `relay audit`.",
     }

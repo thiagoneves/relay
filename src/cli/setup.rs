@@ -24,18 +24,23 @@ pub fn run() -> anyhow::Result<i32> {
         let r = h.install(&inst.exe)?;
         let state = if r.changed { "hooks installed in" } else { "hooks already current in" };
         ui.ok(&format!("{} {state} {}", h.command(), tilde(&r.settings_path)));
-        found.push(h.command());
+        found.push(h);
     }
     ui.blank();
     if found.is_empty() {
-        ui.next("Install Claude Code or Codex, then run `relay setup` again.");
+        ui.next("Install Claude Code, Codex, Gemini CLI or Cursor, then run `relay setup` again.");
         return Ok(0);
     }
     if let PathChange::Added(f) | PathChange::InProfile(f) = &inst.path {
         ui.next(&format!("Open a new terminal (or run `source {}`) so `relay` is on your PATH.", tilde(f)));
     }
-    let commands: Vec<String> = found.iter().map(|c| format!("`relay {c}`")).collect();
-    ui.next(&format!("In any git repo, start a session with {}.", commands.join(" or ")));
+    let commands: Vec<String> = found.iter().filter_map(|h| h.launcher()).map(|c| format!("`{c}`")).collect();
+    if !commands.is_empty() {
+        ui.next(&format!("In any git repo, start a session with {}.", commands.join(" or ")));
+    }
+    if found.iter().any(|h| h.launcher().is_none()) {
+        ui.next("In Cursor, just open a project: its agent uses the hooks.");
+    }
     Ok(0)
 }
 

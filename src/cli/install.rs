@@ -19,7 +19,10 @@ pub fn install(id: HarnessId) -> anyhow::Result<i32> {
         ui.ok(&format!("{} hooks already current in {}", h.command(), tilde(&r.settings_path)));
     }
     if h.detect() {
-        ui.next(&format!("Start a session with `relay {}`.", h.command()));
+        match h.launcher() {
+            Some(cmd) => ui.next(&format!("Start a session with `{cmd}`.")),
+            None => ui.next(&format!("Open a project in {}; its agent uses the hooks from now on.", h.command())),
+        }
     } else {
         ui.warn(&format!("`{}` is not on your PATH; the hooks take effect once it is installed.", h.command()));
     }

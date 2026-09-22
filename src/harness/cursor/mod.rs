@@ -62,6 +62,11 @@ impl Harness for Cursor {
         hooks_json::uninstall(&target())
     }
 
+    /// An editor: its agent picks the hooks up, nothing to launch.
+    fn launcher(&self) -> Option<String> {
+        None
+    }
+
     /// The editor has no command to resume a conversation by id.
     fn resume_args(&self, _: &str) -> Vec<String> {
         Vec::new()
