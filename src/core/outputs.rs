@@ -8,6 +8,7 @@
 //! absorbed into the local tier by the next hook, which runs outside
 //! the sandbox. The spill is a transient buffer, not a third tier.
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -143,7 +144,7 @@ fn move_file(from: &Path, dir: &Path) -> bool {
     fs::read(from).is_ok_and(|b| write_atomic(&to, &b).is_ok()) && fs::remove_file(from).is_ok()
 }
 
-fn read_metas(dir: &Path, into: &mut Vec<OutputMeta>) {
+fn read_metas(dir: &Path, seen: &mut HashSet<String>, into: &mut Vec<OutputMeta>) {
     let Ok(rd) = fs::read_dir(dir) else { return };
     for e in rd.flatten() {
         let p = e.path();
@@ -152,7 +153,7 @@ fn read_metas(dir: &Path, into: &mut Vec<OutputMeta>) {
         }
         if let Ok(b) = fs::read(&p)
             && let Ok(m) = serde_json::from_slice::<OutputMeta>(&b)
-            && !into.iter().any(|x| x.id == m.id)
+            && seen.insert(m.id.clone())
         {
             into.push(m);
         }
@@ -160,11 +161,12 @@ fn read_metas(dir: &Path, into: &mut Vec<OutputMeta>) {
 }
 
 /// All stored metas (local + spill), oldest first. Cheap enough for
-/// status and handoff while the store is per worktree.
+/// status and handoff while the store is per worktree and pruned.
 pub fn list(paths: &Paths) -> Vec<OutputMeta> {
     let mut v: Vec<OutputMeta> = Vec::new();
-    read_metas(&paths.outputs(), &mut v);
-    read_metas(&spill_dir(paths), &mut v);
+    let mut seen = HashSet::new();
+    read_metas(&paths.outputs(), &mut seen, &mut v);
+    read_metas(&spill_dir(paths), &mut seen, &mut v);
     v.sort_by(|a, b| a.ts.cmp(&b.ts).then(a.id.cmp(&b.id)));
     v
 }
@@ -215,6 +217,17 @@ mod tests {
         assert!(!p.outputs().join("o_half.out").exists());
         assert!(spill.join("o_half.out").exists());
         assert_eq!(get(&p, "o_full").unwrap().1, "whole");
+        let _ = fs::remove_dir_all(&spill);
+        let _ = fs::remove_dir_all(&p.root);
+    }
+
+    #[test]
+    fn list_dedupes_an_id_present_in_both_tiers() {
+        let p = paths("dedupe");
+        let spill = spill_dir(&p);
+        write_pair(&p.outputs(), &meta("o_same"), "x").unwrap();
+        write_pair(&spill, &meta("o_same"), "x").unwrap();
+        assert_eq!(list(&p).len(), 1);
         let _ = fs::remove_dir_all(&spill);
         let _ = fs::remove_dir_all(&p.root);
     }
