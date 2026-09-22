@@ -21,7 +21,7 @@ pub struct Event {
     pub timeout: u32,
 }
 
-const fn ev(name: &'static str, matcher: Option<&'static str>, timeout: u32) -> Event {
+pub const fn ev(name: &'static str, matcher: Option<&'static str>, timeout: u32) -> Event {
     Event { name, matcher, timeout }
 }
 

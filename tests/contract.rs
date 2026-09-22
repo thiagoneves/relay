@@ -30,7 +30,7 @@ fn run_hook(repo: &Repo, args: &[&str]) -> std::process::Output {
 fn every_hook_command_ever_installed_still_parses() {
     let repo = Repo::new("contract-hooks");
     // `claude-code` is what the first releases wrote.
-    for harness in ["claude", "codex", "claude-code"] {
+    for harness in ["claude", "codex", "cursor", "claude-code"] {
         let out = run_hook(&repo, &["hook", harness]);
         assert!(out.status.success(), "relay hook {harness}: {}", String::from_utf8_lossy(&out.stderr));
     }

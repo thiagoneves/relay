@@ -43,6 +43,13 @@ impl Harness for Claude {
         true
     }
 
+    /// Cursor runs Claude Code's hooks too, in its own payload shape;
+    /// relay's Cursor hooks handle those events, so they are left alone
+    /// here rather than recorded twice.
+    fn normalize(&self, raw: serde_json::Value) -> Option<serde_json::Value> {
+        (!super::cursor::is_cursor_event(&raw)).then_some(raw)
+    }
+
     /// The Bash tool's `timeout` in milliseconds, 2 minutes when unset.
     fn command_timeout(&self, tool_input: &serde_json::Value) -> Option<std::time::Duration> {
         const DEFAULT_MS: u64 = 120_000;
