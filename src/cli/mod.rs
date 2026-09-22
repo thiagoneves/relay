@@ -1,6 +1,7 @@
 //! Command-line surface. Each command is a thin file that parses flags,
 //! calls into `core` or `harness`, and prints. No domain logic here.
 
+mod audit;
 mod bench;
 mod brief;
 mod get;
@@ -80,6 +81,21 @@ pub enum Commands {
         #[arg(long = "path")]
         paths: Vec<String>,
     },
+    /// Point out context waste: what fills every call and costs quota, from the harness transcripts
+    Audit {
+        /// Harness to audit (default: every harness with transcripts)
+        #[arg(long)]
+        harness: Option<String>,
+        /// Newest top-level sessions to read, per harness (their subagents are included)
+        #[arg(long, default_value_t = 20)]
+        sessions: usize,
+        /// Every project, not only this one
+        #[arg(long)]
+        all_projects: bool,
+        /// Machine-readable output
+        #[arg(long)]
+        json: bool,
+    },
     /// Measure compression: tokens saved and signal kept, per filter
     Bench {
         /// Fixture dir with <name>.cmd, <name>.out and optional <name>.keep
@@ -138,6 +154,9 @@ pub fn run() -> anyhow::Result<i32> {
         Commands::Get { id, meta } => get::run(&id, meta),
         Commands::Handoff { session, show } => handoff::run(session.as_deref(), show),
         Commands::Remember { kind, text, paths } => remember::run(kind, &text.join(" "), &paths),
+        Commands::Audit { harness, sessions, all_projects, json } => {
+            audit::run(harness.as_deref(), sessions, all_projects, json)
+        }
         Commands::Bench { corpus, history, history_dir, json, min_recall } => {
             let source = match (corpus, history) {
                 (Some(dir), _) => bench::Source::Corpus(dir),

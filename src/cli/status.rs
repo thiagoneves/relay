@@ -30,6 +30,7 @@ pub fn run() -> anyhow::Result<i32> {
             refetched * 100 / outs.len()
         );
     }
+    print_last_session_context(&paths);
     print_orientation(&paths);
     println!("Sessions      {sessions} recorded, {handoffs} handoffs");
     let items = memory::list(&paths);
@@ -72,4 +73,29 @@ fn print_orientation(paths: &Paths) {
             side(without, "without")
         );
     }
+}
+
+/// Exact numbers for the newest session, read from the harness transcript
+/// whose path the `SessionStart` hook recorded.
+fn print_last_session_context(paths: &Paths) {
+    let Some((session, _)) = spool::sessions(paths).into_iter().next() else { return };
+    let events = spool::read(paths, &session);
+    let Some(start) = events.iter().find(|e| e.event == "session_start") else { return };
+    let (Some(harness), Some(transcript)) = (start.data["harness"].as_str(), start.data["transcript_path"].as_str())
+    else {
+        return;
+    };
+    let Some(audit) =
+        crate::harness::by_name(harness).ok().and_then(|h| h.audit_session(std::path::Path::new(transcript)))
+    else {
+        return;
+    };
+    let u = audit.usage;
+    println!(
+        "Context       last session: {} calls, {} tokens sent ({}% cached), {} at the first call  [exact] · `relay audit` for waste",
+        u.calls,
+        human_tokens(u.context_sent),
+        u.cached * 100 / u.context_sent.max(1),
+        human_tokens(u.first_context)
+    );
 }
