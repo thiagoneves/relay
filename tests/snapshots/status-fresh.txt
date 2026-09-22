@@ -1,0 +1,13 @@
+exit: 0
+--- stdout
+relay status · ~
+
+  Compression   nothing compressed yet
+  Sessions      0 recorded · 0 handoffs
+  Remembered    0 rules · 0 gotchas · 0 decisions
+
+  Shared        .relay · <size> · committed with the repo
+  Local         .git/relay · <size> · this worktree, never leaves the machine
+
+→ Start a session with `relay claude` or `relay codex`.
+--- stderr

@@ -1,0 +1,5 @@
+exit: 0
+--- stdout
+✓ No sessions to audit for this project.
+→ Widen the scope with `--since 7d` or `--all-projects`, or start a session with `relay claude`.
+--- stderr

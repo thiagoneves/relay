@@ -1,0 +1,5 @@
+exit: 1
+--- stdout
+--- stderr
+✗ No stored output with id `<id>`.
+→ Copy the id from the `[relay … original: relay get <id>]` line; originals older than 30 days are deleted.

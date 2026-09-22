@@ -1,0 +1,5 @@
+exit: 0
+--- stdout
+✓ relay hooks removed from ~/settings.json
+  previous file saved as ~/settings.json.relay-bak-<time>
+--- stderr

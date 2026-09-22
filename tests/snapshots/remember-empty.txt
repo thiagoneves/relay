@@ -1,0 +1,5 @@
+exit: 1
+--- stdout
+--- stderr
+✗ Nothing to remember: the text is empty.
+→ Pass one line, e.g. `relay remember rule "Run cargo test before committing"`.

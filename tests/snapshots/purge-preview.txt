@@ -1,0 +1,9 @@
+exit: 0
+--- stdout
+relay purge · preview, nothing deleted
+
+  Deletes       ~/.git/relay (<size>): sessions, outputs, handoffs, log
+  Keeps         .relay, the committed rules and memory
+
+→ Run `relay purge --yes` to delete.
+--- stderr

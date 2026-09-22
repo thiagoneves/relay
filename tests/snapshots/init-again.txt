@@ -1,0 +1,6 @@
+exit: 0
+--- stdout
+✓ .relay/project.md already exists; left as is.
+✓ Local store at ~/.git/relay
+→ Commit .relay to share it with your team.
+--- stderr

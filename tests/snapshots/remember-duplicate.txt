@@ -1,0 +1,5 @@
+exit: 1
+--- stdout
+--- stderr
+✗ Already remembered in .relay/rules/run-cargo-test-before-committing.md.
+→ Edit that file to change it.

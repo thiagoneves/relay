@@ -1,0 +1,6 @@
+exit: 0
+--- stdout
+✓ Created .relay/project.md: the rules a new session reads first. Edit it freely.
+✓ Local store at ~/.git/relay
+→ Commit .relay to share it with your team.
+--- stderr

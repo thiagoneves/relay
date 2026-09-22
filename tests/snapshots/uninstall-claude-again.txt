@@ -1,0 +1,4 @@
+exit: 0
+--- stdout
+✓ No relay hooks in ~/settings.json; nothing to remove.
+--- stderr

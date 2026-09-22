@@ -1,0 +1,6 @@
+exit: 0
+--- stdout
+✓ claude hooks already current in ~/settings.json
+→ Start a session with `relay claude`.
+--- stderr
+! Add ~/.local/bin to your PATH to type `relay` directly.
