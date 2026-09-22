@@ -2,7 +2,7 @@
 //! at its stable path, on PATH, with hooks in every harness found.
 //! `relay claude|codex` and `relay install` do the same for one harness.
 
-use crate::core::machine::{self, Installed};
+use crate::core::machine::{self, Installed, Refresh};
 use crate::harness;
 use crate::helpers::profile::PathChange;
 
@@ -41,8 +41,12 @@ pub fn run() -> anyhow::Result<i32> {
 
 pub fn report(inst: &Installed) {
     let dir = machine::bin_dir();
-    if inst.updated {
-        eprintln!("relay: installed {}", inst.exe.display());
+    match &inst.refresh {
+        Refresh::Unchanged => {}
+        Refresh::Updated => eprintln!("relay: installed {}", inst.exe.display()),
+        Refresh::KeptOld(why) => {
+            eprintln!("relay: could not replace {} ({why}); hooks keep the previous build", inst.exe.display());
+        }
     }
     match &inst.path {
         PathChange::Present => {}
