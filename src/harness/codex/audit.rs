@@ -20,7 +20,7 @@ const BLOCKS: &[(&str, &str, Origin)] = &[
     ("<skills_instructions>", "Skills listing", Origin::Config),
     ("# AGENTS.md instructions", "Instruction file AGENTS.md", Origin::Config),
     ("<user_instructions>", "Instruction file AGENTS.md", Origin::Config),
-    ("<app-context>", "Apps context (connected apps and connectors)", Origin::Config),
+    ("<app-context>", "Codex desktop app context", Origin::Harness),
     ("# Computer and Browser Use", "Computer and browser use instructions", Origin::Config),
     (
         "The following is the Codex agent history",

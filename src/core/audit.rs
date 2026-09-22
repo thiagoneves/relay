@@ -300,8 +300,6 @@ fn findings(r: &Report) -> Vec<Finding> {
             "Disable MCP servers this project does not use (per-project config instead of global)".into()
         } else if c.source.starts_with("Auto-review") {
             "Every approval sends the conversation to a reviewer model. Use a permission profile that needs fewer approvals, or review manually".into()
-        } else if c.source.starts_with("Apps context") {
-            "Disconnect apps and connectors this project does not use".into()
         } else if c.source.starts_with("Instruction file ~/") && !c.source.contains("/Projects/") {
             "Loaded from your home directory, so it applies to every project below it. Keep only what applies everywhere".into()
         } else if c.source.starts_with("Agent types") {
