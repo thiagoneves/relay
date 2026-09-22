@@ -261,40 +261,51 @@ fn is_header_noise(l: &str) -> bool {
 pub fn log(text: &str) -> String {
     const HEADERS: &[&str] = &["Merge: ", "AuthorDate: ", "Commit: ", "CommitDate: "];
     let mut out = Vec::new();
-    let mut sha = String::new();
-    let mut author = String::new();
-    let mut date = String::new();
-    let mut subject: Option<String> = None;
-    let flush = |out: &mut Vec<String>, sha: &str, author: &str, date: &str, subject: &Option<String>| {
-        if !sha.is_empty() {
-            let s = subject.clone().unwrap_or_default();
-            let short: String = sha.chars().take(7).collect();
-            out.push(format!("{short} {date} {author} {s}").trim().to_string());
-        }
-    };
+    let mut commit = Commit::default();
     for l in text.lines() {
         if let Some(rest) = l.strip_prefix("commit ") {
-            flush(&mut out, &sha, &author, &date, &subject);
-            sha = rest.split_whitespace().next().unwrap_or("").to_string();
-            author.clear();
-            date.clear();
-            subject = None;
+            out.extend(commit.line());
+            commit = Commit { sha: rest.split_whitespace().next().unwrap_or("").to_string(), ..Commit::default() };
         } else if let Some(rest) = l.strip_prefix("Author: ") {
-            author = rest.split(" <").next().unwrap_or(rest).trim().to_string();
+            commit.author = rest.split(" <").next().unwrap_or(rest).trim().to_string();
         } else if let Some(rest) = l.strip_prefix("Date: ") {
-            // "Mon Sep 22 10:11:12 2026 -0300" -> "Sep 22"
-            let parts: Vec<&str> = rest.split_whitespace().collect();
-            date = if parts.len() >= 3 { format!("{} {}", parts[1], parts[2]) } else { rest.trim().to_string() };
+            commit.date = short_date(rest);
         } else if l.starts_with("    ") {
-            if subject.is_none() && !l.trim().is_empty() {
-                subject = Some(l.trim().to_string());
+            if commit.subject.is_none() && !l.trim().is_empty() {
+                commit.subject = Some(l.trim().to_string());
             }
         } else if !l.trim().is_empty() && !HEADERS.iter().any(|h| l.starts_with(h)) {
             return text.to_string();
         }
     }
-    flush(&mut out, &sha, &author, &date, &subject);
+    out.extend(commit.line());
     if out.is_empty() { text.to_string() } else { out.join("\n") }
+}
+
+#[derive(Default)]
+struct Commit {
+    sha: String,
+    author: String,
+    date: String,
+    subject: Option<String>,
+}
+
+impl Commit {
+    /// `abc1234 Sep 22 Ana Fix thing`; nothing before the first commit.
+    fn line(&self) -> Option<String> {
+        if self.sha.is_empty() {
+            return None;
+        }
+        let short: String = self.sha.chars().take(7).collect();
+        let subject = self.subject.as_deref().unwrap_or_default();
+        Some(format!("{short} {} {} {subject}", self.date, self.author).trim().to_string())
+    }
+}
+
+/// "Mon Sep 22 10:11:12 2026 -0300" -> "Sep 22".
+fn short_date(date: &str) -> String {
+    let parts: Vec<&str> = date.split_whitespace().collect();
+    if parts.len() >= 3 { format!("{} {}", parts[1], parts[2]) } else { date.trim().to_string() }
 }
 
 #[cfg(test)]
