@@ -69,6 +69,21 @@ fn list(b: &mut String, title: &str, items: impl Iterator<Item = String>) {
     b.push('\n');
 }
 
+const TERSE: &str = "\n## Answers\n\n<!-- relay terse -->\nAnswer in as few words as the point needs. Lead with the answer, then the \
+reason. Don't restate what the user said or what the code already shows.\n";
+
+/// Add the concise-answers section to project.md, once. Opt-in: it
+/// changes how the agent writes, which is the user's call.
+pub fn ensure_terse(paths: &Paths) -> Result<bool> {
+    let pf = paths.project_file();
+    let text = std::fs::read_to_string(&pf).unwrap_or_default();
+    if text.contains("<!-- relay terse -->") {
+        return Ok(false);
+    }
+    write_atomic(&pf, format!("{}\n{TERSE}", text.trim_end()).as_bytes())?;
+    Ok(true)
+}
+
 /// Create `.relay/` with a project.md. Never overwrites an existing one.
 pub fn ensure_shared(paths: &Paths) -> Result<bool> {
     std::fs::create_dir_all(&paths.shared)?;
