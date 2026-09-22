@@ -132,8 +132,8 @@ pub fn select(mut all: Vec<Transcript>, limit: usize) -> Vec<Transcript> {
 }
 
 /// The top-level session started last.
-pub fn newest(all: Vec<Transcript>) -> Option<Transcript> {
-    all.into_iter().filter(|t| t.parent.is_none()).max_by_key(|t| t.started)
+pub fn newest(all: &[Transcript]) -> Option<Transcript> {
+    all.iter().filter(|t| t.parent.is_none()).max_by_key(|t| t.started).cloned()
 }
 
 struct Block {
