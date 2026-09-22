@@ -24,12 +24,29 @@ pub fn run(cmd: &str, raw_only: bool, session: Option<&str>) -> Result<Outcome> 
     // gives a parallel session time to move it.
     let session =
         session.map(str::to_string).or_else(|| Paths::from_cwd().ok().and_then(|p| spool::current_session(&p)));
-    // Merge stderr into stdout in order, inside the user's shell, so
-    // compilers and test runners keep their natural interleaving.
-    let wrapped = format!("{{\n{cmd}\n}} 2>&1");
+    let (exit, raw) = run_shell(cmd)?;
+    if raw_only || raw.len() < limits::store::MIN_OUTPUT_BYTES {
+        return Ok(Outcome { exit, printed: compress::generic::strip_ansi(&raw) });
+    }
+    let c = compress::compress(cmd, &raw);
+    let tokens = Tokens { before: est_tokens(&raw), after: est_tokens(&c.text) };
+    let stored = store_original(cmd, exit, &raw, &c, tokens, session);
+    Ok(Outcome { exit, printed: view(c, &raw, stored.as_deref(), tokens) })
+}
+
+#[derive(Clone, Copy)]
+struct Tokens {
+    before: usize,
+    after: usize,
+}
+
+/// Exit code and combined output. stderr is merged into stdout inside the
+/// user's shell, so compilers and test runners keep their natural
+/// interleaving.
+fn run_shell(cmd: &str) -> Result<(i32, String)> {
     let mut command = if let Some(sh) = shell::posix_shell() {
         let mut c = Command::new(sh);
-        c.arg("-c").arg(&wrapped);
+        c.arg("-c").arg(format!("{{\n{cmd}\n}} 2>&1"));
         c
     } else {
         cmd_shell(cmd)
@@ -40,54 +57,56 @@ pub fn run(cmd: &str, raw_only: bool, session: Option<&str>) -> Result<Outcome> 
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()?;
-    let exit = out.status.code().unwrap_or(1);
     let mut raw = String::from_utf8_lossy(&out.stdout).into_owned();
     raw.push_str(&String::from_utf8_lossy(&out.stderr));
+    Ok((out.status.code().unwrap_or(1), raw))
+}
 
-    if raw_only || raw.len() < limits::store::MIN_OUTPUT_BYTES {
-        let text = compress::generic::strip_ansi(&raw);
-        return Ok(Outcome { exit, printed: text });
-    }
-
-    let c = compress::compress(cmd, &raw);
-    let tokens_in = est_tokens(&raw);
-    let tokens_out = est_tokens(&c.text);
-
-    // The original is stored even when the view is unchanged: handoffs
-    // cite it. A cut view is shown only if its original is retrievable.
-    let stored = Paths::from_cwd().ok().and_then(|paths| {
-        let meta = OutputMeta {
-            id: new_id("o"),
-            ts: now_iso(),
-            session,
-            cwd: std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default(),
-            cmd: cmd.to_string(),
-            exit,
-            filter: c.filter.to_string(),
-            bytes_in: raw.len(),
-            bytes_out: c.text.len(),
-            tokens_in,
-            tokens_out,
-        };
-        match outputs::store(&paths, &meta, &raw) {
-            Ok(()) => Some(meta.id),
-            Err(e) => {
-                crate::core::paths::log(&paths, &format!("store failed: {e}"));
-                None
-            }
+/// The original is stored even when the view is unchanged: handoffs cite
+/// it. Returns its id, or `None` when it could not be kept.
+fn store_original(
+    cmd: &str,
+    exit: i32,
+    raw: &str,
+    c: &compress::Compressed,
+    tokens: Tokens,
+    session: Option<String>,
+) -> Option<String> {
+    let paths = Paths::from_cwd().ok()?;
+    let meta = OutputMeta {
+        id: new_id("o"),
+        ts: now_iso(),
+        session,
+        cwd: std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default(),
+        cmd: cmd.to_string(),
+        exit,
+        filter: c.filter.to_string(),
+        bytes_in: raw.len(),
+        bytes_out: c.text.len(),
+        tokens_in: tokens.before,
+        tokens_out: tokens.after,
+    };
+    match outputs::store(&paths, &meta, raw) {
+        Ok(()) => Some(meta.id),
+        Err(e) => {
+            crate::core::paths::log(&paths, &format!("store failed: {e}"));
+            None
         }
-    });
-    let printed = match stored {
+    }
+}
+
+/// A cut view is shown only when its original is retrievable.
+fn view(c: compress::Compressed, raw: &str, stored: Option<&str>, tokens: Tokens) -> String {
+    match stored {
         Some(id) if c.shortened => format!(
             "{}\n[relay {}→{} tokens · original: relay get {id}]",
             c.text,
-            human_tokens(tokens_in),
-            human_tokens(tokens_out)
+            human_tokens(tokens.before),
+            human_tokens(tokens.after)
         ),
-        _ if c.shortened => compress::generic::strip_ansi(&raw),
+        _ if c.shortened => compress::generic::strip_ansi(raw),
         _ => c.text,
-    };
-    Ok(Outcome { exit, printed })
+    }
 }
 
 /// Windows without Git Bash: the harness ran it in cmd, so do we. The
