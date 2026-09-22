@@ -31,14 +31,17 @@ relay sits under the agent, in the hooks it already calls, and fixes all of it.
 a handoff from what actually happened: where the work stopped, what you asked,
 the decisions you made, the files touched, what was failing. The next session
 opens with a short brief built from it, whether it runs in Claude Code, Codex,
-Gemini CLI or Cursor. Your memory belongs to the repo, not to a vendor.
-Nothing to run, nothing to paste.
+Gemini CLI or Cursor, and it lists what else happened here in the last days:
+a session in another agent, a teammate's shared handoff. Your memory belongs
+to the repo, not to a vendor. Nothing to run, nothing to paste.
 
 **Memory that lives with the code.** `relay remember` saves a rule, a gotcha or
 a decision as one small file under `.relay/`. Commit it and every session, and
 every teammate, gets it; it shows up in a pull request like any other change.
-When the code it describes moves on, relay says so:
-_may be stale: src/pay.rs changed since_.
+`relay compile` lists what recent sessions decided and lets you keep it with
+one flag. When the code an item describes moves on, relay says so:
+_may be stale: src/pay.rs changed since_. An item can carry an expiry, for the
+gotcha that only holds until the next upgrade.
 
 **Long output, short context.** A 400-line script output reached the model as
 918 tokens instead of 3,248, with errors, failing tests and `file:line`
@@ -127,11 +130,14 @@ You close the session. relay writes the handoff for the next one.
 | Command | What it does |
 |---|---|
 | `relay claude` · `relay codex` · `relay gemini` | Start a session under relay |
-| `relay remember rule\|gotcha\|decision "<one line>"` | Save what the next session should know |
+| `relay remember rule\|gotcha\|decision "<one line>"` | Save what the next session should know (`--path`, `--until 30d`) |
+| `relay compile` | List what recent sessions decided; `--save 1,3` or `--save all` keeps it |
 | `relay get <id>` | The original output behind a compressed view |
 | `relay status` | What relay saved, what it stores, anything that failed |
 | `relay audit` | What fills your context, and how to trim it |
 | `relay brief` · `relay handoff --show` | What the next session receives |
+| `relay handoff --share` | Put a session's handoff in `.relay/` for the team, credentials masked |
+| `relay init --local` | Keep memory in `.git/relay/` for a repo you cannot commit to |
 | `relay log` | What failed in the hooks, newest last |
 | `relay purge` | Preview, then with `--yes` delete this worktree's local data |
 | `relay uninstall claude\|codex\|gemini\|cursor` | Remove the hooks |
@@ -140,7 +146,7 @@ You close the session. relay writes the handoff for the next one.
 
 | Place | What | Shared |
 |---|---|---|
-| `.relay/` | Project rules and remembered items | Yes, you commit it |
+| `.relay/` | Project rules, remembered items, handoffs you chose to share | Yes, you commit it |
 | `.git/relay/` | Session events, handoffs, originals, logs | No, per worktree |
 | `$TMPDIR/relay-<uid>/` | Originals from sandboxed runs, until the next hook moves them | No, owner-only |
 
@@ -189,6 +195,10 @@ relay only approves what it rewrites: reads and routine dev tasks. `rm -rf`,
 
 On Windows, `relay x` needs Git Bash; Codex, Gemini CLI and Cursor run commands
 in PowerShell there, so relay compresses nothing for them on Windows.
+
+## Roadmap
+
+What comes next, and what is not planned, is in [ROADMAP.md](ROADMAP.md).
 
 ## Contributing
 

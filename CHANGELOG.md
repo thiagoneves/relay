@@ -23,6 +23,16 @@ All notable changes to relay. Dates are UTC.
 
 ### Added
 
+- `relay compile`: the decisions of recent sessions that memory does not
+  hold yet, kept with `--save`.
+- `relay handoff --share` copies a session's handoff into `.relay/`,
+  credentials masked; the brief reads shared handoffs too.
+- `relay init --local` keeps memory in `.git/relay/` for a repo you cannot
+  commit to.
+- `relay remember --until 30d` gives an item an expiry.
+- The brief lists the other sessions of the last week, one line each.
+- `relay status` opens with one headline: tokens kept out of the context,
+  sessions handed off, items remembered.
 - Gemini CLI and Cursor adapters, each translating its own hook dialect, and
   `relay gemini`.
 - Remembered items whose paths changed since they were saved are marked "may
