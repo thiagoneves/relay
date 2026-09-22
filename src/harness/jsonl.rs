@@ -42,7 +42,6 @@ pub fn tail_lines(path: &Path, max_bytes: u64) -> Option<impl Iterator<Item = St
     Some(lines)
 }
 
-/// The first `n` lines of a file.
 pub fn head_lines(path: &Path, n: usize) -> Option<impl Iterator<Item = String>> {
     Some(BufReader::new(std::fs::File::open(path).ok()?).lines().map_while(Result::ok).take(n))
 }

@@ -181,7 +181,6 @@ pub fn for_session(paths: &Paths, session: &str) -> Vec<OutputMeta> {
     list(paths).into_iter().filter(|m| m.session.as_deref() == Some(session)).collect()
 }
 
-/// Remove the spill dir of this worktree, if any.
 pub fn purge_spill(paths: &Paths) -> Result<()> {
     let dir = spill_dir(paths);
     if dir.exists() {
