@@ -121,7 +121,7 @@ fn tally(items: impl Iterator<Item = String>) -> Vec<(String, usize)> {
             None => counts.push((item, 1)),
         }
     }
-    counts.sort_by(|a, b| b.1.cmp(&a.1));
+    counts.sort_by_key(|x| std::cmp::Reverse(x.1));
     counts
 }
 

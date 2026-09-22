@@ -80,7 +80,7 @@ pub fn sessions(paths: &Paths) -> Vec<(String, SystemTime)> {
             v.push((stem.to_string(), mtime));
         }
     }
-    v.sort_by(|a, b| b.1.cmp(&a.1));
+    v.sort_by_key(|x| std::cmp::Reverse(x.1));
     v
 }
 

@@ -63,7 +63,7 @@ pub fn build(paths: &Paths, session: &str, reason: &str, tail: Option<&Tail>) ->
 /// one, then the current branch over others.
 pub fn latest(paths: &Paths, branch: &str) -> Option<(PathBuf, String)> {
     let mut all = stored(paths);
-    all.sort_by(|a, b| b.0.cmp(&a.0));
+    all.sort_by_key(|x| std::cmp::Reverse(x.0));
     let bodies: Vec<&str> = all.iter().map(|(_, _, b)| b.as_str()).collect();
     pick(&bodies, branch).map(|i| (all[i].1.clone(), all[i].2.clone()))
 }
@@ -80,7 +80,7 @@ fn pick(bodies: &[&str], branch: &str) -> Option<usize> {
 }
 
 pub fn count(paths: &Paths) -> usize {
-    std::fs::read_dir(paths.handoffs()).map(Iterator::count).unwrap_or(0)
+    std::fs::read_dir(paths.handoffs()).map_or(0, Iterator::count)
 }
 
 fn stored(paths: &Paths) -> Vec<(SystemTime, PathBuf, String)> {

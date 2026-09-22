@@ -159,7 +159,7 @@ fn languages(files: &[String]) -> Vec<String> {
         *counts.entry(lang).or_default() += 1;
     }
     let mut v: Vec<(&str, usize)> = counts.into_iter().collect();
-    v.sort_by(|a, b| b.1.cmp(&a.1));
+    v.sort_by_key(|x| std::cmp::Reverse(x.1));
     v.into_iter().take(4).map(|(l, _)| l.to_string()).collect()
 }
 
