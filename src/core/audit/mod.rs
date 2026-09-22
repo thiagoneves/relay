@@ -254,13 +254,28 @@ impl Collector {
 }
 
 pub fn report(sessions: Vec<SessionAudit>, now: &Now) -> Report {
-    let mut r = Report::default();
-    let mut seen: HashMap<String, std::time::SystemTime> = HashMap::new();
-    let mut by: HashMap<String, Cost> = HashMap::new();
-    let mut listed = BTreeSet::new();
-    let mut used = BTreeSet::new();
-    let mut mcp = BTreeSet::new();
+    let mut m = Merge::default();
     for s in sessions {
+        m.session(s);
+    }
+    m.finish(now)
+}
+
+/// Sessions added up into one report.
+#[derive(Default)]
+struct Merge {
+    r: Report,
+    /// Newest session each source appeared in.
+    seen: HashMap<String, std::time::SystemTime>,
+    by: HashMap<String, Cost>,
+    listed: BTreeSet<String>,
+    used: BTreeSet<String>,
+    mcp: BTreeSet<String>,
+}
+
+impl Merge {
+    fn session(&mut self, s: SessionAudit) {
+        let r = &mut self.r;
         if s.subagent {
             r.subagents += 1;
             r.subagent_context_sent += s.usage.context_sent;
@@ -270,52 +285,68 @@ pub fn report(sessions: Vec<SessionAudit>, now: &Now) -> Report {
         r.calls += s.usage.calls;
         r.context_sent += s.usage.context_sent;
         r.cached += s.usage.cached;
-        for c in s.costs {
-            if let Some(t) = s.seen {
-                let e = seen.entry(c.source.clone()).or_insert(t);
-                *e = (*e).max(t);
-            }
-            let e = by.entry(c.source.clone()).or_insert_with(|| Cost {
-                source: c.source.clone(),
-                origin: c.origin,
-                ..Cost::default()
-            });
-            e.items = if c.source.starts_with("Tool results") || c.source.starts_with("Conversation") {
-                e.items + c.items
-            } else {
-                e.items.max(c.items)
-            };
-            e.tokens += c.tokens;
-            e.resent += c.resent;
-        }
-        for mut h in s.hook_errors {
-            h.last_seen = s.seen;
-            match r.hook_errors.iter_mut().find(|e| e.command == h.command) {
-                Some(e) => {
-                    e.count += h.count;
-                    e.last_seen = e.last_seen.max(h.last_seen);
-                }
-                None => r.hook_errors.push(h),
-            }
-        }
         r.skills_tracked |= s.skills_tracked;
-        listed.extend(s.skills_listed);
-        used.extend(s.skills_invoked);
-        mcp.extend(s.mcp_servers);
+        for c in &s.costs {
+            self.cost(c, s.seen);
+        }
+        for h in s.hook_errors {
+            self.hook_error(h, s.seen);
+        }
+        self.listed.extend(s.skills_listed);
+        self.used.extend(s.skills_invoked);
+        self.mcp.extend(s.mcp_servers);
     }
-    r.costs = by.into_values().collect();
-    r.costs.sort_by_key(|c| std::cmp::Reverse(c.resent));
-    r.skills_listed = listed.len();
-    if let Some(n) = &now.newest {
-        used.extend(n.skills_invoked.iter().cloned());
-        listed.clone_from(&n.skills_listed);
-        mcp.clone_from(&n.mcp_servers);
+
+    fn cost(&mut self, c: &Cost, seen: Option<std::time::SystemTime>) {
+        if let Some(t) = seen {
+            let e = self.seen.entry(c.source.clone()).or_insert(t);
+            *e = (*e).max(t);
+        }
+        let e = self.by.entry(c.source.clone()).or_insert_with(|| Cost {
+            source: c.source.clone(),
+            origin: c.origin,
+            ..Cost::default()
+        });
+        // Listings count entries, the same ones in every session; work
+        // sources count occurrences, which add up.
+        e.items = if c.source.starts_with("Tool results") || c.source.starts_with("Conversation") {
+            e.items + c.items
+        } else {
+            e.items.max(c.items)
+        };
+        e.tokens += c.tokens;
+        e.resent += c.resent;
     }
-    r.skills_unused = listed.into_iter().filter(|s| !used.contains(s)).collect();
-    r.skills_used = used.into_iter().collect();
-    r.mcp_servers = mcp.into_iter().collect();
-    r.findings = findings::findings(&r, &seen, now);
-    r
+
+    fn hook_error(&mut self, mut h: HookError, seen: Option<std::time::SystemTime>) {
+        h.last_seen = seen;
+        match self.r.hook_errors.iter_mut().find(|e| e.command == h.command) {
+            Some(e) => {
+                e.count += h.count;
+                e.last_seen = e.last_seen.max(h.last_seen);
+            }
+            None => self.r.hook_errors.push(h),
+        }
+    }
+
+    /// Skills and MCP servers come from the newest session when there is
+    /// one: it shows what today's config loads.
+    fn finish(mut self, now: &Now) -> Report {
+        let mut r = self.r;
+        r.costs = self.by.into_values().collect();
+        r.costs.sort_by_key(|c| std::cmp::Reverse(c.resent));
+        r.skills_listed = self.listed.len();
+        if let Some(n) = &now.newest {
+            self.used.extend(n.skills_invoked.iter().cloned());
+            self.listed.clone_from(&n.skills_listed);
+            self.mcp.clone_from(&n.mcp_servers);
+        }
+        r.skills_unused = self.listed.into_iter().filter(|s| !self.used.contains(s)).collect();
+        r.skills_used = self.used.into_iter().collect();
+        r.mcp_servers = self.mcp.into_iter().collect();
+        r.findings = findings::findings(&r, &self.seen, now);
+        r
+    }
 }
 
 #[cfg(test)]
