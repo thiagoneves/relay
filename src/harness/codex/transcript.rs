@@ -2,14 +2,13 @@
 //! only: which ones belong to a project, which are subagents, and how each
 //! turn ended.
 
-use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use serde_json::Value;
 
 use crate::core::audit::Transcript;
 use crate::core::handoff::Tail;
-use crate::harness::jsonl::{self, MAX_REPLIES};
+use crate::harness::jsonl::{self, MAX_REPLIES, TAIL_BYTES};
 
 /// Rollouts under `sessions/`, filtered by the `cwd` in their first line
 /// (`session_meta`). Subagent rollouts name their parent thread.
@@ -34,10 +33,7 @@ pub fn rollouts(dir: &Path, root: Option<&Path>) -> Vec<Transcript> {
 /// Codex closes every turn with a `task_complete` event that carries the
 /// agent's last message.
 pub fn tail(path: &Path) -> Option<Tail> {
-    let f = std::fs::File::open(path).ok()?;
-    let replies = BufReader::new(f)
-        .lines()
-        .map_while(Result::ok)
+    let replies = jsonl::tail_lines(path, TAIL_BYTES)?
         .filter(|l| l.contains("\"task_complete\""))
         .filter_map(|l| serde_json::from_str::<Value>(&l).ok())
         .filter_map(|v| v["payload"]["last_agent_message"].as_str().map(str::to_string))

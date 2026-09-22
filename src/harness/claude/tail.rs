@@ -3,19 +3,17 @@
 //! plan approved through `ExitPlanMode`. Runs in `SessionEnd`, so lines are
 //! filtered by substring before any JSON is parsed.
 
-use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use serde_json::Value;
 
 use crate::core::handoff::Tail;
-use crate::harness::jsonl::{MAX_REPLIES, last};
+use crate::harness::jsonl::{self, MAX_REPLIES, TAIL_BYTES, last};
 
 const MAX_DECISIONS: usize = 8;
 
 pub fn read(path: &Path) -> Option<Tail> {
-    let f = std::fs::File::open(path).ok()?;
-    Some(read_lines(BufReader::new(f).lines().map_while(Result::ok)))
+    Some(read_lines(jsonl::tail_lines(path, TAIL_BYTES)?))
 }
 
 fn read_lines(lines: impl Iterator<Item = String>) -> Tail {
