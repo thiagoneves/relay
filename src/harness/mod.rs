@@ -9,6 +9,7 @@
 pub mod claude;
 pub mod codex;
 pub mod cursor;
+pub mod gemini;
 pub mod jsonl;
 pub mod protocol;
 
@@ -33,6 +34,7 @@ pub enum HarnessId {
     Claude,
     Codex,
     Cursor,
+    Gemini,
 }
 
 impl HarnessId {
@@ -41,6 +43,7 @@ impl HarnessId {
             Self::Claude => "claude-code",
             Self::Codex => "codex",
             Self::Cursor => "cursor",
+            Self::Gemini => "gemini",
         }
     }
 
@@ -50,6 +53,7 @@ impl HarnessId {
             "claude" | "claude-code" => Some(Self::Claude),
             "codex" => Some(Self::Codex),
             "cursor" => Some(Self::Cursor),
+            "gemini" => Some(Self::Gemini),
             _ => None,
         }
     }
@@ -59,6 +63,7 @@ impl HarnessId {
             Self::Claude => Box::new(claude::Claude),
             Self::Codex => Box::new(codex::Codex),
             Self::Cursor => Box::new(cursor::Cursor),
+            Self::Gemini => Box::new(gemini::Gemini),
         }
     }
 }
@@ -174,7 +179,10 @@ pub trait Harness {
 
 /// Every adapter relay has, for commands that look across harnesses.
 pub fn all() -> Vec<Box<dyn Harness>> {
-    [HarnessId::Claude, HarnessId::Codex, HarnessId::Cursor].into_iter().map(HarnessId::adapter).collect()
+    [HarnessId::Claude, HarnessId::Codex, HarnessId::Gemini, HarnessId::Cursor]
+        .into_iter()
+        .map(HarnessId::adapter)
+        .collect()
 }
 
 /// The transcript tail of a recorded session, through the harness and

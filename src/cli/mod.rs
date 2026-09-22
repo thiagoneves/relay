@@ -167,6 +167,14 @@ pub enum Commands {
         last: bool,
         args: Vec<String>,
     },
+    /// Launch Gemini CLI supervised by relay (installs hooks, writes handoff on exit)
+    #[command(trailing_var_arg = true, allow_hyphen_values = true)]
+    Gemini {
+        /// Resume the last relay-supervised session on this branch
+        #[arg(long)]
+        last: bool,
+        args: Vec<String>,
+    },
 }
 
 /// Run the command line and return the process exit code. Errors are
@@ -216,5 +224,6 @@ fn run() -> anyhow::Result<i32> {
         Commands::Purge { yes } => purge::run(yes),
         Commands::Claude { last, args } => wrap::run(HarnessId::Claude, last, &args),
         Commands::Codex { last, args } => wrap::run(HarnessId::Codex, last, &args),
+        Commands::Gemini { last, args } => wrap::run(HarnessId::Gemini, last, &args),
     }
 }
