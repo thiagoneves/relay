@@ -7,62 +7,101 @@
 /// alignment runs, which BPE encodes cheaply, and would make whitespace
 /// cleanup look like savings.
 pub fn est_tokens(s: &str) -> usize {
-    const WORD: f64 = 1.387;
-    const LONG_WORD_EXTRA: f64 = 1.154;
-    const DIGIT_TRIPLE: f64 = 1.819;
-    const PUNCT: f64 = 0.361;
-    const SPACE_RUN: f64 = 0.886;
-    const NEWLINE: f64 = 0.535;
-    const NON_ASCII: f64 = 0.054;
-
-    let (mut words, mut long_extra, mut digit_triples, mut punct) = (0usize, 0usize, 0usize, 0usize);
-    let (mut space_runs, mut newlines, mut non_ascii) = (0usize, 0usize, 0usize);
-    let (mut word_len, mut digit_len, mut blank_len) = (0usize, 0usize, 0usize);
+    let mut f = Features::default();
+    // The sentinel closes a word, number or blank run at the end.
     for c in s.chars().chain(std::iter::once('\0')) {
+        f.push(c);
+    }
+    f.tokens()
+}
+
+/// The text features the token model is fitted on, counted in one pass.
+#[derive(Default)]
+struct Features {
+    words: usize,
+    long_word_extra: usize,
+    digit_triples: usize,
+    punct: usize,
+    space_runs: usize,
+    newlines: usize,
+    non_ascii: usize,
+    word_len: usize,
+    digit_len: usize,
+    blank_len: usize,
+}
+
+impl Features {
+    fn push(&mut self, c: char) {
+        self.run_of_letters(c);
+        self.run_of_digits(c);
+        self.run_of_blanks(c);
+        self.single(c);
+    }
+
+    fn run_of_letters(&mut self, c: char) {
         if c.is_ascii_alphabetic() {
-            word_len += 1;
-        } else if word_len > 0 {
-            words += 1;
-            long_extra += word_len.saturating_sub(8) / 6;
-            word_len = 0;
+            self.word_len += 1;
+        } else if self.word_len > 0 {
+            self.words += 1;
+            self.long_word_extra += self.word_len.saturating_sub(8) / 6;
+            self.word_len = 0;
         }
+    }
+
+    fn run_of_digits(&mut self, c: char) {
         if c.is_ascii_digit() {
-            digit_len += 1;
-        } else if digit_len > 0 {
-            digit_triples += digit_len.div_ceil(3);
-            digit_len = 0;
+            self.digit_len += 1;
+        } else if self.digit_len > 0 {
+            self.digit_triples += self.digit_len.div_ceil(3);
+            self.digit_len = 0;
         }
+    }
+
+    fn run_of_blanks(&mut self, c: char) {
         if c == ' ' || c == '\t' {
-            blank_len += 1;
+            self.blank_len += 1;
         } else {
-            space_runs += usize::from(blank_len >= 2);
-            blank_len = 0;
+            self.space_runs += usize::from(self.blank_len >= 2);
+            self.blank_len = 0;
         }
+    }
+
+    fn single(&mut self, c: char) {
         match c {
-            '\n' => newlines += 1,
+            '\n' => self.newlines += 1,
             '\0' => {}
             c if !c.is_ascii() => {
-                non_ascii += 1;
-                punct += usize::from(!c.is_alphanumeric() && !c.is_whitespace());
+                self.non_ascii += 1;
+                self.punct += usize::from(!c.is_alphanumeric() && !c.is_whitespace());
             }
-            c if c.is_ascii_punctuation() && c != '_' => punct += 1,
+            c if c.is_ascii_punctuation() && c != '_' => self.punct += 1,
             _ => {}
         }
     }
-    let est = WORD * words as f64
-        + LONG_WORD_EXTRA * long_extra as f64
-        + DIGIT_TRIPLE * digit_triples as f64
-        + PUNCT * punct as f64
-        + SPACE_RUN * space_runs as f64
-        + NEWLINE * newlines as f64
-        + NON_ASCII * non_ascii as f64;
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "non-negative and far below usize::MAX"
-    )]
-    let rounded = est.round() as usize;
-    rounded
+
+    fn tokens(&self) -> usize {
+        const WORD: f64 = 1.387;
+        const LONG_WORD_EXTRA: f64 = 1.154;
+        const DIGIT_TRIPLE: f64 = 1.819;
+        const PUNCT: f64 = 0.361;
+        const SPACE_RUN: f64 = 0.886;
+        const NEWLINE: f64 = 0.535;
+        const NON_ASCII: f64 = 0.054;
+        let est = WORD * self.words as f64
+            + LONG_WORD_EXTRA * self.long_word_extra as f64
+            + DIGIT_TRIPLE * self.digit_triples as f64
+            + PUNCT * self.punct as f64
+            + SPACE_RUN * self.space_runs as f64
+            + NEWLINE * self.newlines as f64
+            + NON_ASCII * self.non_ascii as f64;
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "non-negative and far below usize::MAX"
+        )]
+        let rounded = est.round() as usize;
+        rounded
+    }
 }
 
 /// Whole lines of `text` that fit in `max` bytes, and whether any were
