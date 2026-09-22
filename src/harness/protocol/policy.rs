@@ -193,6 +193,14 @@ const WRAP: &[&str] = &[
     "mvnw",
     "jq",
     "sed",
+    "composer",
+    "phpunit",
+    "mix",
+    "deno",
+    "dart",
+    "flutter",
+    "sbt",
+    "zig",
 ];
 
 /// Commands worth routing through `relay x`. Conservative on purpose:

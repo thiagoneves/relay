@@ -9,7 +9,8 @@ const SCRIPTS: &[&str] =
     &["test", "tests", "lint", "build", "check", "typecheck", "type-check", "tsc", "format:check", "fmt:check"];
 
 /// Tools run through npx, pnpm exec and the like.
-const TOOLS: &[&str] = &["tsc", "eslint", "vitest", "jest", "prettier", "mypy", "pytest", "ruff", "playwright"];
+const TOOLS: &[&str] =
+    &["tsc", "eslint", "vitest", "jest", "prettier", "mypy", "pytest", "ruff", "playwright", "phpunit", "credo"];
 
 pub fn is_dev_task(program: &str, args: &[&str]) -> bool {
     let sub = args.first().copied().unwrap_or("");
@@ -24,7 +25,13 @@ pub fn is_dev_task(program: &str, args: &[&str]) -> bool {
         "gradle" | "gradlew" | "mvn" | "mvnw" => {
             !args.is_empty() && args.iter().all(|a| a.starts_with('-') || JVM_GOALS.contains(a))
         }
-        "dotnet" | "swift" => matches!(sub, "test" | "build"),
+        "dotnet" | "swift" | "sbt" | "zig" => matches!(sub, "test" | "build" | "compile"),
+        "mix" => {
+            matches!(sub, "test" | "compile" | "credo" | "dialyzer") || (sub == "format" && args.contains(&"--check"))
+        }
+        "deno" => matches!(sub, "test" | "lint" | "check") || (sub == "fmt" && args.contains(&"--check")),
+        "dart" | "flutter" => matches!(sub, "test" | "analyze" | "build"),
+        "composer" => matches!(sub, "test" | "lint" | "validate"),
         _ => tool(program, args),
     }
 }
@@ -91,6 +98,14 @@ mod tests {
             "gradlew test",
             "mvn -q verify",
             "dotnet build",
+            "mix test",
+            "deno test",
+            "deno fmt --check",
+            "flutter analyze",
+            "composer test",
+            "phpunit tests",
+            "sbt compile",
+            "zig build",
         ] {
             assert!(dev(cmd), "{cmd}");
         }
@@ -114,6 +129,10 @@ mod tests {
             "jest -u",
             "mvn deploy",
             "go run main.go",
+            "mix phx.server",
+            "deno fmt",
+            "deno run app.ts",
+            "composer install",
             "python3 script.py",
         ] {
             assert!(!dev(cmd), "{cmd}");
