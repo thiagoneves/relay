@@ -25,7 +25,7 @@ pub struct Codex;
 const MARKER: &str = " hook codex";
 
 pub fn codex_home() -> PathBuf {
-    std::env::var_os("CODEX_HOME").map_or_else(|| home().join(".codex"), PathBuf::from)
+    super::home_from_env("CODEX_HOME", || home().join(".codex"))
 }
 
 fn target() -> hooks_json::Target {

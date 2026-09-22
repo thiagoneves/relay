@@ -22,7 +22,7 @@ pub struct Claude;
 const MARKER: &str = " hook claude";
 
 fn config_dir() -> PathBuf {
-    std::env::var_os("CLAUDE_CONFIG_DIR").map_or_else(|| home().join(".claude"), PathBuf::from)
+    super::home_from_env("CLAUDE_CONFIG_DIR", || home().join(".claude"))
 }
 
 fn target() -> hooks_json::Target {

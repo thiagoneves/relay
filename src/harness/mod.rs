@@ -11,7 +11,7 @@ pub mod codex;
 pub mod protocol;
 
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
 use serde_json::Value;
@@ -42,8 +42,6 @@ pub trait Harness {
     fn handle_hook(&self) -> Result<()>;
     /// Extra arguments to resume a native session by id.
     fn resume_args(&self, session_id: &str) -> Vec<String>;
-    /// Shell calls from the harness's own transcripts, for benchmarking
-    /// against real history. `dir` overrides the default location.
     /// Session transcripts for the project at `root`, or for every
     /// project when `None`, subagents included.
     fn transcripts(&self, root: Option<&Path>) -> Vec<Transcript> {
@@ -78,10 +76,23 @@ pub trait Harness {
         let _ = f;
         None
     }
+    /// Shell calls from the harness's own transcripts, for benchmarking
+    /// against real history. `dir` overrides the default location.
     fn shell_history(&self, dir: Option<&Path>) -> Result<Vec<ShellCall>> {
         let _ = dir;
         bail!("reading {} history is not supported yet", self.id())
     }
+}
+
+/// A harness home from its environment variable, else `default`. An
+/// empty value counts as unset: `PathBuf::from("")` would put the
+/// harness config in whatever directory relay runs from.
+pub fn home_from_env(var: &str, default: impl FnOnce() -> PathBuf) -> PathBuf {
+    dir_or(std::env::var_os(var), default)
+}
+
+fn dir_or(value: Option<std::ffi::OsString>, default: impl FnOnce() -> PathBuf) -> PathBuf {
+    value.filter(|v| !v.is_empty()).map_or_else(default, PathBuf::from)
 }
 
 /// Every adapter relay has, for commands that look across harnesses.
@@ -125,5 +136,18 @@ pub fn run_fail_open(name: &str, f: impl FnOnce() -> Result<()>) {
         && let Ok(p) = Paths::from_cwd()
     {
         crate::core::paths::log(&p, &format!("hook {name} error: {e:#}"));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_home_variable_falls_back_to_the_default() {
+        let default = || PathBuf::from("/home/u/.claude");
+        assert_eq!(dir_or(Some("".into()), default), PathBuf::from("/home/u/.claude"));
+        assert_eq!(dir_or(None, default), PathBuf::from("/home/u/.claude"));
+        assert_eq!(dir_or(Some("/cfg".into()), default), PathBuf::from("/cfg"));
     }
 }
