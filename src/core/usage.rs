@@ -16,12 +16,17 @@ pub fn is_edit(tool: &str) -> bool {
     EDIT_TOOLS.contains(&tool)
 }
 
+/// What the model is charged for one image, at most: Claude resizes
+/// larger ones down to about 1.15 megapixels, ~1,600 tokens.
+pub const IMAGE_TOKENS: usize = 1600;
+
 /// Tokens of every string inside a tool response: the text the agent got.
+/// An image arrives as base64, which the model sees as an image, not text.
 pub fn response_tokens(v: &Value) -> usize {
     match v {
         Value::String(s) => est_tokens(s),
         Value::Array(a) => a.iter().map(response_tokens).sum(),
-        Value::Object(o) => o.values().map(response_tokens).sum(),
+        Value::Object(o) => o.iter().map(|(k, v)| if k == "base64" { IMAGE_TOKENS } else { response_tokens(v) }).sum(),
         _ => 0,
     }
 }
@@ -119,6 +124,12 @@ mod tests {
     fn counts_every_string_in_a_response() {
         let r = json!({ "file": { "content": "hello world", "numLines": 1 }, "extra": ["hello world"] });
         assert_eq!(response_tokens(&r), 2 * est_tokens("hello world"));
+    }
+
+    #[test]
+    fn an_image_costs_an_image_not_its_base64() {
+        let r = json!({ "type": "image", "file": { "base64": "iVBORw0KGgo".repeat(40_000), "type": "image/png" } });
+        assert_eq!(response_tokens(&r), IMAGE_TOKENS + est_tokens("image") + est_tokens("image/png"));
     }
 
     #[test]
