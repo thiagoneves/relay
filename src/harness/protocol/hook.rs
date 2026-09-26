@@ -4,13 +4,14 @@
 use anyhow::Result;
 use serde_json::Value;
 
+use super::files;
 use super::policy;
 use super::record::Recorder;
 use super::reply::Reply;
 use super::verify;
 use crate::core::paths::Paths;
 use crate::core::spool;
-use crate::core::{brief, claims, condense, handoff, log, outputs, read_guard, timings, usage};
+use crate::core::{brief, claims, condense, handoff, log, outputs, reads, timings, usage};
 use crate::harness::Harness;
 use crate::helpers::env::{self, Var};
 use crate::helpers::{est_tokens, shell, slash};
@@ -51,6 +52,7 @@ fn dispatch(event: &str, rec: &Recorder, input: &Value, harness: &dyn Harness) -
         "SubagentStop" => nothing(rec.subagent_stop(input)),
         "SessionEnd" => nothing(session_end(rec, input, harness)),
         "PreCompact" => {
+            reads::forget(rec.paths, rec.session);
             rec.compact(input)?;
             nothing(build_handoff(rec, input, harness, "compact"))
         }
@@ -61,6 +63,8 @@ fn dispatch(event: &str, rec: &Recorder, input: &Value, harness: &dyn Harness) -
 
 fn session_start(rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result<Reply> {
     spool::set_current_session(rec.paths, rec.session);
+    // A new, cleared, compacted or resumed context: earlier reads may be gone.
+    reads::forget(rec.paths, rec.session);
     let text = brief::build_for(rec.paths, Some(rec.session));
     rec.session_start(input, harness.id(), est_tokens(&text))?;
     Ok(if text.trim().is_empty() { Reply::Nothing } else { Reply::Context(text) })
@@ -81,6 +85,8 @@ fn session_end(rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result<(
     // After the handoff, which lists this session's outputs; and even when
     // it failed, so storage stays bounded.
     outputs::prune(rec.paths, KEEP_OUTPUTS);
+    reads::forget(rec.paths, rec.session);
+    reads::prune(rec.paths);
     check_replacements(rec, input, harness);
     built
 }
@@ -123,6 +129,10 @@ fn build_handoff(rec: &Recorder, input: &Value, harness: &dyn Harness, reason: &
 fn post_tool_use(rec: &Recorder, input: &Value, replaces_output: bool) -> Result<Reply> {
     if let Some(file) = edited_file(rec.paths, input) {
         claims::edited(rec.paths, rec.session, &file)?;
+    }
+    if input["tool_name"].as_str() == Some("Read") && replaces_output {
+        rec.tool_use(input)?;
+        return Ok(files::reread(rec, input));
     }
     if input["tool_name"].as_str() != Some("Bash") {
         return rec.tool_use(input).map(|()| Reply::Nothing);
@@ -173,7 +183,7 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness: &dyn Harne
         return claims::warn_once(paths, session, &file).map_or(Reply::Nothing, Reply::Warn);
     }
     if input["tool_name"].as_str() == Some("Read") {
-        return guard_read(&Recorder { paths, session }, input);
+        return files::guard_read(&Recorder { paths, session }, input);
     }
     let cmd = input["tool_input"]["command"].as_str().unwrap_or("").trim();
     if input["tool_name"].as_str() != Some("Bash") || cmd.is_empty() {
@@ -193,20 +203,6 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness: &dyn Harne
         timeout: harness.command_timeout(&input["tool_input"]),
     };
     policy::rewrite(&call, relay_invocation).map_or(Reply::Nothing, Reply::Rewrite)
-}
-
-/// A whole-file read of a big text file gets the file's outline instead.
-fn guard_read(rec: &Recorder, input: &Value) -> Reply {
-    let tool_input = &input["tool_input"];
-    // Gemini CLI named it `absolute_path` before `file_path`.
-    let Some(file) = tool_input["file_path"].as_str().or(tool_input["absolute_path"].as_str()) else {
-        return Reply::Nothing;
-    };
-    let path = std::path::Path::new(input["cwd"].as_str().unwrap_or("")).join(file);
-    let ranged = !tool_input["offset"].is_null() || !tool_input["limit"].is_null();
-    let Some(g) = read_guard::check(&path, &rec.paths.rel_file(&slash(&path)), ranged) else { return Reply::Nothing };
-    let _ = rec.guarded_read(input, &g);
-    Reply::Deny(g.message)
 }
 
 /// Use the bare name when `relay` on PATH is this very binary; otherwise

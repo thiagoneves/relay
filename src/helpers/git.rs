@@ -63,6 +63,23 @@ pub fn dirty_files(root: &Path, max: usize) -> Vec<String> {
     files
 }
 
+/// A unified diff of two files outside any repo, hunks only, with
+/// `context` lines around each change; empty when they are equal.
+pub fn diff_files(old: &Path, new: &Path, context: usize) -> Option<String> {
+    let out = Command::new("git")
+        .args(["diff", "--no-index", "--no-color", "--no-ext-diff", &format!("-U{context}"), "--"])
+        .arg(old)
+        .arg(new)
+        .output()
+        .ok()?;
+    // 1 means the files differ; anything else is a failure.
+    if !matches!(out.status.code(), Some(0 | 1)) {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    Some(text.find("\n@@").map_or_else(String::new, |i| text[i + 1..].to_string()))
+}
+
 /// Files changed by commits since `sha`. Uncommitted edits do not count:
 /// they may have been there when the item was saved. `None` when git does
 /// not know the commit (rebased away, or a shallow clone).

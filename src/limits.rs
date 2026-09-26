@@ -136,6 +136,12 @@ pub mod reads {
     pub const OUTLINE_MAX_BYTES: u64 = 16 * 1024 * 1024;
     /// Outline lines shown in place of the file.
     pub const OUTLINE_ENTRIES: usize = 80;
+    /// Longer reads are not compared with earlier ones.
+    pub const DEDUP_MAX_BYTES: usize = 2 * 1024 * 1024;
+    /// Context lines around each change in a re-read's diff.
+    pub const DIFF_CONTEXT: usize = 3;
+    /// Stored read texts untouched this long are deleted.
+    pub const KEEP_BLOBS: std::time::Duration = std::time::Duration::from_secs(2 * 24 * 3600);
 }
 
 /// `relay brief <query>`: one page for one task.

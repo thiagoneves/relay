@@ -3,6 +3,7 @@
 //! that speak it only need to say where their file lives.
 
 mod dev_tasks;
+mod files;
 pub mod hook;
 pub mod hooks_json;
 mod permission;
