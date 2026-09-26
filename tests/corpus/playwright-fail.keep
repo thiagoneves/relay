@@ -1,0 +1,5 @@
+✘  24 [chromium] › e2e/login.spec.ts:12:3 › rejects a bad password (5.0s)
+Error: expect(locator).toHaveText(expected)
+at /app/e2e/login.spec.ts:12:43
+1 failed
+23 passed (41.3s)

@@ -135,6 +135,10 @@ mod tests {
         assert_eq!(classify("npm test"), JsTest);
         assert_eq!(classify("pnpm run test:unit"), JsTest);
         assert_eq!(classify("pnpm exec vitest run"), JsTest);
+        assert_eq!(classify("pnpm exec playwright test e2e/login.spec.ts"), Playwright);
+        assert_eq!(classify("npx playwright test"), Playwright);
+        assert_eq!(classify("npx tsc --noEmit"), Tsc);
+        assert_eq!(classify("tsc -p tsconfig.json"), Tsc);
         assert_eq!(classify("pnpm run build"), Generic);
         assert_eq!(classify("rg foo src"), Grep);
         assert_eq!(classify("python -m pytest tests/"), Pytest);

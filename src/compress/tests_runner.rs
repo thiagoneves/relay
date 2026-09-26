@@ -18,6 +18,9 @@ pub fn filter_for(s: &Simple) -> Option<Filter> {
         ("rspec" | "phpunit", _) | ("mix" | "composer", "test") | ("rake", "test" | "spec") => Filter::DotTest,
         ("bundle", "exec") if matches!(t2, "rspec" | "rake") => Filter::DotTest,
         ("dart" | "flutter", "test") => Filter::DartTest,
+        ("playwright", "test") => Filter::Playwright,
+        ("npx" | "bunx" | "pnpm" | "yarn", "playwright") if t2 == "test" => Filter::Playwright,
+        ("tsc" | "vue-tsc", _) | ("npx" | "bunx" | "pnpm" | "yarn", "tsc" | "vue-tsc") => Filter::Tsc,
         _ => return None,
     })
 }

@@ -1,0 +1,51 @@
+
+Running 24 tests using 4 workers
+
+  ✓  1 [chromium] › e2e/practice/lesson-1.spec.ts:11:5 › learner hears the phrase twice before speaking (2.1s)
+  ✓  2 [chromium] › e2e/practice/lesson-2.spec.ts:12:5 › learner hears the phrase twice before speaking (3.2s)
+  ✓  3 [chromium] › e2e/practice/lesson-3.spec.ts:13:5 › learner hears the phrase twice before speaking (1.3s)
+  ✓  4 [chromium] › e2e/practice/lesson-4.spec.ts:14:5 › learner hears the phrase twice before speaking (2.4s)
+  ✓  5 [chromium] › e2e/practice/lesson-5.spec.ts:15:5 › learner hears the phrase twice before speaking (3.5s)
+  ✓  6 [chromium] › e2e/practice/lesson-0.spec.ts:16:5 › learner hears the phrase twice before speaking (1.6s)
+  ✓  7 [chromium] › e2e/practice/lesson-1.spec.ts:17:5 › learner hears the phrase twice before speaking (2.7s)
+  ✓  8 [chromium] › e2e/practice/lesson-2.spec.ts:18:5 › learner hears the phrase twice before speaking (3.8s)
+  ✓  9 [chromium] › e2e/practice/lesson-3.spec.ts:19:5 › learner hears the phrase twice before speaking (1.9s)
+  ✓  10 [chromium] › e2e/practice/lesson-4.spec.ts:20:5 › learner hears the phrase twice before speaking (2.10s)
+  ✓  11 [chromium] › e2e/practice/lesson-5.spec.ts:21:5 › learner hears the phrase twice before speaking (3.11s)
+  ✓  12 [chromium] › e2e/practice/lesson-0.spec.ts:22:5 › learner hears the phrase twice before speaking (1.12s)
+  ✓  13 [chromium] › e2e/practice/lesson-1.spec.ts:23:5 › learner hears the phrase twice before speaking (2.13s)
+  ✓  14 [chromium] › e2e/practice/lesson-2.spec.ts:24:5 › learner hears the phrase twice before speaking (3.14s)
+  ✓  15 [chromium] › e2e/practice/lesson-3.spec.ts:25:5 › learner hears the phrase twice before speaking (1.15s)
+  ✓  16 [chromium] › e2e/practice/lesson-4.spec.ts:26:5 › learner hears the phrase twice before speaking (2.16s)
+  ✓  17 [chromium] › e2e/practice/lesson-5.spec.ts:27:5 › learner hears the phrase twice before speaking (3.17s)
+  ✓  18 [chromium] › e2e/practice/lesson-0.spec.ts:28:5 › learner hears the phrase twice before speaking (1.18s)
+  ✓  19 [chromium] › e2e/practice/lesson-1.spec.ts:29:5 › learner hears the phrase twice before speaking (2.19s)
+  ✓  20 [chromium] › e2e/practice/lesson-2.spec.ts:30:5 › learner hears the phrase twice before speaking (3.20s)
+  ✓  21 [chromium] › e2e/practice/lesson-3.spec.ts:31:5 › learner hears the phrase twice before speaking (1.21s)
+  ✓  22 [chromium] › e2e/practice/lesson-4.spec.ts:32:5 › learner hears the phrase twice before speaking (2.22s)
+  ✓  23 [chromium] › e2e/practice/lesson-5.spec.ts:33:5 › learner hears the phrase twice before speaking (3.23s)
+  ✘  24 [chromium] › e2e/login.spec.ts:12:3 › rejects a bad password (5.0s)
+
+
+  1) [chromium] › e2e/login.spec.ts:12:3 › rejects a bad password ─────────────────────────
+
+    Error: expect(locator).toHaveText(expected)
+
+    Locator: getByRole('alert')
+    Expected string: "Wrong password"
+    Received string: ""
+    Call log:
+      - expect.toHaveText with timeout 5000ms
+      - waiting for getByRole('alert')
+
+      10 |   await page.fill('#password', 'nope');
+      11 |   await page.click('text=Sign in');
+    > 12 |   await expect(page.getByRole('alert')).toHaveText('Wrong password');
+         |                                         ^
+      13 | });
+
+        at /app/e2e/login.spec.ts:12:43
+
+  1 failed
+    [chromium] › e2e/login.spec.ts:12:3 › rejects a bad password ──────────────────────────
+  23 passed (41.3s)

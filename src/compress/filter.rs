@@ -1,7 +1,7 @@
 //! The structured filters a command's output can go through, and what
 //! each one does before the generic pipeline.
 
-use super::{generic, git, listing, tests_runner};
+use super::{generic, git, green, js_tools, listing, tests_runner};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Filter {
@@ -15,6 +15,9 @@ pub enum Filter {
     /// `RSpec`, `ExUnit`, `PHPUnit`, Minitest.
     DotTest,
     DartTest,
+    Playwright,
+    /// The TypeScript compiler.
+    Tsc,
     /// Search results: grouped by file, never cut.
     Grep,
     LsLong,
@@ -35,6 +38,8 @@ impl Filter {
             Self::JsTest => "js-test",
             Self::DotTest => "dot-test",
             Self::DartTest => "dart-test",
+            Self::Playwright => "playwright",
+            Self::Tsc => "tsc",
             Self::Grep => "grep",
             Self::LsLong => "ls-long",
             Self::Read => "read",
@@ -59,10 +64,12 @@ impl Filter {
             Self::GitStatus => git::status(&clean),
             Self::GitDiff => git::diff(&clean),
             Self::GitLog => git::log(&clean),
-            Self::CargoTest => tests_runner::cargo_test(&clean),
+            Self::CargoTest => green::cargo(&clean).unwrap_or_else(|| tests_runner::cargo_test(&clean)),
             Self::GoTest => tests_runner::go_test(&clean),
             Self::Pytest => tests_runner::pytest(&clean),
-            Self::JsTest => tests_runner::js_test(&clean),
+            Self::JsTest => green::js(&clean).unwrap_or_else(|| tests_runner::js_test(&clean)),
+            Self::Playwright => green::playwright(&clean).unwrap_or_else(|| js_tools::playwright(&clean)),
+            Self::Tsc => js_tools::tsc(&clean),
             Self::DotTest => tests_runner::dot_test(&clean),
             Self::DartTest => tests_runner::dart_test(&clean),
             Self::LsLong => listing::ls_long(&clean),

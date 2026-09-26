@@ -9,6 +9,8 @@ pub mod fidelity;
 mod filter;
 pub mod generic;
 mod git;
+mod green;
+mod js_tools;
 mod listing;
 mod tests_runner;
 

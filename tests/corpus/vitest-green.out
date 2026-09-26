@@ -1,0 +1,48 @@
+
+ RUN  v2.1.8 /app/packages/contracts
+
+ ✓ test/pedagogy/policy-0.test.ts (3 tests) 4ms
+ ✓ test/pedagogy/policy-1.test.ts (4 tests) 5ms
+ ✓ test/pedagogy/policy-2.test.ts (5 tests) 6ms
+ ✓ test/pedagogy/policy-3.test.ts (6 tests) 7ms
+ ✓ test/pedagogy/policy-4.test.ts (7 tests) 8ms
+ ✓ test/pedagogy/policy-5.test.ts (3 tests) 9ms
+ ✓ test/pedagogy/policy-6.test.ts (4 tests) 10ms
+ ✓ test/pedagogy/policy-7.test.ts (5 tests) 11ms
+ ✓ test/pedagogy/policy-8.test.ts (6 tests) 12ms
+ ✓ test/pedagogy/policy-9.test.ts (7 tests) 13ms
+ ✓ test/pedagogy/policy-10.test.ts (3 tests) 14ms
+ ✓ test/pedagogy/policy-11.test.ts (4 tests) 15ms
+ ✓ test/pedagogy/policy-12.test.ts (5 tests) 16ms
+ ✓ test/pedagogy/policy-13.test.ts (6 tests) 17ms
+ ✓ test/pedagogy/policy-14.test.ts (7 tests) 18ms
+ ✓ test/pedagogy/policy-15.test.ts (3 tests) 19ms
+ ✓ test/pedagogy/policy-16.test.ts (4 tests) 20ms
+ ✓ test/pedagogy/policy-17.test.ts (5 tests) 21ms
+ ✓ test/pedagogy/policy-18.test.ts (6 tests) 22ms
+ ✓ test/pedagogy/policy-19.test.ts (7 tests) 23ms
+ ✓ test/pedagogy/policy-20.test.ts (3 tests) 24ms
+ ✓ test/pedagogy/policy-21.test.ts (4 tests) 25ms
+ ✓ test/pedagogy/policy-22.test.ts (5 tests) 26ms
+ ✓ test/pedagogy/policy-23.test.ts (6 tests) 27ms
+ ✓ test/pedagogy/policy-24.test.ts (7 tests) 28ms
+ ✓ test/pedagogy/policy-25.test.ts (3 tests) 29ms
+ ✓ test/pedagogy/policy-26.test.ts (4 tests) 30ms
+ ✓ test/pedagogy/policy-27.test.ts (5 tests) 31ms
+ ✓ test/pedagogy/policy-28.test.ts (6 tests) 32ms
+ ✓ test/pedagogy/policy-29.test.ts (7 tests) 33ms
+ ✓ test/pedagogy/policy-30.test.ts (3 tests) 34ms
+ ✓ test/pedagogy/policy-31.test.ts (4 tests) 35ms
+ ✓ test/pedagogy/policy-32.test.ts (5 tests) 36ms
+ ✓ test/pedagogy/policy-33.test.ts (6 tests) 37ms
+ ✓ test/pedagogy/policy-34.test.ts (7 tests) 38ms
+ ✓ test/pedagogy/policy-35.test.ts (3 tests) 39ms
+ ✓ test/pedagogy/policy-36.test.ts (4 tests) 40ms
+ ✓ test/pedagogy/policy-37.test.ts (5 tests) 41ms
+ ✓ test/pedagogy/policy-38.test.ts (6 tests) 42ms
+ ✓ test/pedagogy/policy-39.test.ts (7 tests) 43ms
+
+ Test Files  40 passed (40)
+      Tests  200 passed (200)
+   Start at  10:12:01
+   Duration  3.41s (transform 1.2s, setup 0ms, collect 2.1s, tests 0.9s)

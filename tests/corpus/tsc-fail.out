@@ -1,0 +1,14 @@
+> @speakly/api@0.1.0 typecheck /app/apps/api
+> tsc --noEmit
+
+src/modules/diagnostics/services/production-evaluation.service.ts(42,7): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/modules/writing/services/writing-coach.service.ts(118,23): error TS2345: Argument of type 'DiagnosticCorrection[]' is not assignable to parameter of type 'Correction[]'.
+  Property 'severity' is missing in type 'DiagnosticCorrection' but required in type 'Correction'.
+
+Found 2 errors in 2 files.
+
+Errors  Files
+     1  src/modules/diagnostics/services/production-evaluation.service.ts:42
+     1  src/modules/writing/services/writing-coach.service.ts:118
+ ELIFECYCLE  Command failed with exit code 2.

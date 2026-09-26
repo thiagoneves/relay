@@ -46,8 +46,15 @@ impl Fidelity {
     }
 }
 
+/// A count of zero (`0 failed`, `0 errors`) reports that nothing went
+/// wrong: it is not what makes a line signal.
+static ZERO: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\b0 (failed|failures?|errors?|warnings?)\b").expect("valid regex"));
+
+/// A line that starts with a runner's pass mark is about a test that
+/// passed, whatever its name or location says.
 pub fn is_signal(line: &str) -> bool {
-    SIGNAL.is_match(line)
+    !line.trim_start().starts_with(['✓', '✔', '√']) && SIGNAL.is_match(&ZERO.replace_all(line, ""))
 }
 
 pub fn signal_lines(raw: &str) -> Vec<String> {
@@ -164,6 +171,15 @@ mod tests {
         let started = std::time::Instant::now();
         assert_eq!(measure(&raw, &grouped).kept, 20_000);
         assert!(started.elapsed().as_secs() < 2, "{:?}", started.elapsed());
+    }
+
+    #[test]
+    fn zero_counts_and_passing_tests_are_not_signal() {
+        assert!(!is_signal("test result: ok. 452 passed; 0 failed; 0 ignored; finished in 0.17s"));
+        assert!(is_signal("test result: FAILED. 450 passed; 2 failed"));
+        assert!(is_signal("Found 0 errors, 1 failure"), "a real failure beside a zero");
+        assert!(!is_signal("  ✓  3 [chromium] › e2e/login.spec.ts:12:5 › signs in (1.2s)"));
+        assert!(is_signal("  ✘  4 [chromium] › e2e/login.spec.ts:30:5 › rejects a bad password (5.0s)"));
     }
 
     #[test]
