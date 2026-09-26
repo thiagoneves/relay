@@ -47,6 +47,8 @@ fn dispatch(event: &str, rec: &Recorder, input: &Value, harness: &dyn Harness) -
         "PostToolUse" => post_tool_use(rec, input, harness.replaces_output()),
         "UserPromptSubmit" => nothing(rec.prompt(input)),
         "SessionStart" => session_start(rec, input, harness),
+        "SubagentStart" => subagent_start(rec, input),
+        "SubagentStop" => nothing(rec.subagent_stop(input)),
         "SessionEnd" => nothing(session_end(rec, input, harness)),
         "PreCompact" => {
             rec.compact(input)?;
@@ -62,6 +64,14 @@ fn session_start(rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result
     let text = brief::build_for(rec.paths, Some(rec.session));
     rec.session_start(input, harness.id(), est_tokens(&text))?;
     Ok(if text.trim().is_empty() { Reply::Nothing } else { Reply::Context(text) })
+}
+
+/// A subagent starts without the session's brief; it gets the part that
+/// still applies to a task handed down: memory, and who else is editing.
+fn subagent_start(rec: &Recorder, input: &Value) -> Result<Reply> {
+    let text = brief::for_subagent(rec.paths, rec.session);
+    rec.subagent_start(input, est_tokens(&text))?;
+    Ok(if text.is_empty() { Reply::Nothing } else { Reply::Context(text) })
 }
 
 fn session_end(rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result<()> {

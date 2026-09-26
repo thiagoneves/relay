@@ -32,7 +32,7 @@ fn target() -> hooks_json::Target {
     hooks_json::Target {
         path: codex_home().join("hooks.json"),
         marker: MARKER,
-        events: hooks_json::CLAUDE_EVENTS,
+        events: hooks_json::CODEX_EVENTS,
         layout: hooks_json::Layout::Grouped,
     }
 }

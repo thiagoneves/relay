@@ -25,11 +25,14 @@ pub enum Reply {
 /// The reason a harness shows for a rewrite relay approved.
 pub const APPROVED_BECAUSE: &str = "relay: a read or routine dev task";
 
-pub fn claude(reply: &Reply) -> Option<String> {
+pub fn claude(event: &str, reply: &Reply) -> Option<String> {
     match reply {
         Reply::Nothing => None,
         // Plain stdout on SessionStart becomes context for the model.
-        Reply::Context(text) => Some(text.clone()),
+        Reply::Context(text) if event == "SessionStart" => Some(text.clone()),
+        Reply::Context(text) => {
+            Some(json!({ "hookSpecificOutput": { "hookEventName": event, "additionalContext": text } }).to_string())
+        }
         Reply::Rewrite(r) => {
             let mut out = json!({ "hookEventName": "PreToolUse", "updatedInput": { "command": r.command } });
             if r.approve {

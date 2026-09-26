@@ -18,6 +18,25 @@ pub fn build_for(paths: &Paths, session: Option<&str>) -> String {
     compose(&gather(paths, session))
 }
 
+/// What a subagent gets when it starts: the remembered items and the other
+/// sessions in this checkout (not the parent `session`, whose work it is
+/// doing), and how to read a big file. Empty when there is neither.
+pub fn for_subagent(paths: &Paths, session: &str) -> String {
+    let i = gather(paths, Some(session));
+    if i.items.is_empty() && i.claims.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("# relay brief\n");
+    if !i.items.is_empty() {
+        out.push_str(&memory_section(&i.items, &i.stale, &i.shared_dir));
+    }
+    out.push_str(&i.claims);
+    out.push_str(
+        "_Big files: read the range you need; `relay brief <task id or words>` prints the matching plan sections._\n",
+    );
+    out
+}
+
 /// Everything the brief shows, read from disk and git.
 struct Inputs {
     project: String,

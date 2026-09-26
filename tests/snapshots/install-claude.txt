@@ -1,7 +1,7 @@
 exit: 0
 --- stdout
 ✓ claude hooks written to ~/settings.json
-  events: PreToolUse, PostToolUse, UserPromptSubmit, SessionStart, SessionEnd, PreCompact, Stop
+  events: PreToolUse, PostToolUse, UserPromptSubmit, SessionStart, SubagentStart, SubagentStop, SessionEnd, PreCompact, Stop
 → Start a session with `relay claude`.
 --- stderr
 ✓ relay installed at ~/.local/bin/relay

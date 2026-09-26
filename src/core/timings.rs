@@ -24,8 +24,8 @@ pub enum Group {
 impl Group {
     fn of(event: &str) -> Option<Self> {
         match event {
-            "PreToolUse" | "PostToolUse" | "UserPromptSubmit" | "Stop" => Some(Self::PerCall),
-            "SessionStart" => Some(Self::SessionStart),
+            "PreToolUse" | "PostToolUse" | "UserPromptSubmit" | "Stop" | "SubagentStop" => Some(Self::PerCall),
+            "SessionStart" | "SubagentStart" => Some(Self::SessionStart),
             "SessionEnd" | "PreCompact" => Some(Self::SessionEnd),
             _ => None,
         }

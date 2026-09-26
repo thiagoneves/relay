@@ -68,6 +68,23 @@ impl Recorder<'_> {
         self.append("read_guarded", key.as_deref(), data)
     }
 
+    pub fn subagent_start(&self, input: &Value, brief_tokens: usize) -> Result<()> {
+        let data = json!({ "agent": input["agent_id"], "type": input["agent_type"], "brief_tokens": brief_tokens });
+        self.append("subagent_start", None, data)
+    }
+
+    /// The subagent's own transcript, where `relay usage` reads what it
+    /// really cost.
+    pub fn subagent_stop(&self, input: &Value) -> Result<()> {
+        let data = json!({
+            "agent": input["agent_id"],
+            "type": input["agent_type"],
+            "transcript_path": input["agent_transcript_path"],
+        });
+        let key = input["agent_id"].as_str().map(|a| format!("subagent:{a}"));
+        self.append("subagent_stop", key.as_deref(), data)
+    }
+
     pub fn session_end(&self, input: &Value) -> Result<()> {
         self.append("session_end", None, json!({ "reason": input["reason"] }))
     }
@@ -85,6 +102,15 @@ impl Recorder<'_> {
 /// What a finished tool call leaves in the spool. Edit responses echo the
 /// file back to the harness, not to the model, so they cost no tokens.
 fn tool_data(input: &Value) -> Value {
+    let mut data = tool_fields(input);
+    // Calls made inside a subagent say which one, so its cost is its own.
+    if let Some(agent) = input["agent_id"].as_str() {
+        data["agent"] = agent.into();
+    }
+    data
+}
+
+fn tool_fields(input: &Value) -> Value {
     let tool = input["tool_name"].as_str().unwrap_or("");
     let tokens = if usage::is_edit(tool) { 0 } else { usage::response_tokens(&input["tool_response"]) };
     if tool != "Bash" {

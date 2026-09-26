@@ -26,9 +26,23 @@ pub const fn ev(name: &'static str, matcher: Option<&'static str>, timeout: u32)
 }
 
 /// The dialect Claude Code introduced and Codex adopted; timeouts in
-/// seconds.
+/// seconds. Hooks fire inside Claude Code's subagents too; the subagent
+/// events add a brief when one starts and its transcript when it stops.
 pub const CLAUDE_EVENTS: &[Event] = &[
     ev("PreToolUse", Some("Bash|Read|Write|Edit|MultiEdit|NotebookEdit"), 5),
+    ev("PostToolUse", Some("Bash|Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit"), 5),
+    ev("UserPromptSubmit", None, 5),
+    ev("SessionStart", None, 5),
+    ev("SubagentStart", None, 5),
+    ev("SubagentStop", None, 5),
+    ev("SessionEnd", None, 2),
+    ev("PreCompact", None, 5),
+    ev("Stop", None, 5),
+];
+
+/// Codex's share of the dialect: it has no subagent events.
+pub const CODEX_EVENTS: &[Event] = &[
+    ev("PreToolUse", Some("Bash"), 5),
     ev("PostToolUse", Some("Bash|Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit"), 5),
     ev("UserPromptSubmit", None, 5),
     ev("SessionStart", None, 5),

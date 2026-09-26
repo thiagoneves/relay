@@ -112,8 +112,7 @@ pub trait Harness {
     /// A hook's reply to `event` (named as in the internal shape) in this
     /// harness's dialect; `None` prints nothing.
     fn render(&self, event: &str, reply: &protocol::reply::Reply) -> Option<String> {
-        let _ = event;
-        protocol::reply::claude(reply)
+        protocol::reply::claude(event, reply)
     }
     /// Whether a `PostToolUse` hook may replace the shell output the model
     /// sees, so relay can shrink it without rewriting the command.
