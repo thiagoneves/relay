@@ -80,6 +80,9 @@ pub fn render(event: &str, reply: &Reply) -> Option<String> {
         ("SessionStart", Reply::Context(text)) => Some(
             json!({ "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": text } }).to_string(),
         ),
+        ("PostToolUse", Reply::Noted(_, note)) => Some(
+            json!({ "hookSpecificOutput": { "hookEventName": "AfterTool", "additionalContext": note } }).to_string(),
+        ),
         // The reason reaches the agent as the tool's error.
         ("PreToolUse", Reply::Deny(reason)) => Some(json!({ "decision": "deny", "reason": reason }).to_string()),
         _ => None,

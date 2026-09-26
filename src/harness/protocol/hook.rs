@@ -11,7 +11,7 @@ use super::reply::Reply;
 use super::verify;
 use crate::core::paths::Paths;
 use crate::core::spool;
-use crate::core::{brief, claims, condense, handoff, log, outputs, reads, timings, usage};
+use crate::core::{brief, budget, claims, condense, handoff, log, outputs, reads, timings, usage};
 use crate::harness::Harness;
 use crate::helpers::env::{self, Var};
 use crate::helpers::{est_tokens, shell, slash};
@@ -46,10 +46,16 @@ fn dispatch(event: &str, rec: &Recorder, input: &Value, harness: &dyn Harness) -
     match event {
         "PreToolUse" => Ok(pre_tool_use(paths, session, input, harness)),
         "PostToolUse" => post_tool_use(rec, input, harness.replaces_output()),
-        "UserPromptSubmit" => nothing(rec.prompt(input)),
+        "UserPromptSubmit" => {
+            budget::asked(paths, session, input["prompt"].as_str().unwrap_or(""))?;
+            nothing(rec.prompt(input))
+        }
         "SessionStart" => session_start(rec, input, harness),
         "SubagentStart" => subagent_start(rec, input),
-        "SubagentStop" => nothing(rec.subagent_stop(input)),
+        "SubagentStop" => {
+            budget::close(paths, session, Some(input["agent_id"].as_str().unwrap_or("")))?;
+            nothing(rec.subagent_stop(input))
+        }
         "SessionEnd" => nothing(session_end(rec, input, harness)),
         "PreCompact" => {
             reads::forget(rec.paths, rec.session);
@@ -81,6 +87,7 @@ fn subagent_start(rec: &Recorder, input: &Value) -> Result<Reply> {
 fn session_end(rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result<()> {
     rec.session_end(input)?;
     claims::end(rec.paths, rec.session)?;
+    budget::close(rec.paths, rec.session, None)?;
     let built = build_handoff(rec, input, harness, input["reason"].as_str().unwrap_or("end"));
     // After the handoff, which lists this session's outputs; and even when
     // it failed, so storage stays bounded.
@@ -130,18 +137,24 @@ fn post_tool_use(rec: &Recorder, input: &Value, replaces_output: bool) -> Result
     if let Some(file) = edited_file(rec.paths, input) {
         claims::edited(rec.paths, rec.session, &file)?;
     }
-    if input["tool_name"].as_str() == Some("Read") && replaces_output {
-        rec.tool_use(input)?;
-        return Ok(files::reread(rec, input));
+    let tool = input["tool_name"].as_str().unwrap_or("");
+    if tool == "Bash" {
+        // Hooks run outside the tool sandbox: pull in anything relay x
+        // could not write to the local tier.
+        outputs::absorb_spill(rec.paths);
     }
-    if input["tool_name"].as_str() != Some("Bash") {
-        return rec.tool_use(input).map(|()| Reply::Nothing);
-    }
-    // Hooks run outside the tool sandbox: pull in anything relay x could
-    // not write to the local tier.
-    outputs::absorb_spill(rec.paths);
-    rec.tool_use(input)?;
-    Ok(if replaces_output { shrink_output(rec, input) } else { Reply::Nothing })
+    let tokens = rec.tool_use(input)?;
+    let reply = match tool {
+        "Read" if replaces_output => files::reread(rec, input),
+        "Bash" if replaces_output => shrink_output(rec, input),
+        _ => Reply::Nothing,
+    };
+    let agent = input["agent_id"].as_str().unwrap_or("");
+    let note = budget::add(rec.paths, rec.session, agent, input["agent_type"].as_str(), tokens)?;
+    Ok(match note {
+        Some(n) => Reply::Noted(Box::new(reply), n),
+        None => reply,
+    })
 }
 
 /// Replace what the model sees of a command the harness ran itself with

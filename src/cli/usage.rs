@@ -1,9 +1,10 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::SystemTime;
 
 use crate::core::paths::Paths;
 use crate::core::scoreboard::{self, Tally};
-use crate::core::{outputs, spool};
+use crate::core::{budget, outputs, spool};
 use crate::harness::HarnessId;
 use crate::helpers::env::tilde;
 use crate::helpers::text::count;
@@ -27,7 +28,10 @@ impl Row {
     }
 }
 
-pub fn run(since: &str) -> anyhow::Result<i32> {
+pub fn run(since: &str, history: bool) -> anyhow::Result<i32> {
+    if history {
+        return print_history();
+    }
     let from = parse_since(since, SystemTime::now()).ok_or_else(|| {
         problem(
             format!("`--since {since}` is not a time relay understands."),
@@ -65,6 +69,51 @@ pub fn run(since: &str) -> anyhow::Result<i32> {
     ui.blank();
     ui.next("Point an agent at one task's plan section instead of the whole doc: `relay brief <task id>`.");
     Ok(0)
+}
+
+/// Per day: tokens and agents.
+type Days = BTreeMap<String, (usize, usize)>;
+
+/// What each task cost, per day, from the agents that ended.
+fn print_history() -> anyhow::Result<i32> {
+    let paths = Paths::from_cwd()?;
+    let ui = Ui::stdout();
+    ui.heading("relay usage --history", &tilde(&paths.root));
+    let spent = budget::history(&paths);
+    if spent.is_empty() {
+        ui.ok("No agent has ended here since relay started keeping totals.");
+        return Ok(0);
+    }
+    let by = per_task(&spent);
+    let mut rows: Vec<(&String, &Days)> = by.iter().collect();
+    rows.sort_by_key(|(_, days)| std::cmp::Reverse(days.keys().next_back().cloned()));
+    ui.field("Per task", "tool output per day, estimated; a session naming two tasks counts for both");
+    for (task, days) in rows.iter().take(CONSUMERS) {
+        let total: usize = days.values().map(|d| d.0).sum();
+        let agents: usize = days.values().map(|d| d.1).sum();
+        let trend: Vec<String> =
+            days.iter().map(|(d, (t, _))| format!("{} {}", d.get(5..).unwrap_or(d), human_tokens(*t))).collect();
+        ui.field(
+            "",
+            &format!("{task:<12} {:>7} over {} · {}", human_tokens(total), count(agents, "agent"), trend.join(" → ")),
+        );
+    }
+    Ok(0)
+}
+
+/// Task → day → cost; agents without a task id go under "no task id".
+fn per_task(spent: &[budget::Spent]) -> BTreeMap<String, Days> {
+    let mut by: BTreeMap<String, Days> = BTreeMap::new();
+    for s in spent {
+        let day = s.ts.get(..10).unwrap_or("").to_string();
+        let tasks = if s.tasks.is_empty() { vec!["no task id".to_string()] } else { s.tasks.clone() };
+        for t in tasks {
+            let e = by.entry(t).or_default().entry(day.clone()).or_default();
+            e.0 += s.tokens;
+            e.1 += 1;
+        }
+    }
+    by
 }
 
 fn print_consumers(ui: Ui, rows: &[Row]) {

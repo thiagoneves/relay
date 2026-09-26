@@ -20,6 +20,8 @@ pub enum Reply {
     Warn(String),
     /// Turn the tool call down; the model reads why instead.
     Deny(String),
+    /// A reply, and a note for the model beside the tool's result.
+    Noted(Box<Reply>, String),
 }
 
 /// The reason a harness shows for a rewrite relay approved.
@@ -27,6 +29,13 @@ pub const APPROVED_BECAUSE: &str = "relay: a read or routine dev task";
 
 pub fn claude(event: &str, reply: &Reply) -> Option<String> {
     match reply {
+        Reply::Noted(inner, note) => {
+            let mut out: Value =
+                claude(event, inner).and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_else(|| json!({}));
+            out["hookSpecificOutput"]["hookEventName"] = event.into();
+            out["hookSpecificOutput"]["additionalContext"] = note.as_str().into();
+            Some(out.to_string())
+        }
         Reply::Nothing => None,
         // Plain stdout on SessionStart becomes context for the model.
         Reply::Context(text) if event == "SessionStart" => Some(text.clone()),

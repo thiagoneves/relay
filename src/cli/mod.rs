@@ -172,6 +172,9 @@ pub enum Commands {
         /// Sessions active since then: `30m`, `12h`, `7d` or `2026-09-22`
         #[arg(long, default_value = "7d")]
         since: String,
+        /// Cost per task over time, from every agent that ended
+        #[arg(long)]
+        history: bool,
     },
     /// What failed in relay's hooks, newest last
     Log {
@@ -255,7 +258,7 @@ fn run() -> anyhow::Result<i32> {
         Commands::Brief { query } => brief::run(&query.join(" ")),
         Commands::Log { lines } => log::run(lines),
         Commands::Status => status::run(),
-        Commands::Usage { since } => usage::run(&since),
+        Commands::Usage { since, history } => usage::run(&since, history),
         Commands::Purge { yes } => purge::run(yes),
         Commands::Claude { last, args } => wrap::run(HarnessId::Claude, last, &args),
         Commands::Codex { last, args } => wrap::run(HarnessId::Codex, last, &args),

@@ -50,8 +50,12 @@ impl Recorder<'_> {
         )
     }
 
-    pub fn tool_use(&self, input: &Value) -> Result<()> {
-        self.append("tool", input["tool_use_id"].as_str(), tool_data(input))
+    /// Records the call; returns the tokens of output it gave the agent.
+    pub fn tool_use(&self, input: &Value) -> Result<usize> {
+        let data = tool_data(input);
+        let tokens = data["tokens"].as_u64().and_then(|n| usize::try_from(n).ok()).unwrap_or(0);
+        self.append("tool", input["tool_use_id"].as_str(), data)?;
+        Ok(tokens)
     }
 
     /// A whole-file read relay turned down: what it would have cost and

@@ -5,6 +5,7 @@ pub mod audit;
 pub mod bench;
 pub mod bootstrap;
 pub mod brief;
+pub mod budget;
 pub mod claims;
 pub mod collide;
 pub mod compile;

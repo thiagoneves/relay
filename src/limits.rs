@@ -166,6 +166,12 @@ pub mod task_brief {
     pub const BRANCHES_READ: usize = 10;
 }
 
+/// Reminders when an agent's tool output adds up.
+pub mod budget {
+    /// An agent hears about its total each time it passes another step.
+    pub const WARN_EVERY: usize = 150_000;
+}
+
 /// `relay usage`.
 pub mod usage {
     /// Rows in the list of top consumers, and in the biggest reads.
