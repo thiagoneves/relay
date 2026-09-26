@@ -11,6 +11,7 @@ pub mod condense;
 pub mod exec;
 pub mod handoff;
 pub mod index;
+pub mod likely;
 pub mod log;
 pub mod memory;
 pub mod okf;

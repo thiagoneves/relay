@@ -160,6 +160,8 @@ pub mod task_brief {
     /// Newest sessions whose prompts are searched, and files listed.
     pub const SESSIONS_READ: usize = 40;
     pub const FILES: usize = 12;
+    /// Newest commits whose message names the query, read for likely files.
+    pub const COMMITS_READ: usize = 200;
 }
 
 /// `relay usage`.

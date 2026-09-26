@@ -1,20 +1,16 @@
 //! `relay brief <query>`: one page for one task, so an agent stops
 //! reading whole plan docs to find it. The sections of the repo's
 //! Markdown docs whose heading names the query (`T-253` finds its entry,
-//! not `T-2530`), the remembered items that mention it, and the files the
-//! sessions that worked on it edited. Deterministic, no model, bounded.
-
-use std::collections::BTreeMap;
+//! not `T-2530`), the remembered items that mention it, and the files it
+//! will likely touch. Deterministic, no model, bounded.
 
 use crate::core::outline::{self, Entry};
 use crate::core::paths::Paths;
-use crate::core::{index, memory, spool, usage};
+use crate::core::{index, likely, memory};
 use crate::helpers::git as gitstate;
 use crate::helpers::text::cut_lines;
 use crate::helpers::truncate_chars;
-use crate::limits::task_brief::{
-    DOC_MAX_BYTES, FILES, MAX_CHARS, MIN_SECTION_CHARS, OTHER_MATCHES, SECTION_CHARS, SECTIONS, SESSIONS_READ,
-};
+use crate::limits::task_brief::{DOC_MAX_BYTES, MAX_CHARS, MIN_SECTION_CHARS, OTHER_MATCHES, SECTION_CHARS, SECTIONS};
 
 /// A section of a doc that matched, and how well.
 struct Hit {
@@ -48,11 +44,13 @@ pub fn build(paths: &Paths, query: &str) -> String {
         .filter(|i| mentions(&i.title, query))
         .map(|i| format!("- {}: {}", i.kind, i.title))
         .collect();
-    let files = session_files(paths, query);
+    // The doc that describes the task is already on the page.
+    let files: Vec<likely::Likely> =
+        likely::files(paths, query).into_iter().filter(|l| !hits.iter().any(|h| h.file == l.file)).collect();
     compose(query, &hits, &items, &files)
 }
 
-fn compose(query: &str, hits: &[Hit], items: &[String], files: &[(String, usize)]) -> String {
+fn compose(query: &str, hits: &[Hit], items: &[String], files: &[likely::Likely]) -> String {
     let mut out = format!("# relay brief: {query}\n");
     if hits.is_empty() && items.is_empty() && files.is_empty() {
         out.push_str("Nothing in the docs, memory or recent sessions names it. Try another id or fewer words.\n");
@@ -80,10 +78,10 @@ fn compose(query: &str, hits: &[Hit], items: &[String], files: &[(String, usize)
         out.push('\n');
     }
     if !files.is_empty() {
-        out.push_str("\n## Files sessions edited for it (edits)\n");
-        let list: Vec<String> = files.iter().map(|(f, n)| format!("{f} ({n})")).collect();
-        out.push_str(&list.join(", "));
-        out.push('\n');
+        out.push_str("\n## Likely files\n");
+        for f in files {
+            out.push_str(&format!("- {f}\n"));
+        }
     }
     out
 }
@@ -182,31 +180,6 @@ fn in_doc(rel: &str, text: &str, entries: &[Entry], query: &str) -> Vec<Hit> {
         }
     }
     out
-}
-
-/// Files edited by recent sessions whose prompts named the query, most
-/// edited first.
-fn session_files(paths: &Paths, query: &str) -> Vec<(String, usize)> {
-    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
-    for (session, _) in spool::sessions(paths).into_iter().take(SESSIONS_READ) {
-        let events = spool::read(paths, &session);
-        let asked =
-            events.iter().any(|e| e.event == "prompt" && e.data["text"].as_str().is_some_and(|t| mentions(t, query)));
-        if !asked {
-            continue;
-        }
-        for e in events.iter().filter(|e| e.event == "tool" && e.data["tool"].as_str().is_some_and(usage::is_edit)) {
-            let rel = e.data["file"].as_str().map(|f| paths.rel_file(f));
-            // Files outside this repo (another checkout, a temp dir) are not its files.
-            if let Some(rel) = rel.filter(|r| !std::path::Path::new(r).has_root() && !r.starts_with("..")) {
-                *counts.entry(rel).or_default() += 1;
-            }
-        }
-    }
-    let mut v: Vec<(String, usize)> = counts.into_iter().collect();
-    v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    v.truncate(FILES);
-    v
 }
 
 #[cfg(test)]

@@ -80,6 +80,20 @@ pub fn diff_files(old: &Path, new: &Path, context: usize) -> Option<String> {
     Some(text.find("\n@@").map_or_else(String::new, |i| text[i + 1..].to_string()))
 }
 
+/// Newest `max` commits whose message contains `word` (any case), each
+/// with its message and the files it changed.
+pub fn commits_mentioning(root: &Path, word: &str, max: usize) -> Vec<(String, Vec<String>)> {
+    let args = ["log", "-n", &max.to_string(), "-F", "-i", "--grep", word, "--format=%x1e%B%x1f", "--name-only"];
+    let Some(out) = git_raw(root, &args) else { return Vec::new() };
+    out.split('\x1e')
+        .filter_map(|rec| {
+            let (message, files) = rec.split_once('\x1f')?;
+            let files = files.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect();
+            Some((message.trim().to_string(), files))
+        })
+        .collect()
+}
+
 /// Files changed by commits since `sha`. Uncommitted edits do not count:
 /// they may have been there when the item was saved. `None` when git does
 /// not know the commit (rebased away, or a shallow clone).
