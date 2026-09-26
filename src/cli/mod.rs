@@ -159,8 +159,11 @@ pub enum Commands {
         #[arg(long, value_name = "RECALL")]
         min_recall: Option<f64>,
     },
-    /// Print the brief a new session would receive
-    Brief,
+    /// Print the brief a new session would receive, or with a query the one page for a task
+    Brief {
+        /// A task id or words: the plan sections, memory and files for it
+        query: Vec<String>,
+    },
     /// What relay saved, what it stores, and where
     Status,
     /// What failed in relay's hooks, newest last
@@ -242,7 +245,7 @@ fn run() -> anyhow::Result<i32> {
             };
             bench::run(source, json, min_recall)
         }
-        Commands::Brief => brief::run(),
+        Commands::Brief { query } => brief::run(&query.join(" ")),
         Commands::Log { lines } => log::run(lines),
         Commands::Status => status::run(),
         Commands::Purge { yes } => purge::run(yes),

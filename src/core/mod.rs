@@ -18,5 +18,6 @@ pub mod outputs;
 pub mod paths;
 pub mod read_guard;
 pub mod spool;
+pub mod task_brief;
 pub mod timings;
 pub mod usage;

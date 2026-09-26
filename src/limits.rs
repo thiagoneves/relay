@@ -137,3 +137,21 @@ pub mod reads {
     /// Outline lines shown in place of the file.
     pub const OUTLINE_ENTRIES: usize = 80;
 }
+
+/// `relay brief <query>`: one page for one task.
+pub mod task_brief {
+    /// About 1,500 tokens in all.
+    pub const MAX_CHARS: usize = 6000;
+    /// Sections printed in full, and the longest each may be.
+    pub const SECTIONS: usize = 3;
+    pub const SECTION_CHARS: usize = 3600;
+    /// Less room than this left, a section is listed by range only.
+    pub const MIN_SECTION_CHARS: usize = 400;
+    /// Further matches, listed by range only.
+    pub const OTHER_MATCHES: usize = 8;
+    /// Docs larger than this are not searched.
+    pub const DOC_MAX_BYTES: u64 = 16 * 1024 * 1024;
+    /// Newest sessions whose prompts are searched, and files listed.
+    pub const SESSIONS_READ: usize = 40;
+    pub const FILES: usize = 12;
+}
