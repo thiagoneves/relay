@@ -17,7 +17,8 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::core::paths::Paths;
-use crate::helpers::{human_tokens, now_iso, write_atomic};
+use crate::helpers::fs::write_state;
+use crate::helpers::{human_tokens, now_iso};
 use crate::limits::budget::WARN_EVERY;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -69,7 +70,7 @@ fn load(paths: &Paths, session: &str) -> Board {
 }
 
 fn save(paths: &Paths, session: &str, board: &Board) -> Result<()> {
-    write_atomic(&file_for(paths, session), &serde_json::to_vec(board)?)
+    write_state(&file_for(paths, session), &serde_json::to_vec(board)?)
 }
 
 /// The session was asked `prompt`: the task ids in it are what its

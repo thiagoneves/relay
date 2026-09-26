@@ -19,9 +19,10 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::core::paths::Paths;
+use crate::helpers::fs::write_state;
 use crate::helpers::git as gitstate;
 use crate::helpers::hash::content_hash;
-use crate::helpers::{ago, now_iso, parse_iso, write_atomic};
+use crate::helpers::{ago, now_iso, parse_iso};
 use crate::limits::reads::{DEDUP_MAX_BYTES, DIFF_CONTEXT, KEEP_BLOBS};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,9 +89,9 @@ pub fn observe(paths: &Paths, r: &Read) -> Result<Verdict> {
     let before = seen.insert(key, Seen { hash: hash.clone(), at: now_iso() });
     let new_blob = blob(paths, &hash);
     if !new_blob.exists() {
-        write_atomic(&new_blob, r.content.as_bytes())?;
+        write_state(&new_blob, r.content.as_bytes())?;
     }
-    write_atomic(&file_for(paths, r.session), &serde_json::to_vec(&seen)?)?;
+    write_state(&file_for(paths, r.session), &serde_json::to_vec(&seen)?)?;
     let Some(before) = before else { return Ok(Verdict::Fresh) };
     let when = parse_iso(&before.at).map_or_else(String::new, |t| ago(t, SystemTime::now()));
     if before.hash == hash {

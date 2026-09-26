@@ -25,6 +25,20 @@ pub fn write_atomic(path: &Path, content: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Replace a small, rebuildable state file by rename, without waiting for
+/// the disk: a hook writes several per tool call, and an fsync each would
+/// cost more than the rest of the hook. Readers still never see half a
+/// file; a crash may lose the last update, which only costs a saving.
+pub fn write_state(path: &Path, content: &[u8]) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension(format!("tmp{}", std::process::id()));
+    fs::write(&tmp, content)?;
+    fs::rename(&tmp, path)?;
+    Ok(())
+}
+
 /// The file a symlink chain ends at, even when that file does not exist
 /// yet; `path` itself when it is not a link.
 fn link_target(path: &Path) -> PathBuf {

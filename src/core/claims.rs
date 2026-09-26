@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::paths::Paths;
 use crate::core::spool;
-use crate::helpers::{ago, iso, now_iso, parse_iso, truncate_chars, write_atomic};
+use crate::helpers::fs::write_state;
+use crate::helpers::{ago, iso, now_iso, parse_iso, truncate_chars};
 use crate::limits::claims::{AREAS_SHOWN, BRIEF_CHARS, DIRTY_SHOWN, KEEP, LABEL_CHARS, LIVE};
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -82,7 +83,7 @@ fn load(paths: &Paths, session: &str) -> Option<Claim> {
 }
 
 fn save(paths: &Paths, claim: &Claim) -> Result<()> {
-    write_atomic(&file_for(paths, &claim.session), &serde_json::to_vec(claim)?)
+    write_state(&file_for(paths, &claim.session), &serde_json::to_vec(claim)?)
 }
 
 /// A claim for `session`, new ones named from its spool: the harness and

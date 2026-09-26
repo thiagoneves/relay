@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 use crate::core::outline::{self, Entry};
 use crate::core::paths::Paths;
 use crate::helpers::est_tokens;
+use crate::helpers::fs::write_state;
 use crate::helpers::hash::content_hash;
-use crate::helpers::write_atomic;
 
 /// Bump when what an index file holds changes shape or meaning.
 const VERSION: u32 = 1;
@@ -61,7 +61,7 @@ pub fn get(paths: &Paths, rel: &str, full: &Path) -> Option<Indexed> {
         Some(c) if c.hash == hash => Indexed { size, mtime_ms, ..c },
         _ => build(&String::from_utf8_lossy(&bytes), outline::is_markdown(rel), size, mtime_ms, hash),
     };
-    let _ = write_atomic(&cache, &serde_json::to_vec(&fresh).ok()?);
+    let _ = write_state(&cache, &serde_json::to_vec(&fresh).ok()?);
     Some(fresh)
 }
 
@@ -132,7 +132,7 @@ mod tests {
         // A stale cache with the same stamp is trusted: proof it was not re-read.
         let mut forged = first.clone();
         forged.entries.clear();
-        write_atomic(&file_for(&p, "plan.md"), &serde_json::to_vec(&forged).unwrap()).unwrap();
+        write_state(&file_for(&p, "plan.md"), &serde_json::to_vec(&forged).unwrap()).unwrap();
         assert!(get(&p, "plan.md", &f).unwrap().entries.is_empty());
         std::fs::write(&f, "# A\n## T-1\nx\n## T-2\ny\n").unwrap();
         assert_eq!(get(&p, "plan.md", &f).unwrap().entries.len(), 3, "a changed file is indexed again");
