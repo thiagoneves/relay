@@ -15,7 +15,7 @@ const SHELL: &str = "run_shell_command";
 pub const EVENTS: &[Event] = &[
     ev("SessionStart", None, 10_000),
     ev("BeforeAgent", None, 5_000),
-    ev("BeforeTool", Some(SHELL), 5_000),
+    ev("BeforeTool", Some("run_shell_command|read_file"), 5_000),
     ev("AfterTool", None, 5_000),
     ev("AfterAgent", None, 5_000),
     ev("PreCompress", None, 5_000),
@@ -80,6 +80,8 @@ pub fn render(event: &str, reply: &Reply) -> Option<String> {
         ("SessionStart", Reply::Context(text)) => Some(
             json!({ "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": text } }).to_string(),
         ),
+        // The reason reaches the agent as the tool's error.
+        ("PreToolUse", Reply::Deny(reason)) => Some(json!({ "decision": "deny", "reason": reason }).to_string()),
         _ => None,
     }
 }
@@ -120,5 +122,7 @@ mod tests {
         let ctx: Value = serde_json::from_str(&render("SessionStart", &Reply::Context("b".into())).unwrap()).unwrap();
         assert_eq!(ctx["hookSpecificOutput"]["additionalContext"], "b");
         assert_eq!(render("PreToolUse", &Reply::Nothing), None);
+        let deny: Value = serde_json::from_str(&render("PreToolUse", &Reply::Deny("outline".into())).unwrap()).unwrap();
+        assert_eq!(deny, json!({ "decision": "deny", "reason": "outline" }));
     }
 }

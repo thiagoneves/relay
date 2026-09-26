@@ -54,6 +54,20 @@ impl Recorder<'_> {
         self.append("tool", input["tool_use_id"].as_str(), tool_data(input))
     }
 
+    /// A whole-file read relay turned down: what it would have cost and
+    /// what the agent read instead, for `relay usage`.
+    pub fn guarded_read(&self, input: &Value, g: &crate::core::read_guard::Guarded) -> Result<()> {
+        let file = input["tool_input"]["file_path"].as_str().or(input["tool_input"]["absolute_path"].as_str());
+        let data = json!({
+            "file": file.map(|f| self.paths.rel_file(f)),
+            "tokens": g.file_tokens,
+            "shown": crate::helpers::est_tokens(&g.message),
+            "agent": input["agent_id"],
+        });
+        let key = input["tool_use_id"].as_str().map(|id| format!("guard:{id}"));
+        self.append("read_guarded", key.as_deref(), data)
+    }
+
     pub fn session_end(&self, input: &Value) -> Result<()> {
         self.append("session_end", None, json!({ "reason": input["reason"] }))
     }

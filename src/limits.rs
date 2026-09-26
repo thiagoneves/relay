@@ -127,3 +127,13 @@ pub mod bench {
     pub const WORST_SHOWN: usize = 5;
     pub const FAMILIES_SHOWN: usize = 20;
 }
+
+/// Whole-file reads of big text files get an outline instead.
+pub mod reads {
+    /// Bigger files are not read whole: about 15k tokens of prose.
+    pub const GUARD_BYTES: u64 = 60 * 1024;
+    /// Files are not scanned past this size; the guard just says how big.
+    pub const OUTLINE_MAX_BYTES: u64 = 16 * 1024 * 1024;
+    /// Outline lines shown in place of the file.
+    pub const OUTLINE_ENTRIES: usize = 80;
+}

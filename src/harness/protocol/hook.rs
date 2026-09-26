@@ -10,7 +10,7 @@ use super::reply::Reply;
 use super::verify;
 use crate::core::paths::Paths;
 use crate::core::spool;
-use crate::core::{brief, claims, condense, handoff, log, outputs, timings, usage};
+use crate::core::{brief, claims, condense, handoff, log, outputs, read_guard, timings, usage};
 use crate::harness::Harness;
 use crate::helpers::env::{self, Var};
 use crate::helpers::{est_tokens, shell, slash};
@@ -162,6 +162,9 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness: &dyn Harne
     if let Some(file) = edited_file(paths, input) {
         return claims::warn_once(paths, session, &file).map_or(Reply::Nothing, Reply::Warn);
     }
+    if input["tool_name"].as_str() == Some("Read") {
+        return guard_read(&Recorder { paths, session }, input);
+    }
     let cmd = input["tool_input"]["command"].as_str().unwrap_or("").trim();
     if input["tool_name"].as_str() != Some("Bash") || cmd.is_empty() {
         return Reply::Nothing;
@@ -180,6 +183,20 @@ fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness: &dyn Harne
         timeout: harness.command_timeout(&input["tool_input"]),
     };
     policy::rewrite(&call, relay_invocation).map_or(Reply::Nothing, Reply::Rewrite)
+}
+
+/// A whole-file read of a big text file gets the file's outline instead.
+fn guard_read(rec: &Recorder, input: &Value) -> Reply {
+    let tool_input = &input["tool_input"];
+    // Gemini CLI named it `absolute_path` before `file_path`.
+    let Some(file) = tool_input["file_path"].as_str().or(tool_input["absolute_path"].as_str()) else {
+        return Reply::Nothing;
+    };
+    let path = std::path::Path::new(input["cwd"].as_str().unwrap_or("")).join(file);
+    let ranged = !tool_input["offset"].is_null() || !tool_input["limit"].is_null();
+    let Some(g) = read_guard::check(&path, &rec.paths.rel_file(&slash(&path)), ranged) else { return Reply::Nothing };
+    let _ = rec.guarded_read(input, &g);
+    Reply::Deny(g.message)
 }
 
 /// Use the bare name when `relay` on PATH is this very binary; otherwise

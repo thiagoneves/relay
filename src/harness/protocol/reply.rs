@@ -18,6 +18,8 @@ pub enum Reply {
     ReplaceOutput(Value),
     /// Let the tool call go ahead, with a note for the model beside it.
     Warn(String),
+    /// Turn the tool call down; the model reads why instead.
+    Deny(String),
 }
 
 /// The reason a harness shows for a rewrite relay approved.
@@ -36,6 +38,12 @@ pub fn claude(reply: &Reply) -> Option<String> {
             }
             Some(json!({ "hookSpecificOutput": out }).to_string())
         }
+        Reply::Deny(reason) => Some(
+            json!({ "hookSpecificOutput": {
+                "hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason
+            } })
+            .to_string(),
+        ),
         Reply::Warn(text) => Some(
             json!({ "hookSpecificOutput": { "hookEventName": "PreToolUse", "additionalContext": text } }).to_string(),
         ),

@@ -56,7 +56,7 @@ fn install_adds_hooks_to_settings_and_keeps_the_rest() {
     let v: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(v["selectedAuthType"], "oauth-personal");
     let group = &v["hooks"]["BeforeTool"][0];
-    assert_eq!(group["matcher"], "run_shell_command");
+    assert_eq!(group["matcher"], "run_shell_command|read_file");
     assert!(group["hooks"][0]["command"].as_str().unwrap().ends_with(" hook gemini"));
     assert!(repo.run(&["uninstall", "gemini"]).status.success());
     let v: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
