@@ -5,6 +5,7 @@ pub mod audit;
 pub mod bench;
 pub mod bootstrap;
 pub mod brief;
+pub mod claims;
 pub mod compile;
 pub mod condense;
 pub mod exec;

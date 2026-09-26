@@ -10,7 +10,7 @@ use super::reply::Reply;
 use super::verify;
 use crate::core::paths::Paths;
 use crate::core::spool;
-use crate::core::{brief, condense, handoff, log, outputs, timings};
+use crate::core::{brief, claims, condense, handoff, log, outputs, timings, usage};
 use crate::harness::Harness;
 use crate::helpers::env::{self, Var};
 use crate::helpers::{est_tokens, shell, slash};
@@ -59,13 +59,14 @@ fn dispatch(event: &str, rec: &Recorder, input: &Value, harness: &dyn Harness) -
 
 fn session_start(rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result<Reply> {
     spool::set_current_session(rec.paths, rec.session);
-    let text = brief::build(rec.paths);
+    let text = brief::build_for(rec.paths, Some(rec.session));
     rec.session_start(input, harness.id(), est_tokens(&text))?;
     Ok(if text.trim().is_empty() { Reply::Nothing } else { Reply::Context(text) })
 }
 
 fn session_end(rec: &Recorder, input: &Value, harness: &dyn Harness) -> Result<()> {
     rec.session_end(input)?;
+    claims::end(rec.paths, rec.session)?;
     let built = build_handoff(rec, input, harness, input["reason"].as_str().unwrap_or("end"));
     // After the handoff, which lists this session's outputs; and even when
     // it failed, so storage stays bounded.
@@ -110,6 +111,9 @@ fn build_handoff(rec: &Recorder, input: &Value, harness: &dyn Harness, reason: &
 }
 
 fn post_tool_use(rec: &Recorder, input: &Value, replaces_output: bool) -> Result<Reply> {
+    if let Some(file) = edited_file(rec.paths, input) {
+        claims::edited(rec.paths, rec.session, &file)?;
+    }
     if input["tool_name"].as_str() != Some("Bash") {
         return rec.tool_use(input).map(|()| Reply::Nothing);
     }
@@ -142,7 +146,22 @@ fn shrink_output(rec: &Recorder, input: &Value) -> Reply {
     Reply::ReplaceOutput(updated)
 }
 
+/// The repo-relative file an edit tool call is about; `None` for other
+/// tools and for files outside the repo.
+fn edited_file(paths: &Paths, input: &Value) -> Option<String> {
+    if !input["tool_name"].as_str().is_some_and(usage::is_edit) {
+        return None;
+    }
+    let tool_input = &input["tool_input"];
+    let file = tool_input["file_path"].as_str().or(tool_input["notebook_path"].as_str())?;
+    let rel = paths.rel_file(file);
+    (rel != file || !std::path::Path::new(file).is_absolute()).then_some(rel)
+}
+
 fn pre_tool_use(paths: &Paths, session: &str, input: &Value, harness: &dyn Harness) -> Reply {
+    if let Some(file) = edited_file(paths, input) {
+        return claims::warn_once(paths, session, &file).map_or(Reply::Nothing, Reply::Warn);
+    }
     let cmd = input["tool_input"]["command"].as_str().unwrap_or("").trim();
     if input["tool_name"].as_str() != Some("Bash") || cmd.is_empty() {
         return Reply::Nothing;

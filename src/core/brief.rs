@@ -2,14 +2,20 @@
 //! handoff, capped at roughly 600 tokens. File reads and one git call; no LLM.
 
 use crate::core::paths::Paths;
-use crate::core::{handoff, memory};
+use crate::core::{claims, handoff, memory};
 use crate::helpers::frontmatter;
 use crate::helpers::git as gitstate;
 use crate::helpers::text::cut_lines;
 use crate::limits;
 
 pub fn build(paths: &Paths) -> String {
-    compose(&gather(paths))
+    build_for(paths, None)
+}
+
+/// The brief as `session` receives it: other sessions in this checkout
+/// are named, `session` itself is not.
+pub fn build_for(paths: &Paths, session: Option<&str>) -> String {
+    compose(&gather(paths, session))
 }
 
 /// Everything the brief shows, read from disk and git.
@@ -20,13 +26,16 @@ struct Inputs {
     handoff: Option<(String, String)>,
     /// Other sessions of the last days, one line each.
     others: Vec<String>,
+    /// What other sessions in this checkout are editing, and which
+    /// uncommitted files are theirs.
+    claims: String,
     items: Vec<memory::Item>,
     /// Per item, the paths it is about that changed since it was saved.
     stale: Vec<Vec<String>>,
     shared_dir: String,
 }
 
-fn gather(paths: &Paths) -> Inputs {
+fn gather(paths: &Paths, session: Option<&str>) -> Inputs {
     let branch = gitstate::branch(&paths.root);
     let now = crate::helpers::now_iso();
     let items: Vec<memory::Item> = memory::list(paths).into_iter().filter(|i| !i.expired(&now)).collect();
@@ -39,7 +48,12 @@ fn gather(paths: &Paths) -> Inputs {
         .into_iter()
         .map(|g| glance_line(&g, &branch))
         .collect();
+    let claimed = claims::all(paths);
+    // `git status` only when some session has claimed a path.
+    let dirty =
+        if claimed.is_empty() { Vec::new() } else { gitstate::dirty_files(&paths.root, limits::claims::DIRTY_READ) };
     Inputs {
+        claims: claims::section(&claimed, &dirty, session, std::time::SystemTime::now()),
         project: std::fs::read_to_string(paths.project_file()).unwrap_or_default(),
         handoff: latest.map(|(p, body)| (paths.rel(&p), body)),
         others,
@@ -61,9 +75,12 @@ fn compose(i: &Inputs) -> String {
     if !i.items.is_empty() {
         out.push_str(&memory_section(&i.items, &i.stale, &i.shared_dir));
     }
+    // Before the last session: a collision in progress matters more than
+    // yesterday's summary.
+    out.push_str(&i.claims);
     match &i.handoff {
         Some((path, body)) => out.push_str(&last_session(body, path, &i.branch, out.len())),
-        None if i.project.trim().is_empty() && i.items.is_empty() => return String::new(),
+        None if i.project.trim().is_empty() && i.items.is_empty() && i.claims.is_empty() => return String::new(),
         None => {}
     }
     if !i.others.is_empty() {
@@ -196,6 +213,7 @@ mod tests {
             branch: "main".into(),
             handoff: None,
             others: vec![],
+            claims: String::new(),
             items: vec![],
             stale: vec![],
             shared_dir: ".relay".into(),

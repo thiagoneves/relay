@@ -16,6 +16,8 @@ pub enum Reply {
     Rewrite(Rewritten),
     /// Show the model this tool response instead of the one it produced.
     ReplaceOutput(Value),
+    /// Let the tool call go ahead, with a note for the model beside it.
+    Warn(String),
 }
 
 /// The reason a harness shows for a rewrite relay approved.
@@ -34,6 +36,9 @@ pub fn claude(reply: &Reply) -> Option<String> {
             }
             Some(json!({ "hookSpecificOutput": out }).to_string())
         }
+        Reply::Warn(text) => Some(
+            json!({ "hookSpecificOutput": { "hookEventName": "PreToolUse", "additionalContext": text } }).to_string(),
+        ),
         Reply::ReplaceOutput(updated) => Some(
             json!({ "hookSpecificOutput": { "hookEventName": "PostToolUse", "updatedToolOutput": updated } })
                 .to_string(),

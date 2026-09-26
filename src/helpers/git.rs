@@ -12,11 +12,16 @@ pub struct GitState {
 }
 
 fn git(root: &Path, args: &[&str]) -> Option<String> {
+    git_raw(root, args).map(|s| s.trim().to_string())
+}
+
+/// Output as printed: porcelain status starts with a meaningful space.
+fn git_raw(root: &Path, args: &[&str]) -> Option<String> {
     let out = Command::new("git").args(args).current_dir(root).output().ok()?;
     if !out.status.success() {
         return None;
     }
-    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    Some(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 /// The committer's name, for provenance; `None` when git has none.
@@ -35,6 +40,27 @@ pub fn state(root: &Path) -> GitState {
         .map(|s| s.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect())
         .unwrap_or_default();
     GitState { branch, sha, dirty, user: user(root) }
+}
+
+/// Uncommitted files, repo-relative, untracked ones listed one by one;
+/// at most `max`.
+pub fn dirty_files(root: &Path, max: usize) -> Vec<String> {
+    let Some(out) = git_raw(root, &["status", "--porcelain", "-z", "--untracked-files=all"]) else {
+        return Vec::new();
+    };
+    let mut files = Vec::new();
+    let mut entries = out.split('\0').filter(|e| e.len() > 3);
+    while let Some(e) = entries.next() {
+        if files.len() == max {
+            break;
+        }
+        files.push(e[3..].to_string());
+        // A rename or copy is followed by its old path.
+        if matches!(e.as_bytes()[0], b'R' | b'C') {
+            entries.next();
+        }
+    }
+    files
 }
 
 /// Files changed by commits since `sha`. Uncommitted edits do not count:

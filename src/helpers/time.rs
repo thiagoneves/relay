@@ -24,6 +24,22 @@ pub fn short_utc(t: SystemTime) -> String {
     format!("{:04}-{:02}-{:02} {:02}:{:02} UTC", d.year(), u8::from(d.month()), d.day(), d.hour(), d.minute())
 }
 
+/// The instant an `iso` timestamp names.
+pub fn parse_iso(s: &str) -> Option<SystemTime> {
+    OffsetDateTime::parse(s, &Rfc3339).ok().map(SystemTime::from)
+}
+
+/// `just now`, `12 min ago`, `3 h ago`, `2 d ago`.
+pub fn ago(then: SystemTime, now: SystemTime) -> String {
+    let secs = now.duration_since(then).map_or(0, |d| d.as_secs());
+    match secs {
+        0..60 => "just now".into(),
+        60..3600 => format!("{} min ago", secs / 60),
+        3600..86_400 => format!("{} h ago", secs / 3600),
+        _ => format!("{} d ago", secs / 86_400),
+    }
+}
+
 /// A point in time from `30m`, `12h`, `7d` (ago) or `2026-09-22` (UTC midnight).
 pub fn parse_since(s: &str, now: SystemTime) -> Option<SystemTime> {
     parse_when(s, now, false)
@@ -69,6 +85,17 @@ mod tests {
         assert_eq!(parse_since("5y", now), None);
         assert_eq!(parse_since("999999999999999999d", now), None);
         assert_eq!(parse_until("2d", now), Some(UNIX_EPOCH + Duration::from_secs(12 * 86_400)));
+    }
+
+    #[test]
+    fn reads_iso_back_and_says_how_long_ago() {
+        let t = UNIX_EPOCH + Duration::from_secs(86_400);
+        assert_eq!(parse_iso(&iso(t)), Some(t));
+        assert_eq!(parse_iso("yesterday"), None);
+        assert_eq!(ago(t, t + Duration::from_secs(30)), "just now");
+        assert_eq!(ago(t, t + Duration::from_secs(720)), "12 min ago");
+        assert_eq!(ago(t, t + Duration::from_secs(7200)), "2 h ago");
+        assert_eq!(ago(t + Duration::from_secs(5), t), "just now");
     }
 
     #[test]

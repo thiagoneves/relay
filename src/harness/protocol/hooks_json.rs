@@ -28,7 +28,7 @@ pub const fn ev(name: &'static str, matcher: Option<&'static str>, timeout: u32)
 /// The dialect Claude Code introduced and Codex adopted; timeouts in
 /// seconds.
 pub const CLAUDE_EVENTS: &[Event] = &[
-    ev("PreToolUse", Some("Bash"), 5),
+    ev("PreToolUse", Some("Bash|Write|Edit|MultiEdit|NotebookEdit"), 5),
     ev("PostToolUse", Some("Bash|Read|Grep|Glob|Write|Edit|MultiEdit|NotebookEdit"), 5),
     ev("UserPromptSubmit", None, 5),
     ev("SessionStart", None, 5),

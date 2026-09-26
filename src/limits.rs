@@ -52,6 +52,26 @@ pub mod brief {
     pub const STALE_COMMITS: usize = 8;
 }
 
+/// Which session is editing which paths in one checkout.
+pub mod claims {
+    use std::time::Duration;
+
+    /// A session that edited within this window, and has not ended, is
+    /// live: its paths are claimed.
+    pub const LIVE: Duration = Duration::from_secs(2 * 3600);
+    /// Claims are deleted this long after their last edit; until then an
+    /// ended session still names the uncommitted files it left.
+    pub const KEEP: Duration = Duration::from_secs(7 * 24 * 3600);
+    /// The brief's section on other sessions.
+    pub const BRIEF_CHARS: usize = 700;
+    pub const AREAS_SHOWN: usize = 4;
+    pub const DIRTY_SHOWN: usize = 5;
+    /// The first ask that names a session.
+    pub const LABEL_CHARS: usize = 60;
+    /// Uncommitted files read from `git status`.
+    pub const DIRTY_READ: usize = 2000;
+}
+
 /// The handoff a session leaves for the next one.
 pub mod handoff {
     pub const COMMANDS: usize = 12;
