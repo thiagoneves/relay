@@ -85,11 +85,11 @@ fn work_in_the_way_of_the_task_is_named_with_an_order() {
         }),
     );
     let page = String::from_utf8_lossy(&repo.run(&["brief", "T-253"]).stdout).into_owned();
+    assert!(page.contains("\n- session s1 (\"implement T-253 now\") (live) is on src/filters.ts\n"), "{page}");
     assert!(
-        page.contains("\n## In the way\n- session s1 (\"implement T-253 now\") (live) is on src/filters.ts\n"),
+        page.contains("## In the way\n") && page.contains("- session other-se (live) is on src/filters.ts\n"),
         "{page}"
     );
-    assert!(page.contains("- session other-se (live) is on src/filters.ts\n"), "{page}");
     assert!(page.contains("- branch feat-bar changes src/bar.ts\n"), "{page}");
     assert!(page.contains("_Order: merge feat-bar first; let the sessions above"), "{page}");
 }

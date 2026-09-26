@@ -117,7 +117,7 @@ pub fn all(paths: &Paths) -> Vec<Claim> {
             }
         }
     }
-    out.sort_by(|a, b| b.updated.cmp(&a.updated));
+    out.sort_by(|a, b| b.updated.cmp(&a.updated).then(a.session.cmp(&b.session)));
     out
 }
 
