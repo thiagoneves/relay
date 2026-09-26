@@ -155,3 +155,10 @@ pub mod task_brief {
     pub const SESSIONS_READ: usize = 40;
     pub const FILES: usize = 12;
 }
+
+/// `relay usage`.
+pub mod usage {
+    /// Rows in the list of top consumers, and in the biggest reads.
+    pub const CONSUMERS: usize = 12;
+    pub const READS: usize = 8;
+}

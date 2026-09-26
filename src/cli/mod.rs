@@ -17,6 +17,7 @@ mod remember;
 mod setup;
 mod status;
 mod ui;
+mod usage;
 mod wrap;
 mod x;
 
@@ -166,6 +167,12 @@ pub enum Commands {
     },
     /// What relay saved, what it stores, and where
     Status,
+    /// Who spent the context: sessions and subagents, the biggest reads, what relay kept out
+    Usage {
+        /// Sessions active since then: `30m`, `12h`, `7d` or `2026-09-22`
+        #[arg(long, default_value = "7d")]
+        since: String,
+    },
     /// What failed in relay's hooks, newest last
     Log {
         /// How many lines to show
@@ -248,6 +255,7 @@ fn run() -> anyhow::Result<i32> {
         Commands::Brief { query } => brief::run(&query.join(" ")),
         Commands::Log { lines } => log::run(lines),
         Commands::Status => status::run(),
+        Commands::Usage { since } => usage::run(&since),
         Commands::Purge { yes } => purge::run(yes),
         Commands::Claude { last, args } => wrap::run(HarnessId::Claude, last, &args),
         Commands::Codex { last, args } => wrap::run(HarnessId::Codex, last, &args),

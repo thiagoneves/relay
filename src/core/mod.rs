@@ -17,6 +17,7 @@ pub mod outline;
 pub mod outputs;
 pub mod paths;
 pub mod read_guard;
+pub mod scoreboard;
 pub mod spool;
 pub mod task_brief;
 pub mod timings;
