@@ -66,10 +66,17 @@ half of that fix. The other half is `git worktree add`.
 agents read it whole to find one task. A whole-file read of a text file over
 60 KB is turned down with the file's outline: Markdown headings, or a code
 file's top-level blocks, each with its line range, and the offset and limit to
-read one. Ranged reads always go through. `relay brief T-253` goes straight to
-a task: the section whose heading starts with the id, the sections that name
-it, the remembered items that mention it and the files the sessions that
-worked on it edited, in about 1,500 tokens.
+read one. Ranged reads always go through. Outlines come from an index under
+`.git/relay/index/` that is rebuilt only for files whose content changed.
+Reading a file again costs little too: in Claude Code, a re-read of text the
+agent already has becomes a one-line note, and one after a change becomes the
+diff since, per session and per subagent, forgotten at each compaction.
+
+`relay brief T-253` goes straight to a task: the section whose heading starts
+with the id, the sections that name it, the remembered items that mention it,
+the files it will likely touch (changed by commits naming it, edited in turns
+that asked about it) and what is in the way: other sessions on those files,
+branches not merged yet, and an order to integrate in. About 1,500 tokens.
 
 **Subagents get the same treatment.** Claude Code runs relay's hooks inside
 subagents, so their shell output is compressed and their big reads guarded;
@@ -78,6 +85,21 @@ here), and its cost is its own. `relay usage` lists who spent the context,
 each session and each subagent on its own line: context sent and output,
 exact, from the harness transcript, and the biggest reads. Twenty subagents
 once spent 9M tokens in a day, 300k to 650k each; this is where that shows.
+While it happens, an agent gets a note each time its tool output passes
+another 150k tokens, and `relay usage --history` shows what each task id cost,
+day by day.
+
+**Test runs that pass take one line.** A green cargo test, jest, vitest or
+Playwright run shows its counts; a failing one keeps every failure with its
+`file:line` and the totals. Playwright and `tsc` have filters of their own.
+
+**Budgets for what agents read over and over.** `relay lint` flags a Markdown
+doc over 100 KB, an instruction file or memory index over 8 KB, a finished
+task (checked box or check mark) that kept more than one line, an ADR
+implementation section over 10 lines and a commit subject over 72 characters.
+It exits 1, so it works as a git hook: `relay lint --staged` in `pre-commit`,
+`relay lint --commit-msg "$1"` in `commit-msg`. `relay compile --hygiene` names
+memory items to merge, check, shorten or drop.
 
 **Small enough to hold in your head.** One binary, the hooks your harness
 already calls, and two directories: `.relay/` that you commit, `.git/relay/`
@@ -168,7 +190,9 @@ You close the session. relay writes the handoff for the next one.
 | `relay audit` | What fills your context, and how to trim it |
 | `relay brief` · `relay handoff --show` | What the next session receives |
 | `relay brief <task id or words>` | One page for one task: its plan section, memory and files |
-| `relay usage` | Who spent the context, per session and subagent (`--since 30d`) |
+| `relay usage` | Who spent the context, per session and subagent (`--since 30d`); `--history` per task |
+| `relay lint` | Docs, instruction files and commit subjects over budget (`--staged`, `--commit-msg`, `--all`) |
+| `relay compile --hygiene` | Memory items to merge, check, shorten or drop |
 | `relay handoff --share` | Put a session's handoff in `.relay/` for the team, credentials masked |
 | `relay init --local` | Keep memory in `.git/relay/` for a repo you cannot commit to |
 | `relay log` | What failed in the hooks, newest last |
@@ -180,7 +204,7 @@ You close the session. relay writes the handoff for the next one.
 | Place | What | Shared |
 |---|---|---|
 | `.relay/` | An OKF bundle: project rules, remembered items, handoffs you chose to share, and an `index.md` | Yes, you commit it |
-| `.git/relay/` | Session events, handoffs, originals, path claims, logs | No, per worktree |
+| `.git/relay/` | Session events, handoffs, originals, path claims, the section index, read hashes, per-agent totals, logs | No, per worktree |
 | `$TMPDIR/relay-<uid>/` | Originals from sandboxed runs, until the next hook moves them | No, owner-only |
 
 Nothing leaves your machine. Originals are deleted after 30 days, or at once
@@ -244,6 +268,8 @@ What each harness gets beyond compression and the brief:
 | Read guard (outline for a big whole-file read) | yes, `Read` | no read tool; `cat` is compressed | yes, `read_file` | no: its read hook cannot tell the agent why |
 | Path claims | from `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | not yet: patches do not reach its hooks | from `write_file`, `replace` | from the edit tools it reports |
 | Note before editing a claimed file | yes | no | no | no |
+| Re-read as a note or a diff | yes | no | no: its output cannot be replaced | no |
+| Note when an agent's tool output adds up | yes, per subagent | no | main thread | no |
 | Subagents | same hooks, own brief, own line in `relay usage` | no subagent hooks | not verified | not verified |
 
 Claims are per worktree: sessions in separate worktrees do not collide on

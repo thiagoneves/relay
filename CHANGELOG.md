@@ -6,6 +6,8 @@ All notable changes to relay. Dates are UTC.
 
 ### Changed
 
+- Signal lines, which the compression gate must keep, no longer include a
+  zero count (`0 failed`) or a line that starts with a runner's pass mark.
 - Claude Code runs every command as the agent wrote it. relay compresses the
   output after the command succeeds, so permission rules, auto mode and the
   worktree guard see the real command. Tests, builds, linters and reads still
@@ -41,6 +43,25 @@ All notable changes to relay. Dates are UTC.
 - `relay usage`: context per session and per subagent, exact from the
   transcript or estimated from tool output, the biggest reads and what relay
   kept out. On 26/09 about 20 subagents spent ~9M tokens, 300k–650k each.
+- Re-reads in Claude Code: the same text again becomes a one-line note, a
+  changed one the diff since, per session and subagent, keyed by content
+  hash under `.git/relay/reads/`; a compaction forgets them.
+- A section index under `.git/relay/index/`: outlines and task ids per file,
+  rebuilt only when the content changes. The read guard and
+  `relay brief <query>` answer from it (1.6 s cold, 0.12 s warm on 232 docs).
+- `relay brief <query>` lists the files the task will likely touch, from
+  commits naming it and the turns that asked about it, and what is in the
+  way: live sessions on those files, unmerged branches, an order to
+  integrate in.
+- A note to the agent each time its tool output passes another 150k tokens,
+  and `relay usage --history`: each task's cost per day.
+- Green cargo test, jest, vitest and Playwright runs in one line; Playwright
+  and `tsc` filters.
+- `relay lint`: size budgets for plan docs, finished-task notes, ADR
+  implementation sections, instruction files, the memory index and commit
+  subjects; exits 1, for git hooks.
+- `relay compile --hygiene`: memory items to merge, check, shorten or drop,
+  and how many the brief leaves out.
 
 - Structured filters for RSpec, ExUnit (`mix test`), PHPUnit, Minitest and
   `dart test`/`flutter test`: passing lines go, every failure line stays.
