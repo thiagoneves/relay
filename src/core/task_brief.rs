@@ -6,7 +6,7 @@
 
 use crate::core::outline::{self, Entry};
 use crate::core::paths::Paths;
-use crate::core::{index, likely, memory};
+use crate::core::{collide, index, likely, memory};
 use crate::helpers::git as gitstate;
 use crate::helpers::text::cut_lines;
 use crate::helpers::truncate_chars;
@@ -47,7 +47,10 @@ pub fn build(paths: &Paths, query: &str) -> String {
     // The doc that describes the task is already on the page.
     let files: Vec<likely::Likely> =
         likely::files(paths, query).into_iter().filter(|l| !hits.iter().any(|h| h.file == l.file)).collect();
-    compose(query, &hits, &items, &files)
+    let names: Vec<String> = files.iter().map(|l| l.file.clone()).collect();
+    let mut page = compose(query, &hits, &items, &files);
+    page.push_str(&collide::section(paths, &names));
+    page
 }
 
 fn compose(query: &str, hits: &[Hit], items: &[String], files: &[likely::Likely]) -> String {

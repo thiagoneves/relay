@@ -8,8 +8,8 @@ use serde_json::json;
 
 /// A plan doc, two commits (one about T-253, one about T-2530), a
 /// remembered gotcha and a session that edited a file for T-253.
-fn repo_with_history() -> Repo {
-    let repo = Repo::new("task-brief");
+fn repo_with_history(name: &str) -> Repo {
+    let repo = Repo::new(name);
     std::fs::create_dir_all(repo.root.join("docs")).unwrap();
     std::fs::write(
         repo.root.join("docs/plan.md"),
@@ -46,7 +46,7 @@ fn repo_with_history() -> Repo {
 
 #[test]
 fn a_task_id_brings_its_section_memory_and_files() {
-    let repo = repo_with_history();
+    let repo = repo_with_history("task-brief");
     let out = repo.run(&["brief", "T-253"]);
     let page = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
@@ -64,4 +64,32 @@ fn a_task_id_brings_its_section_memory_and_files() {
 
     let none = repo.run(&["brief", "T-999"]);
     assert!(String::from_utf8_lossy(&none.stdout).contains("Nothing in the docs"), "no match is said");
+}
+
+#[test]
+fn work_in_the_way_of_the_task_is_named_with_an_order() {
+    let repo = repo_with_history("task-brief-collide");
+    let git = |args: &[&str]| {
+        let ok = std::process::Command::new("git").args(args).current_dir(&repo.root).status().unwrap().success();
+        assert!(ok, "git {args:?}");
+    };
+    git(&["checkout", "-q", "-b", "feat-bar"]);
+    std::fs::write(repo.root.join("src/bar.ts"), "export const bar = 1;\n").unwrap();
+    git(&["-c", "user.email=a@b.c", "-c", "user.name=t", "commit", "-q", "-am", "Bar"]);
+    git(&["checkout", "-q", "main"]);
+    repo.hook(
+        "claude",
+        json!({
+            "hook_event_name": "PostToolUse", "session_id": "other-sess", "tool_name": "Edit", "tool_use_id": "o1",
+            "tool_input": { "file_path": repo.path("src/filters.ts") }, "tool_response": {}
+        }),
+    );
+    let page = String::from_utf8_lossy(&repo.run(&["brief", "T-253"]).stdout).into_owned();
+    assert!(
+        page.contains("\n## In the way\n- session s1 (\"implement T-253 now\") (live) is on src/filters.ts\n"),
+        "{page}"
+    );
+    assert!(page.contains("- session other-se (live) is on src/filters.ts\n"), "{page}");
+    assert!(page.contains("- branch feat-bar changes src/bar.ts\n"), "{page}");
+    assert!(page.contains("_Order: merge feat-bar first; let the sessions above"), "{page}");
 }

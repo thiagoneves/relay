@@ -162,6 +162,8 @@ pub mod task_brief {
     pub const FILES: usize = 12;
     /// Newest commits whose message names the query, read for likely files.
     pub const COMMITS_READ: usize = 200;
+    /// Unmerged branches compared with the likely files, newest first.
+    pub const BRANCHES_READ: usize = 10;
 }
 
 /// `relay usage`.

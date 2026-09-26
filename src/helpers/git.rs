@@ -94,6 +94,20 @@ pub fn commits_mentioning(root: &Path, word: &str, max: usize) -> Vec<(String, V
         .collect()
 }
 
+/// Local branches with commits HEAD does not have, most recently
+/// committed first, at most `max`.
+pub fn unmerged_branches(root: &Path, max: usize) -> Vec<String> {
+    let args = ["branch", "--no-merged", "HEAD", "--sort=-committerdate", "--format=%(refname:short)"];
+    git(root, &args).map(|s| s.lines().take(max).map(str::to_string).collect()).unwrap_or_default()
+}
+
+/// Files `branch` changed since it left HEAD's history.
+pub fn branch_files(root: &Path, branch: &str) -> Vec<String> {
+    git(root, &["diff", "--name-only", &format!("HEAD...{branch}"), "--"])
+        .map(|s| s.lines().map(str::to_string).collect())
+        .unwrap_or_default()
+}
+
 /// Files changed by commits since `sha`. Uncommitted edits do not count:
 /// they may have been there when the item was saved. `None` when git does
 /// not know the commit (rebased away, or a shallow clone).

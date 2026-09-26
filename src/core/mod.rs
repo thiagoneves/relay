@@ -6,6 +6,7 @@ pub mod bench;
 pub mod bootstrap;
 pub mod brief;
 pub mod claims;
+pub mod collide;
 pub mod compile;
 pub mod condense;
 pub mod exec;
