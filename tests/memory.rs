@@ -131,3 +131,14 @@ fn terse_adds_the_answers_section_once() {
     assert_eq!(std::fs::read_to_string(repo.root.join(".relay/project.md")).unwrap(), project);
     assert!(String::from_utf8(repo.run(&["brief"]).stdout).unwrap().contains("Lead with the answer"));
 }
+
+#[test]
+fn hygiene_names_near_duplicates_to_merge() {
+    let repo = Repo::new("memory-hygiene");
+    assert!(repo.run(&["remember", "rule", "Run cargo test before every commit"]).status.success());
+    assert!(repo.run(&["remember", "rule", "Run cargo test before each commit"]).status.success());
+    let out = repo.run(&["compile", "--hygiene"]);
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{text}");
+    assert!(text.contains("Merge") && text.contains("say nearly the same; keep one"), "{text}");
+}

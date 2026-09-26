@@ -106,6 +106,9 @@ pub enum Commands {
         /// Which candidates to keep: numbers like 1,3 or `all`
         #[arg(long, value_name = "WHICH")]
         save: Option<String>,
+        /// Review memory instead: duplicates to merge, stale, expired or overlong items, what the brief leaves out
+        #[arg(long, conflicts_with = "save")]
+        hygiene: bool,
     },
     /// Save a rule, gotcha or decision to `.relay/` (committed, one file per item)
     Remember {
@@ -257,7 +260,7 @@ fn run() -> anyhow::Result<i32> {
         Commands::Pipe { cmd } => pipe::run(&cmd),
         Commands::Get { id, meta } => get::run(&id, meta),
         Commands::Handoff { session, show, share } => handoff::run(session.as_deref(), show, share),
-        Commands::Compile { save } => compile::run(save.as_deref()),
+        Commands::Compile { save, hygiene } => compile::run(save.as_deref(), hygiene),
         Commands::Remember { kind, text, paths, session, until } => {
             remember::run(kind, &text.join(" "), &paths, session.as_deref(), until.as_deref())
         }

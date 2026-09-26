@@ -1,13 +1,18 @@
+use crate::core::hygiene::Advice;
 use crate::core::memory::{self, Kind, NewItem};
 use crate::core::paths::Paths;
 use crate::core::{compile, spool};
+use crate::helpers::text::count;
 use crate::limits;
 
 use super::ui::{Ui, problem};
 
 /// `relay compile` lists what recent sessions decided and memory does not
 /// hold yet; `--save` keeps the chosen ones as decisions.
-pub fn run(save: Option<&str>) -> anyhow::Result<i32> {
+pub fn run(save: Option<&str>, hygiene: bool) -> anyhow::Result<i32> {
+    if hygiene {
+        return review();
+    }
     let paths = Paths::from_cwd()?;
     let ui = Ui::stdout();
     let found = compile::candidates(&paths, limits::compile::SESSIONS);
@@ -42,6 +47,44 @@ pub fn run(save: Option<&str>) -> anyhow::Result<i32> {
         ui.ok(&format!("Saved decision in {}", paths.rel(&path)));
     }
     ui.next("Commit them so every session and teammate gets them.");
+    Ok(0)
+}
+
+/// What to merge, check, shorten or drop in memory. Advice only: items
+/// are files under `.relay/`, removed or edited by hand and reviewed in
+/// the diff like any other change.
+fn review() -> anyhow::Result<i32> {
+    let paths = Paths::from_cwd()?;
+    let ui = Ui::stdout();
+    let items = memory::list(&paths);
+    let stale = memory::staleness(&paths.root, &items, limits::brief::STALE_COMMITS);
+    let advice = crate::core::hygiene::review(&items, &stale, &crate::helpers::now_iso());
+    ui.heading("relay compile --hygiene", &format!("{} remembered", items.len()));
+    if advice.is_empty() {
+        ui.ok("Memory is lean: no duplicates, nothing stale, expired or too long, and all of it fits the brief.");
+        return Ok(0);
+    }
+    let name = |i: usize| paths.rel(&items[i].path);
+    for a in &advice {
+        let (label, text) = match a {
+            Advice::Merge(i, j) => ("Merge", format!("{} and {} say nearly the same; keep one", name(*i), name(*j))),
+            Advice::Stale(i, changed) => {
+                ("Check", format!("{}: {} changed since it was saved", name(*i), changed.join(", ")))
+            }
+            Advice::Expired(i) => ("Expired", format!("{}: delete it or renew `stale_after`", name(*i))),
+            Advice::Overlong(i) => ("Shorten", format!("{}: one line the brief can show", name(*i))),
+            Advice::Unseen(left) => (
+                "Unseen",
+                format!(
+                    "{} past the brief's budget reach no session; merge or drop older ones",
+                    count(left.len(), "item")
+                ),
+            ),
+        };
+        ui.field(label, &text);
+    }
+    ui.blank();
+    ui.next("Edit or delete the files, then commit: memory changes are reviewed like code.");
     Ok(0)
 }
 

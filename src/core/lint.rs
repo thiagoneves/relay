@@ -38,7 +38,7 @@ pub fn file(rel: &str, text: &str) -> Vec<Finding> {
         out.push(Finding {
             at: rel.into(),
             what: format!(
-                "is {}, over {}: keep only items that change what a session does",
+                "is {}, over {}: see what to merge or drop with `relay compile --hygiene`",
                 human_bytes(size),
                 human_bytes(INDEX_BYTES)
             ),

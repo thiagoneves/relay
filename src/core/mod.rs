@@ -12,6 +12,7 @@ pub mod compile;
 pub mod condense;
 pub mod exec;
 pub mod handoff;
+pub mod hygiene;
 pub mod index;
 pub mod likely;
 pub mod lint;

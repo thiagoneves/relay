@@ -103,6 +103,14 @@ pub mod compile {
     pub const SESSIONS: usize = 10;
 }
 
+/// `relay compile --hygiene`.
+pub mod hygiene {
+    /// Items whose titles share this much of their words are one item.
+    pub const SIMILAR: f64 = 0.6;
+    /// Longer titles do not read as one line in the brief.
+    pub const OVERLONG_CHARS: usize = 140;
+}
+
 /// `relay status` and `relay log`.
 pub mod status {
     use std::time::Duration;
