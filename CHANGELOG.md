@@ -23,6 +23,25 @@ All notable changes to relay. Dates are UTC.
 
 ### Added
 
+- Path claims: each edit claims its file for the session under
+  `.git/relay/claims/`, live for two hours. The brief names the other
+  sessions in the checkout, what they are editing and which uncommitted
+  files are whose; Claude Code gets a note before editing a file another live
+  session changed. On 26/09 three sessions in one checkout spent about 1M
+  tokens on rebases and ports.
+- Read guard: a whole-file read of a text file over 60 KB (Claude Code
+  `Read`, Gemini CLI `read_file`) gets the file's outline with line ranges
+  instead; ranged reads go through. A 345 KB plan doc (~100k tokens) was read
+  whole by many agents that needed one section; Bash reads were already
+  compressed (8,090 → 2,798 tokens in the same session), `Read` was not.
+- Subagents: Claude Code's `SubagentStart` gives a subagent a short brief,
+  tool events carry its id and `SubagentStop` records its transcript.
+- `relay brief <query>`: the plan section for a task id or words, the memory
+  that mentions it and the files sessions edited for it, about 1,500 tokens.
+- `relay usage`: context per session and per subagent, exact from the
+  transcript or estimated from tool output, the biggest reads and what relay
+  kept out. On 26/09 about 20 subagents spent ~9M tokens, 300k–650k each.
+
 - Structured filters for RSpec, ExUnit (`mix test`), PHPUnit, Minitest and
   `dart test`/`flutter test`: passing lines go, every failure line stays.
 - `.relay/` is an Open Knowledge Format (v0.2) bundle: every item, the
@@ -61,6 +80,8 @@ All notable changes to relay. Dates are UTC.
 
 ### Fixed
 
+- An image read counted its base64 text (~350k tokens a screenshot) instead
+  of the image the model sees.
 - Compression kept every line a fixture marks as required: chained commands,
   `git diff --name-only`, `git diff` with SQL comments, deleted and binary
   files, `git log -p`, hyperlinks in colored output, grep indentation, reads

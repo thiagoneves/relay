@@ -23,8 +23,14 @@ the default path, no process left running.
   masked, what never leaves the machine. All of it is true today; the page
   makes it easy to check.
 
+- **Claims for Codex and Cursor.** Codex's patches and Cursor's reads do not
+  reach their hooks in a shape relay can act on; each needs its harness to
+  report them first.
+
 ## Not planned
 
+- Locks. Claims warn and never block an edit; a session that must own a
+  path works in its own worktree.
 - A server, an account, a database or a web UI.
 - Search over memory (embeddings, full-text). Memory stays small and curated.
 - A model in the default path, for summaries or anything else.

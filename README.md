@@ -52,6 +52,33 @@ gotcha that only holds until the next upgrade.
 references intact. The original is one `relay get <id>` away. Replayed over
 one developer's 21,000 real shell calls, relay kept 100% of the signal lines.
 
+**Sessions that share a checkout see each other.** Every edit a harness
+reports claims its file for that session, in a small file under
+`.git/relay/claims/` that expires two hours after the last edit. The brief
+names the other sessions working here, what each is editing
+(`apps/backstage/**`) and which uncommitted files are whose; before an edit to
+a file another live session just changed, Claude Code gets a one-line note
+beside the tool call. It never blocks the edit. Three sessions in one checkout
+once spent about a million tokens on rebases and ports; this is the cheap
+half of that fix. The other half is `git worktree add`.
+
+**Big files are read by section.** A 345 KB plan doc is about 100k tokens, and
+agents read it whole to find one task. A whole-file read of a text file over
+60 KB is turned down with the file's outline: Markdown headings, or a code
+file's top-level blocks, each with its line range, and the offset and limit to
+read one. Ranged reads always go through. `relay brief T-253` goes straight to
+a task: the section whose heading starts with the id, the sections that name
+it, the remembered items that mention it and the files the sessions that
+worked on it edited, in about 1,500 tokens.
+
+**Subagents get the same treatment.** Claude Code runs relay's hooks inside
+subagents, so their shell output is compressed and their big reads guarded;
+a subagent also starts with a short brief (memory and the other sessions
+here), and its cost is its own. `relay usage` lists who spent the context,
+each session and each subagent on its own line: context sent and output,
+exact, from the harness transcript, and the biggest reads. Twenty subagents
+once spent 9M tokens in a day, 300k to 650k each; this is where that shows.
+
 **Small enough to hold in your head.** One binary, the hooks your harness
 already calls, and two directories: `.relay/` that you commit, `.git/relay/`
 that you don't. No server, no account, no database, no background process, no
@@ -140,6 +167,8 @@ You close the session. relay writes the handoff for the next one.
 | `relay status` | What relay saved, what it stores, anything that failed |
 | `relay audit` | What fills your context, and how to trim it |
 | `relay brief` · `relay handoff --show` | What the next session receives |
+| `relay brief <task id or words>` | One page for one task: its plan section, memory and files |
+| `relay usage` | Who spent the context, per session and subagent (`--since 30d`) |
 | `relay handoff --share` | Put a session's handoff in `.relay/` for the team, credentials masked |
 | `relay init --local` | Keep memory in `.git/relay/` for a repo you cannot commit to |
 | `relay log` | What failed in the hooks, newest last |
@@ -151,7 +180,7 @@ You close the session. relay writes the handoff for the next one.
 | Place | What | Shared |
 |---|---|---|
 | `.relay/` | An OKF bundle: project rules, remembered items, handoffs you chose to share, and an `index.md` | Yes, you commit it |
-| `.git/relay/` | Session events, handoffs, originals, logs | No, per worktree |
+| `.git/relay/` | Session events, handoffs, originals, path claims, logs | No, per worktree |
 | `$TMPDIR/relay-<uid>/` | Originals from sandboxed runs, until the next hook moves them | No, owner-only |
 
 Nothing leaves your machine. Originals are deleted after 30 days, or at once
@@ -207,6 +236,18 @@ relay speaks each harness's hook dialect and translates it.
   development tasks, and leaves everything else exactly as the agent wrote it.
   Cursor also runs Claude Code's hooks; relay leaves those events to its Cursor
   hooks, so nothing is recorded twice.
+
+What each harness gets beyond compression and the brief:
+
+| | Claude Code | Codex | Gemini CLI | Cursor |
+|---|---|---|---|---|
+| Read guard (outline for a big whole-file read) | yes, `Read` | no read tool; `cat` is compressed | yes, `read_file` | no: its read hook cannot tell the agent why |
+| Path claims | from `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | not yet: patches do not reach its hooks | from `write_file`, `replace` | from the edit tools it reports |
+| Note before editing a claimed file | yes | no | no | no |
+| Subagents | same hooks, own brief, own line in `relay usage` | no subagent hooks | not verified | not verified |
+
+Claims are per worktree: sessions in separate worktrees do not collide on
+disk, so they do not see each other's claims.
 
 relay only approves what it rewrites: reads and routine dev tasks. `rm -rf`,
 `git push` and everything else reach your normal permission prompt untouched.
