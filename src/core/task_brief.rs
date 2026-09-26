@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use crate::core::outline::{self, Entry};
 use crate::core::paths::Paths;
-use crate::core::{memory, spool, usage};
+use crate::core::{index, memory, spool, usage};
 use crate::helpers::git as gitstate;
 use crate::helpers::text::cut_lines;
 use crate::helpers::truncate_chars;
@@ -133,11 +133,20 @@ fn sections(paths: &Paths, query: &str) -> Vec<Hit> {
         if std::fs::metadata(&full).map_or(true, |m| m.len() > DOC_MAX_BYTES) {
             continue;
         }
+        let Some(idx) = index::get(paths, rel, &full) else { continue };
+        // An id the index does not place in this doc: the doc is not read.
+        let upper = query.trim().to_uppercase();
+        if index::is_id(query)
+            && !idx.ids.contains_key(&upper)
+            && !idx.entries.iter().any(|e| mentions(&e.title, query))
+        {
+            continue;
+        }
         let Ok(text) = std::fs::read_to_string(&full) else { continue };
         if !mentions(&text, query) {
             continue;
         }
-        hits.extend(in_doc(rel, &text, query));
+        hits.extend(in_doc(rel, &text, &idx.entries, query));
     }
     hits.sort_by(|a, b| a.rank.cmp(&b.rank).then(b.entry.depth.cmp(&a.entry.depth)).then(a.file.cmp(&b.file)));
     hits
@@ -151,9 +160,8 @@ fn starts_with(title: &str, query: &str) -> bool {
     mentions(title.split_whitespace().next().unwrap_or(""), first)
 }
 
-fn in_doc(rel: &str, text: &str, query: &str) -> Vec<Hit> {
+fn in_doc(rel: &str, text: &str, entries: &[Entry], query: &str) -> Vec<Hit> {
     let lines: Vec<&str> = text.lines().collect();
-    let entries = outline::of(text, true);
     let body = |e: &Entry| lines[e.start - 1..e.end.min(lines.len())].join("\n");
     let hit = |e: &Entry, rank| Hit { file: rel.to_string(), entry: e.clone(), body: body(e), rank };
     let mut out: Vec<Hit> = entries
@@ -218,13 +226,15 @@ mod tests {
     #[test]
     fn the_heading_that_names_the_task_wins() {
         let doc = "# Plan\n## Phase 1\n### T-1 Login\nneeds T-2\n### T-2 Pay\nstripe\n## Phase 2\n";
-        let hits = in_doc("docs/plan.md", doc, "T-2");
+        let at = |d: &str| outline::of(d, true);
+        let hits = in_doc("docs/plan.md", doc, &at(doc), "T-2");
         let found: Vec<(usize, usize, u8)> = hits.iter().map(|h| (h.entry.start, h.entry.end, h.rank)).collect();
         assert_eq!(found, [(5, 6, 0), (3, 4, 2)], "the task, then the section that mentions it");
-        let dependent = in_doc("docs/plan.md", "### T-3 · Radar — T-2\nx\n### T-2 · Pay\ny\n", "T-2");
+        let two = "### T-3 · Radar — T-2\nx\n### T-2 · Pay\ny\n";
+        let dependent = in_doc("docs/plan.md", two, &at(two), "T-2");
         assert_eq!(dependent.iter().map(|h| h.rank).collect::<Vec<_>>(), [1, 0]);
         assert_eq!(hits[0].body, "### T-2 Pay\nstripe");
-        let loose = in_doc("docs/plan.md", doc, "stripe");
+        let loose = in_doc("docs/plan.md", doc, &at(doc), "stripe");
         assert_eq!((loose[0].entry.title.as_str(), loose[0].rank), ("T-2 Pay", 2));
     }
 

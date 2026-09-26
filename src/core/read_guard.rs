@@ -6,8 +6,9 @@
 
 use std::path::Path;
 
-use crate::core::outline;
-use crate::helpers::{est_tokens, human_bytes, human_tokens};
+use crate::core::paths::Paths;
+use crate::core::{index, outline};
+use crate::helpers::{human_bytes, human_tokens};
 use crate::limits::reads::{GUARD_BYTES, OUTLINE_ENTRIES, OUTLINE_MAX_BYTES};
 
 /// A read turned down, and what it would have cost.
@@ -28,7 +29,7 @@ const NOT_TEXT: &[&str] = &[
 /// The outline to show instead of reading `file` whole, or `None` when
 /// the read should go through: a range was asked for, or the file is
 /// small, missing or not text. `rel` is how the file is named to the agent.
-pub fn check(file: &Path, rel: &str, ranged: bool) -> Option<Guarded> {
+pub fn check(paths: &Paths, file: &Path, rel: &str, ranged: bool) -> Option<Guarded> {
     if ranged {
         return None;
     }
@@ -40,13 +41,9 @@ pub fn check(file: &Path, rel: &str, ranged: bool) -> Option<Guarded> {
     if size <= GUARD_BYTES || size > OUTLINE_MAX_BYTES {
         return None;
     }
-    let bytes = std::fs::read(file).ok()?;
-    if bytes[..bytes.len().min(8192)].contains(&0) {
-        return None;
-    }
-    let text = String::from_utf8_lossy(&bytes);
-    let file_tokens = est_tokens(&text);
-    let entries = outline::of(&text, outline::is_markdown(rel));
+    // From the index: an unchanged file is not read again.
+    let idx = index::get(paths, rel, file)?;
+    let (file_tokens, entries) = (idx.tokens, idx.entries);
     // The example range: the first of the deepest entries shown.
     let shown = outline::pick(&entries, OUTLINE_ENTRIES);
     let deepest = shown.iter().map(|e| e.depth).max().unwrap_or(1);
@@ -75,6 +72,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    fn check(file: &Path, rel: &str, ranged: bool) -> Option<Guarded> {
+        let root = file.parent().unwrap().to_path_buf();
+        let p =
+            Paths { shared: root.join(".relay"), local: root.join("local"), root, in_git: false, memory_local: false };
+        super::check(&p, file, rel, ranged)
     }
 
     #[test]

@@ -19,7 +19,9 @@ pub fn guard_read(rec: &Recorder, input: &Value) -> Reply {
     };
     let path = std::path::Path::new(input["cwd"].as_str().unwrap_or("")).join(file);
     let ranged = !tool_input["offset"].is_null() || !tool_input["limit"].is_null();
-    let Some(g) = read_guard::check(&path, &rec.paths.rel_file(&slash(&path)), ranged) else { return Reply::Nothing };
+    let Some(g) = read_guard::check(rec.paths, &path, &rec.paths.rel_file(&slash(&path)), ranged) else {
+        return Reply::Nothing;
+    };
     let _ = rec.guarded_read(input, &g);
     Reply::Deny(g.message)
 }
