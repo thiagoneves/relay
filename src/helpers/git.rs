@@ -108,6 +108,18 @@ pub fn branch_files(root: &Path, branch: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Files staged for the next commit, deletions left out.
+pub fn staged_files(root: &Path) -> Vec<String> {
+    git(root, &["diff", "--cached", "--name-only", "--diff-filter=ACMR"])
+        .map(|s| s.lines().map(str::to_string).collect())
+        .unwrap_or_default()
+}
+
+/// The message of the last commit; empty when there is none.
+pub fn head_message(root: &Path) -> String {
+    git(root, &["log", "-1", "--format=%B"]).unwrap_or_default()
+}
+
 /// Files changed by commits since `sha`. Uncommitted edits do not count:
 /// they may have been there when the item was saved. `None` when git does
 /// not know the commit (rebased away, or a shallow clone).

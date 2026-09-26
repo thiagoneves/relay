@@ -178,3 +178,19 @@ pub mod usage {
     pub const CONSUMERS: usize = 12;
     pub const READS: usize = 8;
 }
+
+/// `relay lint`: budgets for what agents read over and over.
+pub mod lint {
+    /// A Markdown doc: past this, split it; about 25k tokens.
+    pub const DOC_BYTES: u64 = 100 * 1024;
+    /// CLAUDE.md, AGENTS.md, GEMINI.md: loaded on every call.
+    pub const INSTRUCTIONS_BYTES: u64 = 8 * 1024;
+    /// `.relay/index.md`.
+    pub const INDEX_BYTES: u64 = 8 * 1024;
+    /// Lines a finished task keeps.
+    pub const DONE_LINES: usize = 1;
+    /// Lines of an ADR's implementation section.
+    pub const ADR_SECTION_LINES: usize = 10;
+    /// Longest commit subject; `git log --oneline` and most UIs cut after.
+    pub const SUBJECT_CHARS: usize = 72;
+}

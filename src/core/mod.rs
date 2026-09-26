@@ -14,6 +14,7 @@ pub mod exec;
 pub mod handoff;
 pub mod index;
 pub mod likely;
+pub mod lint;
 pub mod log;
 pub mod memory;
 pub mod okf;

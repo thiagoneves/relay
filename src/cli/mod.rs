@@ -10,6 +10,7 @@ mod handoff;
 mod hook;
 mod init;
 mod install;
+mod lint;
 mod log;
 mod pipe;
 mod purge;
@@ -176,6 +177,22 @@ pub enum Commands {
         #[arg(long)]
         history: bool,
     },
+    /// Check docs agents read often against size budgets; exit 1 when one is over (works as a git hook)
+    ///
+    /// Markdown over 100 KB; CLAUDE.md, AGENTS.md, GEMINI.md and .relay/index.md over 8 KB; a finished
+    /// task (a checked box or check mark in its heading or list item) with more than one line; an ADR
+    /// section whose heading starts with "Implement" over 10 lines; a commit subject over 72 characters.
+    Lint {
+        /// Every tracked doc, not only the changed ones
+        #[arg(long, conflicts_with = "staged")]
+        all: bool,
+        /// Only staged docs (a pre-commit hook)
+        #[arg(long)]
+        staged: bool,
+        /// Only this commit message file's subject (a commit-msg hook)
+        #[arg(long, value_name = "FILE", conflicts_with_all = ["all", "staged"])]
+        commit_msg: Option<std::path::PathBuf>,
+    },
     /// What failed in relay's hooks, newest last
     Log {
         /// How many lines to show
@@ -257,6 +274,7 @@ fn run() -> anyhow::Result<i32> {
         }
         Commands::Brief { query } => brief::run(&query.join(" ")),
         Commands::Log { lines } => log::run(lines),
+        Commands::Lint { all, staged, commit_msg } => lint::run(&lint::Options { all, staged, commit_msg }),
         Commands::Status => status::run(),
         Commands::Usage { since, history } => usage::run(&since, history),
         Commands::Purge { yes } => purge::run(yes),
